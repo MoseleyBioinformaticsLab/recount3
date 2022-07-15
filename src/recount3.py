@@ -3,6 +3,7 @@ recount3old.py
 """
 
 BASE_URL = "http://duffel.rail.bio/recount3/"  #"http://idies.jhu.edu/"
+# http://duffel.rail.bio/recount3/human/homes_index this is base of list of projects
 import urllib.request
 import ssl
 import os
@@ -16,27 +17,45 @@ ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "ju
 ex_rest_params_3 = {"type": "count_files_junctions", "organism": "human", "data_source": "sra", "junction_type": "metadata", "junction_file_extension": "recount_qc", "project":"SRP107565"}
 ex_rest_params_4 = {"type": "metadata_files", "organism": "human", "data_source": "sra", "project": "SRP096765", "table_name": "recount_pred"}
 ex_rest_params_5 = {"type": "bigwig_files", "organism": "mouse", "data_source": "sra", "project": "DRP001299", "sample": "DRR014697"}
+ex_rest_params_6 = {"type": "data_sources", "organism": "human"}
+ex_rest_params_7 = {"type": "data_source_metadata", "organism": "human", "data_source": "sra", "junction_type": "metadata"}
+
 
 def test_download():
     try:
+        print(GenericRecount3URL(ex_rest_params_1))
         download(GenericRecount3URL(ex_rest_params_1))
-    except Exception as error:
+    except Exception:
         print(traceback.format_exc())
     try:
+        print(GenericRecount3URL(ex_rest_params_2))
         download(GenericRecount3URL(ex_rest_params_2))
-    except Exception as error:
+    except Exception:
         print(traceback.format_exc())
     try:
+        print(GenericRecount3URL(ex_rest_params_3))
         download(GenericRecount3URL(ex_rest_params_3))
-    except Exception as error:
+    except Exception:
         print(traceback.format_exc())
     try:
+        print(GenericRecount3URL(ex_rest_params_4))
         download(GenericRecount3URL(ex_rest_params_4))
-    except Exception as error:
+    except Exception:
         print(traceback.format_exc())
     try:
+        print(GenericRecount3URL(ex_rest_params_5))
         download(GenericRecount3URL(ex_rest_params_5))
-    except Exception as error:
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_6))
+        download(GenericRecount3URL(ex_rest_params_6))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_7))
+        download(GenericRecount3URL(ex_rest_params_7))
+    except Exception:
         print(traceback.format_exc())
 
 class GenericRecount3URL:
@@ -51,7 +70,12 @@ class GenericRecount3URL:
         self._validate()
         self.url = self._create_url()
 
+    def __repr__(self):
+        return self.url
+
     expected_params = {
+        "data_sources": ["organism"],
+        "data_source_metadata": ["organism", "data_source","junction_type"],
         "annotations": ["organism", "genomic_unit", "file_extension"],
         "count_files_gene_or_exon": ["organism", "data_source", "genomic_unit", "project", "file_extension"],
         "count_files_junctions": ["organism", "data_source", "junction_type", "junction_file_extension", "project"],
@@ -76,7 +100,11 @@ class GenericRecount3URL:
 
         :return: URL
         """
-        if self.rest_params["type"] == "annotations":
+        if self.rest_params["type"] == "data_sources":
+            return self.base_url + "{organism}/homes_index".format(**self.rest_params)
+        elif self.rest_params["type"] == "data_source_metadata":
+            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{data_source}.recount_project.MD.gz".format(**self.rest_params)
+        elif self.rest_params["type"] == "annotations":
             return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{file_extension}.gtf.gz".format(**self.rest_params)
         elif self.rest_params["type"] == "count_files_gene_or_exon":
             return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.recount_project.{project}.MD.gz".format(project_2_char=self.rest_params["project"][-2:], **self.rest_params)
@@ -89,33 +117,43 @@ class GenericRecount3URL:
         else:
             return None
 
-    def open(self):
-        """
+    @staticmethod
+    def open_url(url: str) -> t.BinaryIO:
+        """ Open and return URL file object.
 
-        :return: Opened URL
+        :param url:
+        :return:
         """
         ssl_context = ssl.create_default_context();
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        return urllib.request.urlopen(self.url, data=None, cafile=None, capath=None, cadefault=False, context=ssl_context)
+        return urllib.request.urlopen(url, data=None, cafile=None, capath=None, cadefault=False, context=ssl_context)
 
-def download(url_object: GenericRecount3URL, path: str = "", mode: str = "bw") -> None:
+    def open(self) -> t.BinaryIO:
+        return self.open_url(self.url)
+
+def download(url: t.Union[str,GenericRecount3URL], path: str = "", mode: str = "bw") -> None:
     """Downloads a URL via a URL proxy object and saves it locally to a file.
 
-    :param url_object: Object of GenericRecount3URL.
+    :param url:
     :param path: File destination.
     :param mode: Mode of opening the file.
     """
-    parsed_url = urllib.parse.urlparse(url_object.url)
+    if type(url) != str:
+        url = str(url)
+    parsed_url = urllib.parse.urlparse(url)
     filename = os.path.basename(parsed_url.path)
     if path.endswith(".zip"):
-        with url_object.open() as url_file, zipfile.ZipFile(path, mode=mode) as zip_file:
+        with GenericRecount3URL.open_url(url) as url_file, zipfile.ZipFile(path, mode=mode) as zip_file:
             with zip_file.open(filename, mode=mode) as out_file:
                 out_file.write(url_file.read())
     else:
         file_path = os.path.join(path, filename)
-        with url_object.open() as url_file, open(file_path, mode=mode) as out_file:
+        with GenericRecount3URL.open_url(url) as url_file, open(file_path, mode=mode) as out_file:
             out_file.write(url_file.read())
+
+def create_project_list():
+    pass
 
 if __name__ == "__main__":
     test_download()
