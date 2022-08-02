@@ -11,6 +11,7 @@ import urllib.parse
 import typing as t
 import zipfile
 import traceback
+import gzip
 
 ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene", "file_extension": "G026"}
 ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "junction_type": "metadata", "genomic_unit": "gene", "data_source": "sra", "project": "SRP107565", "file_extension": "G026"}
@@ -152,8 +153,28 @@ def download(url: t.Union[str,GenericRecount3URL], path: str = "", mode: str = "
         with GenericRecount3URL.open_url(url) as url_file, open(file_path, mode=mode) as out_file:
             out_file.write(url_file.read())
 
-def create_project_list():
-    pass
+def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
+    organisms = [organism] if organism != "" else ["mouse", "human"]
+    data_sources_rest_params = []
+    for organism in organisms:
+        url = str(GenericRecount3URL({"type": "data_sources", "organism": organism}))
+        with GenericRecount3URL.open_url(url) as url_file:
+            for line in url_file:
+                data_sources_rest_params.append({"type": "data_source_metadata", "organism": organism, "junction_type": "metadata", "data_source": line.split("/")[1]})
+
+    projects = set()
+    samples = set()
+    for rest_params in data_sources_rest_params:
+        url = str(GenericRecount3URL(rest_params))
+        with GenericRecount3URL.open_url(url) as url_file:
+            for line in gzip.decompress(url_file.read()):
+                columns = line.split("\t")
+                if columns[2] == columns[3]:
+                    projects.add(columns[2])
+                    samples.add(columns[1])
+
+    return list(samples), list(projects)
+
 
 if __name__ == "__main__":
     test_download()
