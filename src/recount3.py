@@ -12,6 +12,8 @@ import typing as t
 import zipfile
 import traceback
 import gzip
+import re
+
 
 ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene", "file_extension": "G026"}
 ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "junction_type": "metadata", "genomic_unit": "gene", "data_source": "sra", "project": "SRP107565", "file_extension": "G026"}
