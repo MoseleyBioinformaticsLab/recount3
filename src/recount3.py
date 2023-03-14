@@ -153,23 +153,30 @@ def download(url: t.Union[str,GenericRecount3URL], path: str = "", mode: str = "
         with GenericRecount3URL.open_url(url) as url_file, open(file_path, mode=mode) as out_file:
             out_file.write(url_file.read())
 
+
 def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
-    organisms = [organism] if organism != "" else ["mouse", "human"]
+    organisms = [organism] if organism else ["mouse", "human"]
     data_sources_rest_params = []
+    regex = re.compile(r'/|\n')
     for organism in organisms:
         url = str(GenericRecount3URL({"type": "data_sources", "organism": organism}))
         with GenericRecount3URL.open_url(url) as url_file:
-            for line in url_file:
-                data_sources_rest_params.append({"type": "data_source_metadata", "organism": organism, "junction_type": "metadata", "data_source": line.split("/")[1]})
-
+            decoded = url_file.read().decode()
+            location = regex.split(decoded)
+            locations = list(filter(lambda val: val != 'data_sources' and val != '', location))
+            for repo in locations:
+                data_sources_rest_params.append({"type": "data_source_metadata", "organism": organism, "junction_type": "metadata", "data_source": repo})
     projects = set()
     samples = set()
+
     for rest_params in data_sources_rest_params:
         url = str(GenericRecount3URL(rest_params))
         with GenericRecount3URL.open_url(url) as url_file:
-            for line in gzip.decompress(url_file.read()):
+            decoded = gzip.decompress(url_file.read()).decode()
+            split = decoded.split("\n")
+            for line in split:
                 columns = line.split("\t")
-                if columns[2] == columns[3]:
+                if len(columns) > 3 and columns[2] == columns[3] and columns[2][:3] in ["SRP", "ERP", "DRP"]:
                     projects.add(columns[2])
                     samples.add(columns[1])
 
@@ -177,4 +184,9 @@ def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
 
 
 if __name__ == "__main__":
-    test_download()
+    samplist, projlist = create_sample_project_lists("human")
+    with open("samplist.txt", "w") as f:
+        f.write('\n'.join(samplist))
+    with open("projlist.txt", "w") as f:
+        f.write('\n'.join(projlist))
+    # test_download()
