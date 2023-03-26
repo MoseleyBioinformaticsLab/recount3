@@ -13,6 +13,7 @@ import zipfile
 import traceback
 import gzip
 import re
+import pandas as pd
 
 
 ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene", "file_extension": "G026"}
@@ -184,6 +185,19 @@ def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
 
     return list(samples), list(projects)
 
+def load_gene_sums(filepath: str = "")-> pd.DataFrame:
+    """Converts a compressed gene_sums file to pandas dataframe representation
+
+    :param filepath: location of gzip compresed gene_sums file
+    :return: pandas dataframe representation of gene counts
+    """
+
+    if type(filepath)!=str:
+        filepath = str(filepath)
+    with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
+        gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", skiprows=2, index_col=0)
+
+    return gene_sums_table
 
 if __name__ == "__main__":
     samplist, projlist = create_sample_project_lists("human")
