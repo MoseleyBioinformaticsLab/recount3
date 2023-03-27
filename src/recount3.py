@@ -185,7 +185,7 @@ def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
 
     return list(samples), list(projects)
 
-def load_gene_sums(filepath: str = "")-> pd.DataFrame:
+def load_gene_sums_table(filepath: str = "")-> pd.DataFrame:
     """Converts a compressed gene_sums file to pandas dataframe representation
 
     :param filepath: location of gzip compresed gene_sums file
@@ -194,9 +194,12 @@ def load_gene_sums(filepath: str = "")-> pd.DataFrame:
 
     if type(filepath)!=str:
         filepath = str(filepath)
-    with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
-        gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", skiprows=2, index_col=0)
-
+    if filepath.endswith(".gz"):
+        with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
+            gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", skiprows=2, index_col=0)
+    else:
+        with open(filename=filepath, mode='rb') as GeneSumsFile:
+            gene_sums_table = pd.read_csv(GeneSumsFile, sep="\t", skiprows=2, index_col=0)
     return gene_sums_table
 
 if __name__ == "__main__":
