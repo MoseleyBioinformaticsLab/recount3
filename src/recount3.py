@@ -2,7 +2,7 @@
 recount3old.py
 """
 
-BASE_URL = "http://duffel.rail.bio/recount3/"  #"http://idies.jhu.edu/"
+BASE_URL = "http://duffel.rail.bio/recount3/"  # "http://idies.jhu.edu/"
 # http://duffel.rail.bio/recount3/human/homes_index this is base of list of projects
 import urllib.request
 import ssl
@@ -14,15 +14,21 @@ import traceback
 import gzip
 import re
 import pandas as pd
-
+import csv
+import numpy as np
 
 ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene", "file_extension": "G026"}
-ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "junction_type": "metadata", "genomic_unit": "gene", "data_source": "sra", "project": "SRP107565", "file_extension": "G026"}
-ex_rest_params_3 = {"type": "count_files_junctions", "organism": "human", "data_source": "sra", "junction_type": "metadata", "junction_file_extension": "recount_qc", "project":"SRP107565"}
-ex_rest_params_4 = {"type": "metadata_files", "organism": "human", "data_source": "sra", "project": "SRP096765", "table_name": "recount_pred"}
-ex_rest_params_5 = {"type": "bigwig_files", "organism": "mouse", "data_source": "sra", "project": "DRP001299", "sample": "DRR014697"}
+ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "junction_type": "metadata",
+                    "genomic_unit": "gene", "data_source": "sra", "project": "SRP107565", "file_extension": "G026"}
+ex_rest_params_3 = {"type": "count_files_junctions", "organism": "human", "data_source": "sra",
+                    "junction_type": "metadata", "junction_file_extension": "recount_qc", "project": "SRP107565"}
+ex_rest_params_4 = {"type": "metadata_files", "organism": "human", "data_source": "sra", "project": "SRP096765",
+                    "table_name": "recount_pred"}
+ex_rest_params_5 = {"type": "bigwig_files", "organism": "mouse", "data_source": "sra", "project": "DRP001299",
+                    "sample": "DRR014697"}
 ex_rest_params_6 = {"type": "data_sources", "organism": "human"}
-ex_rest_params_7 = {"type": "data_source_metadata", "organism": "human", "data_source": "sra", "junction_type": "metadata"}
+ex_rest_params_7 = {"type": "data_source_metadata", "organism": "human", "data_source": "sra",
+                    "junction_type": "metadata"}
 
 
 def test_download():
@@ -62,6 +68,7 @@ def test_download():
     except Exception:
         print(traceback.format_exc())
 
+
 class GenericRecount3URL:
 
     def __init__(self, rest_params: dict[str, str], base_url: str = BASE_URL):
@@ -79,7 +86,7 @@ class GenericRecount3URL:
 
     expected_params = {
         "data_sources": ["organism"],
-        "data_source_metadata": ["organism", "data_source","junction_type"],
+        "data_source_metadata": ["organism", "data_source", "junction_type"],
         "annotations": ["organism", "genomic_unit", "file_extension"],
         "count_files_gene_or_exon": ["organism", "data_source", "genomic_unit", "project", "file_extension"],
         "count_files_junctions": ["organism", "data_source", "junction_type", "junction_file_extension", "project"],
@@ -95,7 +102,7 @@ class GenericRecount3URL:
         if self.rest_params["type"] not in self.expected_params:
             raise KeyError()
 
-        for params_type,params in self.expected_params.items():
+        for params_type, params in self.expected_params.items():
             if self.rest_params["type"] == params_type and any(key not in self.rest_params for key in params):
                 raise KeyError()
 
@@ -107,17 +114,24 @@ class GenericRecount3URL:
         if self.rest_params["type"] == "data_sources":
             return self.base_url + "{organism}/homes_index".format(**self.rest_params)
         elif self.rest_params["type"] == "data_source_metadata":
-            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{data_source}.recount_project.MD.gz".format(**self.rest_params)
+            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{data_source}.recount_project.MD.gz".format(
+                **self.rest_params)
         elif self.rest_params["type"] == "annotations":
-            return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{file_extension}.gtf.gz".format(**self.rest_params)
+            return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{file_extension}.gtf.gz".format(
+                **self.rest_params)
         elif self.rest_params["type"] == "count_files_gene_or_exon":
-            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.recount_project.{project}.MD.gz".format(project_2_char=self.rest_params["project"][-2:], **self.rest_params)
+            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.recount_project.{project}.MD.gz".format(
+                project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "count_files_junctions":
-            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.{junction_file_extension}.{project}.MD.gz".format(project_2_char=self.rest_params["project"][-2:], **self.rest_params)
+            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.{junction_file_extension}.{project}.MD.gz".format(
+                project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "metadata_files":
-            return self.base_url + "{organism}/data_sources/{data_source}/metadata/{project_2_char}/{project}/{data_source}.{table_name}.{project}.MD.gz".format(project_2_char=self.rest_params["project"][-2:], **self.rest_params)
+            return self.base_url + "{organism}/data_sources/{data_source}/metadata/{project_2_char}/{project}/{data_source}.{table_name}.{project}.MD.gz".format(
+                project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "bigwig_files":
-            return self.base_url + "{organism}/data_sources/{data_source}/base_sums/{project_2_char}/{project}/{sample_2_char}/{data_source}.base_sums.{project}_{sample}.ALL.bw".format(project_2_char=self.rest_params["project"][-2:], sample_2_char=self.rest_params["sample"][-2:], **self.rest_params)
+            return self.base_url + "{organism}/data_sources/{data_source}/base_sums/{project_2_char}/{project}/{sample_2_char}/{data_source}.base_sums.{project}_{sample}.ALL.bw".format(
+                project_2_char=self.rest_params["project"][-2:], sample_2_char=self.rest_params["sample"][-2:],
+                **self.rest_params)
         else:
             return None
 
@@ -136,7 +150,8 @@ class GenericRecount3URL:
     def open(self) -> t.BinaryIO:
         return self.open_url(self.url)
 
-def download(url: t.Union[str,GenericRecount3URL], path: str = "", mode: str = "bw") -> None:
+
+def download(url: t.Union[str, GenericRecount3URL], path: str = "", mode: str = "bw") -> None:
     """Downloads a URL via a URL proxy object and saves it locally to a file.
 
     :param url:
@@ -168,7 +183,9 @@ def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
             location = regex.split(decoded)
             locations = list(filter(lambda val: val != 'data_sources' and val != '', location))
             for repo in locations:
-                data_sources_rest_params.append({"type": "data_source_metadata", "organism": organism, "junction_type": "metadata", "data_source": repo})
+                data_sources_rest_params.append(
+                    {"type": "data_source_metadata", "organism": organism, "junction_type": "metadata",
+                     "data_source": repo})
     projects = set()
     samples = set()
 
@@ -185,22 +202,45 @@ def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
 
     return list(samples), list(projects)
 
-def load_gene_sums_table(filepath: str = "")-> pd.DataFrame:
+
+def load_gene_sums_table(filepath: str = "") -> pd.DataFrame:
+
     """Converts a compressed gene_sums file to pandas dataframe representation
 
-    :param filepath: location of gzip compresed gene_sums file
+    :param filepath: location of gzip compressed gene_sums file
     :return: pandas dataframe representation of gene counts
     """
 
-    if type(filepath)!=str:
+    if type(filepath) != str:
         filepath = str(filepath)
     if filepath.endswith(".gz"):
         with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
             gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", skiprows=2, index_col=0)
     else:
-        with open(filename=filepath, mode='rb') as GeneSumsFile:
+        with open(file=filepath, mode='rb') as GeneSumsFile:
             gene_sums_table = pd.read_csv(GeneSumsFile, sep="\t", skiprows=2, index_col=0)
     return gene_sums_table
+
+
+def load_gene_sums_matrix(filepath: str = "") -> np.array:
+
+    """Converts a compressed gene_sums file to numpy matrix representation
+
+    :param filepath:
+    :return: numpy 2d numpy array containing gene counts
+    """
+    gene_sums_list = []
+    if type(filepath) != str:
+        filepath = str(filepath)
+    if filepath.endswith(".gz"):
+        with gzip.open(filename=filepath, mode='rt', encoding="UTF-8") as decompressedGeneSumsFile:
+            file_reader = csv.reader(decompressedGeneSumsFile, delimiter="\t")
+            for row in file_reader:
+                gene_sums_list.append([float(expression) for expression in row])
+    gene_sums_matrix = np.array(gene_sums_list)
+
+    return gene_sums_matrix
+
 
 if __name__ == "__main__":
     samplist, projlist = create_sample_project_lists("human")
