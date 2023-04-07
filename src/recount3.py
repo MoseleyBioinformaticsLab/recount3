@@ -241,6 +241,26 @@ def load_gene_sums_matrix(filepath: str = "") -> np.array:
 
     return gene_sums_matrix
 
+def load_annotations(filepath: str = "", annotation_columns: tuple = ("seqname", "source", "feature", "start", "end",
+                                                                      "score", "strand", "frame",
+                                                                      "attribute")) -> pd.DataFrame:
+    """
+
+    :param filepath: location of annotation file
+    :param annotation_columns: names of all the columns in the annotation file
+    :return: a pandas DataFrame containing all annotations
+    """
+    if type(filepath) != str:
+        filepath = str(filepath)
+    if filepath.endswith(".gz"):
+        with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
+            gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", columns=annotation_columns, skiprows=2,
+                                          index_col=0)
+    else:
+        with open(file=filepath, mode='rb') as geneSumsFile:
+            gene_sums_table = pd.read_csv(geneSumsFile, sep="\t", columns=annotation_columns, skiprows=2, index_col=0)
+    return gene_sums_table
+
 
 if __name__ == "__main__":
     samplist, projlist = create_sample_project_lists("human")
