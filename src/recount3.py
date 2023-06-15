@@ -17,11 +17,12 @@ import pandas as pd
 import csv
 import numpy as np
 
-ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene", "file_extension": "G026"}
-ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "junction_type": "metadata",
-                    "genomic_unit": "gene", "data_source": "sra", "project": "SRP107565", "file_extension": "G026"}
+ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene",
+                    "annotation_file_extension": "G026"}
+ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "genomic_unit": "gene",
+                    "data_source": "sra", "project": "SRP107565", "annotation_file_extension": "G026"}
 ex_rest_params_3 = {"type": "count_files_junctions", "organism": "human", "data_source": "sra",
-                    "junction_type": "metadata", "junction_file_extension": "recount_qc", "project": "SRP107565"}
+                    "junction_type": "ALL", "junction_file_extension": "MM", "project": "SRP107565"}
 ex_rest_params_4 = {"type": "metadata_files", "organism": "human", "data_source": "sra", "project": "SRP096765",
                     "table_name": "recount_pred"}
 ex_rest_params_5 = {"type": "bigwig_files", "organism": "mouse", "data_source": "sra", "project": "DRP001299",
@@ -95,6 +96,8 @@ class GenericRecount3URL:
     }
 
     possible_param_values = {
+        "type": ["data_sources", "data_source_metadata", "annotations", "count_files_gene_or_exon",
+                 "count_files_junctions", "metadata_files", "bigwig_files"],
         "organism": ["human", "mouse"],
         "data_source": ["sra", "gtex", "tcga"],
         "junction_type": ["ALL"],
@@ -129,13 +132,13 @@ class GenericRecount3URL:
             return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{data_source}.recount_project.MD.gz".format(
                 **self.rest_params)
         elif self.rest_params["type"] == "annotations":
-            return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{file_extension}.gtf.gz".format(
+            return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{annotation_file_extension}.gtf.gz".format(
                 **self.rest_params)
         elif self.rest_params["type"] == "count_files_gene_or_exon":
-            return self.base_url + "{organism}/data_sources/{data_source}/{genomic_unit}/{project_2_char}/{project}/{data_source}.{genomic_unit}.{project}.{file_extension}.gz".format(
+            return self.base_url + "{organism}/data_sources/{data_source}/{genomic_unit}_sums/{project_2_char}/{project}/{data_source}.{genomic_unit}_sums.{project}.{annotation_file_extension}.gz".format(
                 project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "count_files_junctions":
-            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.junctions.{project}.{junction_type}.{junction_file_extension}.gz".format(
+            return self.base_url + "{organism}/data_sources/{data_source}/junctions/{project_2_char}/{project}/{data_source}.junctions.{project}.{junction_type}.{junction_file_extension}.gz".format(
                 project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "metadata_files":
             return self.base_url + "{organism}/data_sources/{data_source}/metadata/{project_2_char}/{project}/{data_source}.{table_name}.{project}.MD.gz".format(
