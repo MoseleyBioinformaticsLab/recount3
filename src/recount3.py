@@ -260,31 +260,37 @@ def load_gene_sums_matrix(filepath: str = "") -> np.array:
 
     return gene_sums_matrix
 
-def load_annotations(filepath: str = "", annotation_columns: tuple = ("seqname", "source", "feature", "start", "end",
-                                                                      "score", "strand", "frame",
-                                                                      "attribute")) -> pd.DataFrame:
+def load_gene_sums_annotations(filepath: str, column_labels: tuple = ("chromosome",
+                                                                      "source", "feature_type", "start", "end", "score",
+                                                                      "strand", "frame", "attributes"))-> pd.DataFrame:
     """
 
     :param filepath: location of annotation file
-    :param annotation_columns: names of all the columns in the annotation file
-    :return: a pandas DataFrame containing all annotations
+    :param column_labels: names of all the columns in the annotation file
+    :return: a pandas DataFrame containing annotations, with labeled columns to access gene annotation data as needed
     """
+
+    row_skip = 5 if any([".G026." in filepath[-12:], ".G029." in filepath[-12:]]) else 0
     if type(filepath) != str:
         filepath = str(filepath)
     if filepath.endswith(".gz"):
         with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
-            gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", columns=annotation_columns, skiprows=2,
-                                          index_col=0)
+            gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", skiprows=row_skip, header=None,
+                                          names=column_labels)
     else:
         with open(file=filepath, mode='rb') as geneSumsFile:
-            gene_sums_table = pd.read_csv(geneSumsFile, sep="\t", columns=annotation_columns, skiprows=2, index_col=0)
+            gene_sums_table = pd.read_csv(geneSumsFile, sep="\t", skiprows=row_skip, header=None, names=column_labels)
+    gene_sums_table.columns = column_labels
     return gene_sums_table
 
 
 if __name__ == "__main__":
+
     samplist, projlist = create_sample_project_lists("human")
+    
     with open("samplist.txt", "w") as f:
         f.write('\n'.join(samplist))
     with open("projlist.txt", "w") as f:
         f.write('\n'.join(projlist))
+
     test_download()
