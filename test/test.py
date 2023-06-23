@@ -1,4 +1,5 @@
 import sys
+import traceback
 from pathlib import Path
 recount_path = (Path.cwd() / '../src/recount').as_posix()
 sys.path.insert(1, recount_path)
