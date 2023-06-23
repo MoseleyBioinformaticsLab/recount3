@@ -1,6 +1,9 @@
 """
 recount3old.py
 """
+
+BASE_URL = "http://duffel.rail.bio/recount3/"  # "http://idies.jhu.edu/"
+# http://duffel.rail.bio/recount3/human/homes_index this is base of list of projects
 import urllib.request
 import ssl
 import os
@@ -14,8 +17,57 @@ import pandas as pd
 import csv
 import numpy as np
 
-BASE_URL = "http://duffel.rail.bio/recount3/"  # "http://idies.jhu.edu/"
-# http://duffel.rail.bio/recount3/human/homes_index this is base of list of projects
+ex_rest_params_1 = {"type": "annotations", "organism": "human", "genomic_unit": "gene",
+                    "annotation_file_extension": "G026"}
+ex_rest_params_2 = {"type": "count_files_gene_or_exon", "organism": "human", "genomic_unit": "gene",
+                    "data_source": "sra", "project": "SRP107565", "annotation_file_extension": "G026"}
+ex_rest_params_3 = {"type": "count_files_junctions", "organism": "human", "data_source": "sra",
+                    "junction_type": "ALL", "junction_file_extension": "MM", "project": "SRP107565"}
+ex_rest_params_4 = {"type": "metadata_files", "organism": "human", "data_source": "sra", "project": "SRP096765",
+                    "table_name": "recount_pred"}
+ex_rest_params_5 = {"type": "bigwig_files", "organism": "mouse", "data_source": "sra", "project": "DRP001299",
+                    "sample": "DRR014697"}
+ex_rest_params_6 = {"type": "data_sources", "organism": "human"}
+ex_rest_params_7 = {"type": "data_source_metadata", "organism": "human", "data_source": "sra",
+                    "junction_type": "metadata"}
+
+
+def test_download():
+    try:
+        print(GenericRecount3URL(ex_rest_params_1))
+        download(GenericRecount3URL(ex_rest_params_1))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_2))
+        download(GenericRecount3URL(ex_rest_params_2))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_3))
+        download(GenericRecount3URL(ex_rest_params_3))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_4))
+        download(GenericRecount3URL(ex_rest_params_4))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_5))
+        download(GenericRecount3URL(ex_rest_params_5))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_6))
+        download(GenericRecount3URL(ex_rest_params_6))
+    except Exception:
+        print(traceback.format_exc())
+    try:
+        print(GenericRecount3URL(ex_rest_params_7))
+        download(GenericRecount3URL(ex_rest_params_7))
+    except Exception:
+        print(traceback.format_exc())
 
 
 class GenericRecount3URL:
@@ -36,11 +88,25 @@ class GenericRecount3URL:
     expected_params = {
         "data_sources": ["organism"],
         "data_source_metadata": ["organism", "data_source", "junction_type"],
-        "annotations": ["organism", "genomic_unit", "file_extension"],
-        "count_files_gene_or_exon": ["organism", "data_source", "genomic_unit", "project", "file_extension"],
-        "count_files_junctions": ["organism", "data_source", "junction_type", "junction_file_extension", "project"],
+        "annotations": ["organism", "genomic_unit", "annotation_file_extension"],
+        "count_files_gene_or_exon": ["organism", "data_source", "genomic_unit", "project", "annotation_file_extension"],
+        "count_files_junctions": ["organism", "data_source", "junction_type", "project", "junction_file_extension"],
         "metadata_files": ["organism", "data_source", "project", "table_name"],
         "bigwig_files": ["organism", "data_source", "project", "sample"]
+    }
+
+    possible_param_values = {
+        "type": ["data_sources", "data_source_metadata", "annotations", "count_files_gene_or_exon",
+                 "count_files_junctions", "metadata_files", "bigwig_files"],
+        "organism": ["human", "mouse"],
+        "data_source": ["sra", "gtex", "tcga"],
+        "junction_type": ["ALL"],
+        "genomic_unit": ["gene", "exon"],
+        "annotation_file_extension": {"human": ["G026", "G029", "ERCC", "F006", "R109", "SIRV"], "mouse": ["M023"]},
+        "project": ["please refer to projlist.txt for a full list of projects"],
+        "junction_file_extension": ["MM", "ID", "RR"],
+        "table_name": ["project_meta", "recount_project", "recount_qc", "recount_seq_qc", "recount_pred"],
+        "sample": ["please refer to samplist.txt for a full list of samples"]
     }
 
     def _validate(self) -> None:
@@ -66,13 +132,13 @@ class GenericRecount3URL:
             return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{data_source}.recount_project.MD.gz".format(
                 **self.rest_params)
         elif self.rest_params["type"] == "annotations":
-            return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{file_extension}.gtf.gz".format(
+            return self.base_url + "{organism}/annotations/{genomic_unit}_sums/{organism}.{genomic_unit}_sums.{annotation_file_extension}.gtf.gz".format(
                 **self.rest_params)
         elif self.rest_params["type"] == "count_files_gene_or_exon":
-            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.recount_project.{project}.MD.gz".format(
+            return self.base_url + "{organism}/data_sources/{data_source}/{genomic_unit}_sums/{project_2_char}/{project}/{data_source}.{genomic_unit}_sums.{project}.{annotation_file_extension}.gz".format(
                 project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "count_files_junctions":
-            return self.base_url + "{organism}/data_sources/{data_source}/{junction_type}/{project_2_char}/{project}/{data_source}.{junction_file_extension}.{project}.MD.gz".format(
+            return self.base_url + "{organism}/data_sources/{data_source}/junctions/{project_2_char}/{project}/{data_source}.junctions.{project}.{junction_type}.{junction_file_extension}.gz".format(
                 project_2_char=self.rest_params["project"][-2:], **self.rest_params)
         elif self.rest_params["type"] == "metadata_files":
             return self.base_url + "{organism}/data_sources/{data_source}/metadata/{project_2_char}/{project}/{data_source}.{table_name}.{project}.MD.gz".format(
@@ -91,7 +157,7 @@ class GenericRecount3URL:
         :param url:
         :return:
         """
-        ssl_context = ssl.create_default_context()
+        ssl_context = ssl.create_default_context();
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
         return urllib.request.urlopen(url, data=None, cafile=None, capath=None, cadefault=False, context=ssl_context)
@@ -122,6 +188,11 @@ def download(url: t.Union[str, GenericRecount3URL], path: str = "", mode: str = 
 
 
 def create_sample_project_lists(organism: str = "") -> t.Tuple[list, list]:
+    """
+
+    :param organism: organism(s)
+    :return:
+    """
     organisms = [organism] if organism else ["mouse", "human"]
     data_sources_rest_params = []
     regex = re.compile(r'/|\n')
@@ -171,6 +242,7 @@ def load_gene_sums_table(filepath: str = "") -> pd.DataFrame:
 
 
 def load_gene_sums_matrix(filepath: str = "") -> np.array:
+
     """Converts a compressed gene_sums file to numpy matrix representation
 
     :param filepath:
@@ -188,31 +260,37 @@ def load_gene_sums_matrix(filepath: str = "") -> np.array:
 
     return gene_sums_matrix
 
-
-def load_annotations(filepath: str = "", annotation_columns: tuple = ("seqname", "source", "feature", "start", "end",
-                                                                      "score", "strand", "frame",
-                                                                      "attribute")) -> pd.DataFrame:
+def load_gene_sums_annotations(filepath: str, column_labels: tuple = ("chromosome",
+                                                                      "source", "feature_type", "start", "end", "score",
+                                                                      "strand", "frame", "attributes"))-> pd.DataFrame:
     """
 
     :param filepath: location of annotation file
-    :param annotation_columns: names of all the columns in the annotation file
-    :return: a pandas DataFrame containing all annotations
+    :param column_labels: names of all the columns in the annotation file
+    :return: a pandas DataFrame containing annotations, with labeled columns to access gene annotation data as needed
     """
+
+    row_skip = 5 if any([".G026." in filepath[-12:], ".G029." in filepath[-12:]]) else 0
     if type(filepath) != str:
         filepath = str(filepath)
     if filepath.endswith(".gz"):
         with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
-            gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", columns=annotation_columns, skiprows=2,
-                                          index_col=0)
+            gene_sums_table = pd.read_csv(decompressedGeneSumsFile, sep="\t", skiprows=row_skip, header=None,
+                                          names=column_labels)
     else:
         with open(file=filepath, mode='rb') as geneSumsFile:
-            gene_sums_table = pd.read_csv(geneSumsFile, sep="\t", columns=annotation_columns, skiprows=2, index_col=0)
+            gene_sums_table = pd.read_csv(geneSumsFile, sep="\t", skiprows=row_skip, header=None, names=column_labels)
+    gene_sums_table.columns = column_labels
     return gene_sums_table
 
 
 if __name__ == "__main__":
+
     samplist, projlist = create_sample_project_lists("human")
+    
     with open("samplist.txt", "w") as f:
         f.write('\n'.join(samplist))
     with open("projlist.txt", "w") as f:
         f.write('\n'.join(projlist))
+
+    test_download()
