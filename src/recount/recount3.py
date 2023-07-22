@@ -263,7 +263,7 @@ def load_gene_sums_matrix(filepath: str = "") -> np.array:
 def load_gene_sums_annotations(filepath: str, column_labels: tuple = ("chromosome",
                                                                       "source", "feature_type", "start", "end", "score",
                                                                       "strand", "frame", "attributes"))-> pd.DataFrame:
-    """
+    """Loads gene annotations from file and stores in pandas dataframe
 
     :param filepath: location of annotation file
     :param column_labels: names of all the columns in the annotation file
