@@ -298,16 +298,12 @@ def load_metadata(filepath: str)-> pd.DataFrame:
 
 if __name__ == "__main__":
 
-    """samplist, projlist = create_sample_project_lists("human")
+    samplist, projlist = create_sample_project_lists("human")
     
     with open("samplist.txt", "w") as f:
         f.write('\n'.join(samplist))
     with open("projlist.txt", "w") as f:
         f.write('\n'.join(projlist))
 
-    test_download()"""
-    params = {"type": "metadata_files", "organism": "mouse", "data_source": "sra", "project": "SRP063455"}
-    for table_name in GenericRecount3URL.possible_param_values['table_name']:
-        params["table_name"] = table_name
-        print(str(GenericRecount3URL(params)))
+    test_download()
 
