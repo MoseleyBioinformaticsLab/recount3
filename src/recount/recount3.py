@@ -85,7 +85,7 @@ class GenericRecount3URL:
     def __repr__(self):
         return self.url
 
-    expected_params = {
+    expected_params_by_type = {
         "data_sources": ["organism"],
         "data_source_metadata": ["organism", "data_source", "junction_type"],
         "annotations": ["organism", "genomic_unit", "annotation_file_extension"],
@@ -105,7 +105,7 @@ class GenericRecount3URL:
         "annotation_file_extension": {"human": ["G026", "G029", "ERCC", "F006", "R109", "SIRV"], "mouse": ["M023"]},
         "project": ["please refer to projlist.txt for a full list of projects"],
         "junction_file_extension": ["MM", "ID", "RR"],
-        "table_name": ["project_meta", "recount_project", "recount_qc", "recount_seq_qc", "recount_pred"],
+        "table_name": [{"project_meta": ["sra", "tcga", "gtex"]}, "recount_project", "recount_qc", "recount_seq_qc", "recount_pred"],
         "sample": ["please refer to samplist.txt for a full list of samples"]
     }
 
@@ -114,10 +114,10 @@ class GenericRecount3URL:
         :raises:
             KeyError: if self.rest_params has wrong or missing key-value pairs.
         """
-        if self.rest_params["type"] not in self.expected_params:
+        if self.rest_params["type"] not in self.expected_params_by_type:
             raise KeyError()
 
-        for params_type, params in self.expected_params.items():
+        for params_type, params in self.expected_params_by_type.items():
             if self.rest_params["type"] == params_type and any(key not in self.rest_params for key in params):
                 raise KeyError()
 
@@ -284,13 +284,30 @@ def load_gene_sums_annotations(filepath: str, column_labels: tuple = ("chromosom
     return gene_sums_table
 
 
+def load_metadata(filepath: str)-> pd.DataFrame:
+    if type(filepath) != str:
+        filepath = str(filepath)
+    if filepath.endswith(".gz"):
+        with gzip.open(filename=filepath, mode='rb') as decompressedGeneSumsFile:
+            metadata_table = pd.read_csv(decompressedGeneSumsFile, sep="\t")
+    else:
+        with open(file=filepath, mode='rb') as GeneSumsFile:
+            metadata_table = pd.read_csv(GeneSumsFile, sep="\t")
+    return metadata_table
+
+
 if __name__ == "__main__":
 
-    samplist, projlist = create_sample_project_lists("human")
+    """samplist, projlist = create_sample_project_lists("human")
     
     with open("samplist.txt", "w") as f:
         f.write('\n'.join(samplist))
     with open("projlist.txt", "w") as f:
         f.write('\n'.join(projlist))
 
-    test_download()
+    test_download()"""
+    params = {"type": "metadata_files", "organism": "mouse", "data_source": "sra", "project": "SRP063455"}
+    for table_name in GenericRecount3URL.possible_param_values['table_name']:
+        params["table_name"] = table_name
+        print(str(GenericRecount3URL(params)))
+
