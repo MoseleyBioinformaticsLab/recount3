@@ -244,27 +244,22 @@ def _http_open(
 
     Args:
       url: Absolute URL to open.
-      timeout: Socket timeout (seconds) passed to `opener.open(...)`.
+      timeout: Socket timeout (seconds) passed to ``opener.open(...)``.
       headers: Optional extra headers to send. Non-string values (including
-        `None`) are sanitized: `None` is dropped; others are `str(...)`-cast.
+        ``None``) are sanitized: ``None`` is dropped; others are ``str(...)``-cast.
 
     Returns:
       A file-like binary object for the HTTP response (e.g., an
-      `http.client.HTTPResponse`), suitable for use with `contextlib.closing`.
+      ``http.client.HTTPResponse``), suitable for use with ``contextlib.closing``.
 
     Raises:
       URLError, HTTPError, socket.timeout: Network/HTTP errors from urllib.
-      ValueError: If `url` is empty.
+      ValueError: If ``url`` is empty.
 
     Environment:
       RECOUNT3_USER_AGENT: If set, overrides the default User-Agent string.
-        You may also define a module-level `USER_AGENT`; if present,
+        You may also define a module-level ``USER_AGENT``; if present,
         it takes precedence over the env var.
-
-    Notes:
-      - This function purposefully keeps behavior minimal to avoid side-effects.
-        If you need custom SSL behavior, add it to the opener construction.
-      - Header keys are assumed to be strings; values are normalized here.
     """
     if not url:
         raise ValueError("Empty URL passed to _http_open().")
@@ -272,7 +267,7 @@ def _http_open(
     ua = (
         globals().get("USER_AGENT")
         or os.environ.get("RECOUNT3_USER_AGENT")
-        or "recount3-python/0.2 (+https://github.com/MoseleyBioinformaticsLab/recount3)"
+        or "recount3-python/0.3 (+https://github.com/MoseleyBioinformaticsLab/recount3)"
     )
 
     merged_headers: dict[str, str] = {"User-Agent": str(ua)}
@@ -284,6 +279,9 @@ def _http_open(
             merged_headers[str(k)] = str(v)
 
     opener = urllib.request.build_opener()
+    if INSECURE_SSL:
+        opener.add_handler(urllib.request.HTTPSHandler(context=_ssl_insecure_context()))  # pragma: no cover
+
     req = urllib.request.Request(url, headers=merged_headers)
     return opener.open(req, timeout=timeout)
 
@@ -352,11 +350,7 @@ def _download_stream_to_zip(
     chunk_size: int,
     overwrite: bool,
 ) -> None:
-    """Stream URL content directly into a .zip file (no cache involvement).
-
-    Note: No retry wrapper here to avoid corrupting the archive with
-    partially-written entries. Prefer running the entire operation once.
-    """
+    """Stream URL content directly into a .zip file (no cache involvement)."""
     _ensure_dir(zip_path.parent)
     mode = "a" if zip_path.exists() else "w"
     with zipfile.ZipFile(zip_path, mode=mode, compression=zipfile.ZIP_DEFLATED) as zf:
@@ -391,38 +385,31 @@ def _write_cached_file_to_zip(
 
 
 # ---------------------------------------------------------------------------
-# R3ResourceDescription: typed resource description and URL builder
+# Multi-factory resource descriptions
 # ---------------------------------------------------------------------------
 
 CacheMode = Literal["enable", "disable", "update"]
 
 
-@dataclasses.dataclass(slots=True)
-class R3ResourceDescription:
-    """Typed description of a recount3 resource.
+def _p2(s: _t.Optional[str]) -> str:
+    """Return the last two characters of ``s`` for duffel shard directories.
 
-    The fields collectively determine the stable URL path (relative to
-    :data:`BASE_URL`). Required fields vary by ``resource_type``.
-
-    Attributes:
-      resource_type: One of {"annotations", "count_files_gene_or_exon",
-        "count_files_junctions", "metadata_files", "bigwig_files",
-        "data_sources", "data_source_metadata"}.
-      organism: "human" or "mouse" (when applicable).
-      data_source: "sra", "gtex", or "tcga" (when applicable).
-      genomic_unit: "gene" or "exon" (for annotations/counts).
-      project: Project accession (e.g., "SRP107565").
-      sample: Sample accession (e.g., "DRR014697").
-      annotation_file_extension: e.g., "G026", "G029", "M023".
-      junction_type: e.g., "ALL" or "metadata".
-      junction_file_extension: e.g., "MM", "ID", "RR".
-      table_name: e.g., "recount_project", "recount_qc", "recount_pred".
-
-    Raises:
-      KeyError: Missing required fields for the selected type.
-      ValueError: Invalid field values.
+    - ``None`` or ``""``  -> ``""``
+    - ``"A"``              -> ``"A"``
+    - ``"SRP107565"``      -> ``"65"``
     """
+    if not s:
+        return ""
+    return s[-2:]
 
+
+@dataclasses.dataclass(slots=True)
+class _R3CommonFields:
+    """Uniform field schema shared by all description subclasses.
+
+    The *multi-factory* base returns concrete subclasses that still expose all
+    of these attributes so existing code paths remain source-compatible.
+    """
     resource_type: str
     organism: Optional[str] = None
     data_source: Optional[str] = None
@@ -434,105 +421,220 @@ class R3ResourceDescription:
     junction_file_extension: Optional[str] = None
     table_name: Optional[str] = None
 
-    # Public API -----------------------------------------------------------
 
-    def url_path(self) -> str:
-        """Build the URL path (including leading slash)."""
-        t = self.resource_type
-        if t == "annotations":
-            return _url_annotations(self)
-        if t == "count_files_gene_or_exon":
-            return _url_count_files_gene_or_exon(self)
-        if t == "count_files_junctions":
-            return _url_count_files_junctions(self)
-        if t == "metadata_files":
-            return _url_metadata_files(self)
-        if t == "bigwig_files":
-            return _url_bigwig_files(self)
-        if t == "data_sources":
-            return _url_data_sources(self)
-        if t == "data_source_metadata":
-            return _url_data_source_metadata(self)
-        raise ValueError(f"Unsupported resource_type: {t!r}")
+class R3ResourceDescription:
+    """Abstract base class and multi-factory for recount3 resource descriptors.
 
-    # Private helpers ------------------------------------------------------
+    Usage:
+      >>> desc = R3ResourceDescription(resource_type="annotations", organism="human", ...)
+
+    The base class overrides :py:meth:`__new__` to return an instance of the
+    registered subclass for the given ``resource_type``. Subclasses should
+    inherit from :class:`_R3CommonFields` and :class:`R3ResourceDescription`,
+    be declared as ``@dataclasses.dataclass(slots=True)``, and implement
+    :py:meth:`url_path()` plus any needed validation in ``__post_init__``.
+    """
+
+    # Registry mapping resource_type -> subclass
+    _TYPE_REGISTRY: dict[str, type["R3ResourceDescription"]] = {}
+
+    # ----- multi-factory -------------------------------------------------
+
+    def __new__(cls, *args, **kwargs):
+        """Return an instance of the appropriate concrete subclass.
+
+        If ``cls`` is already a subclass (direct instantiation), default object
+        creation is used. When invoked as ``R3ResourceDescription(...)``,
+        the ``resource_type`` argument is examined and a suitable subclass is
+        instantiated instead.
+
+        Raises:
+          KeyError: Missing ``resource_type``.
+          ValueError: Unknown ``resource_type``.
+        """
+        if cls is not R3ResourceDescription:
+            return super().__new__(cls)
+
+        # Accept either positional or keyword 'resource_type', but prefer kw.
+        rtype = kwargs.get("resource_type")
+        if rtype is None and args:
+            rtype = args[0]  # positional resource_type in _R3CommonFields
+
+        if not rtype:
+            raise KeyError("resource_type is required to construct R3ResourceDescription.")
+
+        subcls = cls._TYPE_REGISTRY.get(str(rtype))
+        if subcls is None:
+            raise ValueError(f"Unsupported resource_type: {rtype!r}")
+
+        return super().__new__(subcls)  # type: ignore
+
+    # ----- registration helper ------------------------------------------
+
+    @classmethod
+    def register_type(cls, resource_type: str):
+        """Decorator to register a concrete subclass in the factory.
+
+        Example:
+          >>> @R3ResourceDescription.register_type("annotations")
+          ... @dataclasses.dataclass(slots=True)
+          ... class R3Annotations(_R3CommonFields, R3ResourceDescription):
+          ...     def url_path(self) -> str: ...
+        """
+        def _decorator(subcls: type["R3ResourceDescription"]):
+            cls._TYPE_REGISTRY[resource_type] = subcls
+            setattr(subcls, "_RESOURCE_TYPE", resource_type)
+            return subcls
+        return _decorator
+
+    # ----- shared validation helpers ------------------------------------
 
     def _require(self, *names: str) -> None:
+        """Raise ``KeyError`` if any named attribute is missing or empty."""
         for n in names:
-            if getattr(self, n) in (None, ""):
+            if getattr(self, n, None) in (None, ""):
                 raise KeyError(f"Missing required field: {n}")
 
     def _check_organism(self) -> None:
-        if self.organism not in _VALID_ORGANISMS:
-            raise ValueError(f"Invalid organism: {self.organism!r}")
+        if getattr(self, "organism", None) not in _VALID_ORGANISMS:
+            raise ValueError(f"Invalid organism: {getattr(self, 'organism', None)!r}")
 
     def _check_data_source(self) -> None:
-        if self.data_source not in _VALID_DATA_SOURCES:
-            raise ValueError(f"Invalid data_source: {self.data_source!r}")
+        if getattr(self, "data_source", None) not in _VALID_DATA_SOURCES:
+            raise ValueError(f"Invalid data_source: {getattr(self, 'data_source', None)!r}")
 
     def _check_genomic_unit(self) -> None:
-        if self.genomic_unit not in _VALID_GENOMIC_UNITS:
-            raise ValueError(f"Invalid genomic_unit: {self.genomic_unit!r}")
+        if getattr(self, "genomic_unit", None) not in _VALID_GENOMIC_UNITS:
+            raise ValueError(f"Invalid genomic_unit: {getattr(self, 'genomic_unit', None)!r}")
 
-    # URL builders ---------------------------------------------------------
+    # ----- abstract API --------------------------------------------------
 
-def _p2(s: _t.Optional[str]) -> str:
-    """Return the last two characters of `s` for duffel shard directories.
+    def url_path(self) -> str:  # pragma: no cover - implemented by subclasses
+        """Return the URL path (including leading slash)."""
+        raise NotImplementedError
 
-    - None or ""  -> ""
-    - "A"         -> "A"
-    - "SRP107565" -> "65"
-    """
-    if not s:
-        return ""
-    return s[-2:]
 
-def _url_annotations(self) -> str:
-    self._require("organism", "genomic_unit", "annotation_file_extension")
-    return (
-        f"{self.organism}/annotations/{self.genomic_unit}_sums/"
-        f"{self.organism}.{self.genomic_unit}_sums.{self.annotation_file_extension}.gtf.gz"
-    )
+# ----- concrete description subclasses -------------------------------------
 
-def _url_count_files_gene_or_exon(self) -> str:
-    self._require("organism", "data_source", "genomic_unit", "project", "annotation_file_extension")
-    return (
-        f"{self.organism}/data_sources/{self.data_source}/{self.genomic_unit}_sums/"
-        f"{_p2(self.project)}/{self.project}/"
-        f"{self.data_source}.{self.genomic_unit}_sums.{self.project}.{self.annotation_file_extension}.gz"
-    )
+@R3ResourceDescription.register_type("annotations")
+@dataclasses.dataclass(slots=True)
+class R3Annotations(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for gene/exon annotation tables."""
 
-def _url_count_files_junctions(self) -> str:
-    self._require("organism", "data_source", "project", "junction_type", "junction_file_extension")
-    return (
-        f"{self.organism}/data_sources/{self.data_source}/junctions/"
-        f"{_p2(self.project)}/{self.project}/"
-        f"{self.data_source}.junctions.{self.project}.{self.junction_type}.{self.junction_file_extension}.gz"
-    )
+    def __post_init__(self) -> None:
+        self._require("organism", "genomic_unit", "annotation_file_extension")
+        self._check_organism()
+        self._check_genomic_unit()
 
-def _url_metadata_files(self) -> str:
-    self._require("organism", "data_source", "project", "table_name")
-    return (
-        f"{self.organism}/data_sources/{self.data_source}/metadata/"
-        f"{_p2(self.project)}/{self.project}/"
-        f"{self.data_source}.{self.table_name}.{self.project}.MD.gz"
-    )
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/annotations/{self.genomic_unit}_sums/"
+            f"{self.organism}.{self.genomic_unit}_sums.{self.annotation_file_extension}.gtf.gz"
+        )
 
-def _url_bigwig_files(self) -> str:
-    self._require("organism", "data_source", "project", "sample")
-    return (
-        f"{self.organism}/data_sources/{self.data_source}/base_sums/"
-        f"{_p2(self.project)}/{self.project}/{_p2(self.sample)}/"
-        f"{self.data_source}.base_sums.{self.project}_{self.sample}.ALL.bw"
-    )
 
-def _url_data_source_metadata(self) -> str:
-    self._require("organism", "data_source")
-    return f"{self.organism}/data_sources/{self.data_source}/metadata/{self.data_source}.recount_project.MD.gz"
+@R3ResourceDescription.register_type("count_files_gene_or_exon")
+@dataclasses.dataclass(slots=True)
+class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for per-project gene/exon count matrices."""
 
-def _url_data_sources(self) -> str:
-    self._require("organism")
-    return f"{self.organism}/homes_index"
+    def __post_init__(self) -> None:
+        # Annotation extension is required on duffel mirrors.
+        self._require("organism", "data_source", "genomic_unit", "project", "annotation_file_extension")
+        self._check_organism()
+        self._check_data_source()
+        self._check_genomic_unit()
+
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/data_sources/{self.data_source}/{self.genomic_unit}_sums/"
+            f"{_p2(self.project)}/{self.project}/"
+            f"{self.data_source}.{self.genomic_unit}_sums.{self.project}.{self.annotation_file_extension}.gz"
+        )
+
+
+@R3ResourceDescription.register_type("count_files_junctions")
+@dataclasses.dataclass(slots=True)
+class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for per-project junction count files."""
+
+    def __post_init__(self) -> None:
+        self._require("organism", "data_source", "project", "junction_type", "junction_file_extension")
+        self._check_organism()
+        self._check_data_source()
+
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/data_sources/{self.data_source}/junctions/"
+            f"{_p2(self.project)}/{self.project}/"
+            f"{self.data_source}.junctions.{self.project}.{self.junction_type}.{self.junction_file_extension}.gz"
+        )
+
+
+@R3ResourceDescription.register_type("metadata_files")
+@dataclasses.dataclass(slots=True)
+class R3ProjectMetadata(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for per-project metadata tables."""
+
+    def __post_init__(self) -> None:
+        self._require("organism", "data_source", "project", "table_name")
+        self._check_organism()
+        self._check_data_source()
+
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/data_sources/{self.data_source}/metadata/"
+            f"{_p2(self.project)}/{self.project}/"
+            f"{self.data_source}.{self.table_name}.{self.project}.MD.gz"
+        )
+
+
+@R3ResourceDescription.register_type("bigwig_files")
+@dataclasses.dataclass(slots=True)
+class R3BigWig(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for per-sample BigWig coverage files (download-only)."""
+
+    def __post_init__(self) -> None:
+        self._require("organism", "data_source", "project", "sample")
+        self._check_organism()
+        self._check_data_source()
+
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/data_sources/{self.data_source}/base_sums/"
+            f"{_p2(self.project)}/{self.project}/{_p2(self.sample)}/"
+            f"{self.data_source}.base_sums.{self.project}_{self.sample}.ALL.bw"
+        )
+
+
+@R3ResourceDescription.register_type("data_sources")
+@dataclasses.dataclass(slots=True)
+class R3DataSources(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for the organism-level data-source index (homes_index)."""
+
+    def __post_init__(self) -> None:
+        self._require("organism")
+        self._check_organism()
+
+    def url_path(self) -> str:
+        return f"{self.organism}/homes_index"
+
+
+@R3ResourceDescription.register_type("data_source_metadata")
+@dataclasses.dataclass(slots=True)
+class R3DataSourceMetadata(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for source-level metadata listing tables."""
+
+    def __post_init__(self) -> None:
+        self._require("organism", "data_source")
+        self._check_organism()
+        self._check_data_source()
+
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/data_sources/{self.data_source}/metadata/"
+            f"{self.data_source}.recount_project.MD.gz"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -556,15 +658,15 @@ class R3Resource:
       load(): Load the resource into a Python object based on its type.
 
     Cache modes:
-      - "enable": use cache (create if missing).
-      - "disable": bypass cache; stream directly to destination.
-      - "update": re-download into cache under lock, then act like "enable".
+      - ``"enable"``: use cache (create if missing).
+      - ``"disable"``: bypass cache; stream directly to destination.
+      - ``"update"``: re-download into cache under lock, then act like "enable".
 
     Path semantics:
-      - None: cache-only; do not materialize to filesystem.
+      - ``None``: cache-only; do not materialize to filesystem.
       - Directory path: link/copy cached file, or download direct if cache
         is disabled.
-      - ".zip" path: add entry to zip (arcname is URL path sans leading slash).
+      - ``.zip`` path: add entry to zip (arcname is URL path sans leading slash).
     """
 
     description: R3ResourceDescription
@@ -629,8 +731,8 @@ class R3Resource:
         Args:
           path: ``None`` for cache-only; a directory to link/copy into; or a
             ``.zip`` archive to add the resource under its URL path.
-          cache_mode: "enable" uses cache; "disable" streams to ``path``;
-            "update" refreshes cache first then behaves like "enable".
+          cache_mode: ``"enable"`` uses cache; ``"disable"`` streams to ``path``;
+            ``"update"`` refreshes cache first then behaves like ``"enable"``.
           overwrite: Overwrite existing directory materialization when True.
           chunk_size: Chunk size in bytes for streaming/copying.
 
@@ -718,7 +820,7 @@ class R3Resource:
             ValueError: If the resource type is unsupported for loading.
             FileNotFoundError: If the cached file is missing after download.
         """
-        if self.description.resource_type == "bigwig_files":
+        if getattr(self.description, "resource_type", None) == "bigwig_files":
             raise DeprecationError(
                 "Loading BigWig data via pyBigWig is deprecated. "
                 "Please migrate to a BiocPy-compatible workflow or process "
@@ -734,11 +836,12 @@ class R3Resource:
 
         # Load TSV/TSV.GZ into DataFrame or list-of-dicts.
         name = cached.name.lower()
-        if name.endswith(".tsv") or name.endswith(".tsv.gz"):
+        if name.endswith(".tsv") or name.endswith(".tsv.gz") or name.endswith(".md.gz"):
             if pd is not None:
+                # pandas will infer compression and delimiter.
                 return pd.read_table(cached, compression="infer")  # type: ignore[no-any-return]
-            # Minimal fallback: parse as TSV using Python.
 
+            # Parse as TSV using Python.
             if name.endswith(".gz"):
                 fh: io.TextIOBase
                 fh = io.TextIOWrapper(gzip.open(cached, "rb"), encoding="utf-8")
@@ -749,7 +852,7 @@ class R3Resource:
                 return list(reader)
 
         raise ValueError(
-            f"Unsupported load() for resource type {self.description.resource_type!r} "
+            f"Unsupported load() for resource type {getattr(self.description, 'resource_type', None)!r} "
             f"with file {cached.name!r}"
         )
 
@@ -776,10 +879,9 @@ def _as_tuple(value: _StringOrIterable) -> _t.Tuple[str, ...]:
 
 
 def _build_param_grid(resource_type: str, **required_values: _StringOrIterable) -> list[dict[str, str]]:
-    """Cartesian product over provided values.
-    """
+    """Cartesian product over provided values."""
     keys = list(required_values.keys())
-    vals = [ _as_tuple(required_values[k]) for k in keys ]
+    vals = [_as_tuple(required_values[k]) for k in keys]
     grid: list[dict[str, str]] = []
     for combo in itertools.product(*vals):
         d: dict[str, str] = {"resource_type": resource_type}
@@ -794,7 +896,7 @@ def _make_resources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Instantiate R3Resource for each param dict, with optional de-dupe."""
+    """Instantiate R3Resource for each param dict, with optional de-duplication."""
     out: list[R3Resource] = []
     seen: set[str] = set()
     for params in param_dicts:
@@ -840,16 +942,24 @@ def search_count_files_gene_or_exon(
     data_source: _StringOrIterable,
     genomic_unit: _StringOrIterable,
     project: _StringOrIterable,
+    annotation_file_extension: _StringOrIterable = ("G026",),
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for per-project gene/exon counts."""
+    """Return R3Resource objects for per-project gene/exon counts.
+
+    Note:
+      ``annotation_file_extension`` is required on duffel mirrors. A default
+      can be provided here if you routinely target a particular catalog (e.g.
+      ``G026`` for Gencode v26). Override per call as needed.
+    """
     grid = _build_param_grid(
         "count_files_gene_or_exon",
         organism=organism,
         data_source=data_source,
         genomic_unit=genomic_unit,
         project=project,
+        annotation_file_extension=annotation_file_extension,
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
@@ -881,6 +991,7 @@ def search_metadata_files(
     organism: _StringOrIterable,
     data_source: _StringOrIterable,
     table_name: _StringOrIterable,
+    project: _StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
@@ -890,6 +1001,7 @@ def search_metadata_files(
         organism=organism,
         data_source=data_source,
         table_name=table_name,
+        project=project,
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
@@ -916,21 +1028,30 @@ def search_bigwig_files(
 
 def search_data_sources(
     *,
+    organism: _StringOrIterable,
     strict: bool = True,
 ) -> list[R3Resource]:
-    """Return an R3Resource representing the data-source index."""
-    grid = _build_param_grid("data_sources")  # no params required
+    """Return an R3Resource representing the data-source index.
+
+    The duffel layout requires an organism to select the correct homes index.
+    """
+    grid = _build_param_grid("data_sources", organism=organism)
     return _make_resources(grid, strict=strict, deduplicate=True)
 
 
 def search_data_source_metadata(
     *,
+    organism: _StringOrIterable,
     data_source: _StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
     """Return R3Resource objects for data-source level metadata listings."""
-    grid = _build_param_grid("data_source_metadata", data_source=data_source)
+    grid = _build_param_grid(
+        "data_source_metadata",
+        organism=organism,
+        data_source=data_source,
+    )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
 
@@ -962,7 +1083,7 @@ class Recount3Bundle:
                 if strict:
                     raise
                 continue
-            key = res.description.resource_type
+            key = getattr(res.description, "resource_type", "unknown")
             self.loaded.setdefault(key, []).append(obj)
         return self
 
@@ -1002,14 +1123,14 @@ class Recount3Bundle:
             "count_files_gene_or_exon",
             "count_files_junctions",
         }
-        count_res = [r for r in self.resources if r.description.resource_type in wanted]
+        count_res = [r for r in self.resources if getattr(r.description, "resource_type", "") in wanted]
         if not count_res:
             raise ValueError("No count-file resources available to stack.")
 
         # Ensure loaded objects are present
         dfs: list[pd.DataFrame] = []
         for r in count_res:
-            key = r.description.resource_type
+            key = getattr(r.description, "resource_type", "unknown")
             cache = self.loaded.setdefault(key, [])
             df = None
             # try cache
@@ -1027,12 +1148,12 @@ class Recount3Bundle:
                 if not isinstance(obj, pd.DataFrame):
                     raise TypeError(f"Loaded object for {r.url} is not a DataFrame.")
                 df = obj
-            dfs.append(df)  #type: ignore
+            dfs.append(df)  # type: ignore
 
-        return pd.concat(  #type: ignore
+        return pd.concat(  # type: ignore
             dfs,
-            axis=axis,  #type: ignore
-            join=join,  #type: ignore
+            axis=axis,  # type: ignore
+            join=join,  # type: ignore
             verify_integrity=verify_integrity,
         )
 
@@ -1081,7 +1202,7 @@ def materialize_bundle(
             bundle.add(r)
             if load:
                 obj = r.load()
-                key = r.description.resource_type
+                key = getattr(r.description, "resource_type", "unknown")
                 bundle.loaded.setdefault(key, []).append(obj)
         except Exception:
             if strict:
@@ -1103,12 +1224,11 @@ def create_sample_project_lists(organism: str = "") -> tuple[list[str], list[str
     by organism if the column is present.
 
     Args:
-      organism: Optional organism filter ("human" or "mouse", case-insensitive).
+      organism: Optional organism filter (\"human\" or \"mouse\", case-insensitive).
 
     Returns:
       (samples, projects): Sorted unique IDs.
     """
-    # Known sources (matches your module constants).
     data_sources = sorted(_VALID_DATA_SOURCES)
 
     samples: set[str] = set()
@@ -1127,7 +1247,7 @@ def create_sample_project_lists(organism: str = "") -> tuple[list[str], list[str
 
     for ds in data_sources:
         try:
-            res = R3Resource(R3ResourceDescription(resource_type="data_source_metadata", data_source=ds))
+            res = R3Resource(R3ResourceDescription(resource_type="data_source_metadata", organism="human", data_source=ds))
             meta = res.load()
         except Exception:
             # If a particular data source isn’t present on the mirror, skip it.
@@ -1236,7 +1356,7 @@ def test_download() -> None:
         try:
             res = R3Resource(desc)
             print(res.url)
-            folder_name = f"./downloads/{desc.resource_type}"
+            folder_name = f"./downloads/{desc.resource_type}"  # type: ignore
             res.download(path=folder_name, cache_mode="enable")
         except Exception:
             print(traceback.format_exc())
