@@ -138,6 +138,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import ssl
+import warnings
 import zipfile
 import dataclasses
 from pathlib import Path
@@ -148,6 +149,11 @@ from typing import Literal, Optional
 # ---------------------------------------------------------------------------
 
 import pandas as pd
+
+try:  # pyBigWig is required for BigWig read/write, ASK: should it be optional?
+    import pyBigWig  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover - optional dep
+    pyBigWig = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Public constants
@@ -390,6 +396,16 @@ def _write_cached_file_to_zip(
 
 CacheMode = Literal["enable", "disable", "update"]
 
+CompatibilityMode = Literal["family", "feature"]
+"""Stacking compatibility mode.
+
+- "family": Allow stacking only within the same *family* of count files:
+  gene/exon counts with gene/exon counts, junction counts with junction counts.
+  (No gene↔junction mixing.)
+
+- "feature": A stricter mode that also requires the *feature key* to match,
+  e.g., gene vs exon must be identical; junction subtype (e.g., "ALL") must match.
+"""
 
 def _p2(s: _t.Optional[str]) -> str:
     """Return the last two characters of ``s`` for duffel shard directories.
@@ -673,6 +689,8 @@ class R3Resource:
     url: str | None = None
     filepath: Optional[str] = None
 
+    _cached_data: object | None = dataclasses.field(default=None, init=False, repr=False)
+
     # ---- Derived properties ---------------------------------------------
 
     def __post_init__(self) -> None:
@@ -804,64 +822,296 @@ class R3Resource:
 
     # ------------------------------------------------------------------
 
-    def load(self):
-        """Load the resource into memory based on its type.
+    def load(self, *, force: bool = False) -> object:
+        """Load the resource and cache the result on the instance.
 
-        * Tabular (``.tsv``/``.tsv.gz``) resources: return a ``pandas.DataFrame``
-          when pandas is installed; otherwise return a list of dict rows.
-        * BigWig resources: loading is **deprecated**; a :class:`DeprecationError`
-          will be raised with guidance.
+        When called, this method returns the loaded object and also stores it
+        in-memory on the instance so subsequent calls can return the same object
+        without re-parsing the underlying file.
+
+        Args:
+          force: If True, bypass the in-memory cache and re-load from bytes.
 
         Returns:
-            Any: Loaded object depending on resource type.
+          object: The loaded representation (typically a pandas.DataFrame for
+          tabular resources or a list[dict] if pandas is unavailable).
 
         Raises:
-            DeprecationError: For BigWig resource loading.
-            ValueError: If the resource type is unsupported for loading.
-            FileNotFoundError: If the cached file is missing after download.
+          FileNotFoundError: If bytes are unexpectedly missing after download.
+          ValueError: If the resource type is not supported for loading.
         """
+        # Reuse loaded object unless force=True.
+        if not force and self._cached_data is not None:
+            return self._cached_data
+
+        # BigWig: open with pyBigWig and return a managed reader.
         if getattr(self.description, "resource_type", None) == "bigwig_files":
-            raise DeprecationError(
-                "Loading BigWig data via pyBigWig is deprecated. "
-                "Please migrate to a BiocPy-compatible workflow or process "
-                "BigWig files externally. You can still download or add them "
-                "to zip archives with R3Resource.download()."
-            )
+            # Ensure bytes are cached locally (consistent with other resource types).
+            self.download(path=None, cache_mode="enable")
+            cached = self._cached_path()
+            if not cached.exists():  # defensive
+                raise FileNotFoundError(str(cached))
+            reader = BigWigReader(cached)
+            # Open immediately so downstream errors surface now, not later.
+            reader._ensure_open()
+            self._cached_data = reader
+            return reader
 
         # Ensure bytes are present locally (cache enabled by default).
         self.download(path=None, cache_mode="enable")
         cached = self._cached_path()
-        if not cached.exists():  # pragma: no cover - defensive
+        if not cached.exists():  # defensive
             raise FileNotFoundError(str(cached))
 
-        # Load TSV/TSV.GZ into DataFrame or list-of-dicts.
         name = cached.name.lower()
         if name.endswith(".tsv") or name.endswith(".tsv.gz") or name.endswith(".md.gz"):
             if pd is not None:
-                # pandas will infer compression and delimiter.
-                return pd.read_table(cached, compression="infer")  # type: ignore[no-any-return]
+                obj = pd.read_table(cached, compression="infer")
+                self._cached_data = obj
+                return obj
 
-            # Parse as TSV using Python.
+            # Fallback parser without pandas.
             if name.endswith(".gz"):
-                fh: io.TextIOBase
-                fh = io.TextIOWrapper(gzip.open(cached, "rb"), encoding="utf-8")
+                fh: io.TextIOBase = io.TextIOWrapper(gzip.open(cached, "rb"), encoding="utf-8")
             else:
                 fh = open(cached, "rt", encoding="utf-8")
             with fh as tsv:
                 reader = csv.DictReader(tsv, delimiter="\t")
-                return list(reader)
+                obj = list(reader)
+                self._cached_data = obj
+                return obj
 
         raise ValueError(
-            f"Unsupported load() for resource type {getattr(self.description, 'resource_type', None)!r} "
+            "Unsupported load() for resource type "
+            f"{getattr(self.description, 'resource_type', None)!r} "
             f"with file {cached.name!r}"
         )
 
     # ------------------------------------------------------------------
 
+    def is_loaded(self) -> bool:
+        """Return whether this resource has an in-memory loaded object.
+
+        Returns:
+          bool: True if an object is cached on the instance.
+        """
+        return self._cached_data is not None
+
+    def get_loaded(self) -> object | None:
+        """Return the in-memory loaded object without triggering I/O.
+
+        Returns:
+          object | None: The cached object, or None if not loaded.
+        """
+        return self._cached_data
+
+    def clear_loaded(self) -> None:
+        """Clear only the in-memory loaded object.
+
+        This does not affect on-disk byte caches (see the download cache).
+        """
+        # Close pyBigWig handle if present, then clear.
+        obj = self._cached_data
+        try:
+            if isinstance(obj, BigWigReader):
+                obj.close()
+        finally:
+            self._cached_data = None
+
     def __repr__(self) -> str:  # pragma: no cover - representation only
         cls = self.__class__.__name__
         return f"{cls}(url={self.url!r}, arcname={self.arcname!r}, filepath={self.filepath!r})"
 
+# ---------------------------------------------------------------------------
+# BigWig reader wrapper (pyBigWig)
+# ---------------------------------------------------------------------------
+
+@dataclasses.dataclass(slots=True)
+class BigWigReader:
+    """Thin, safe wrapper around a pyBigWig handle.
+
+    This class manages opening and closing a BigWig file and exposes
+    a small, typed API that mirrors the most common `pyBigWig` methods.
+
+    Instances are context-manager friendly and idempotent w.r.t. opening.
+
+    Attributes:
+      path: Filesystem path to a `.bw` file (must exist).
+      mode: File mode for `pyBigWig.open`. Reading is the default ("r").
+
+    Example:
+      >>> reader = BigWigReader(Path("signal.bw"))
+      >>> with reader as bw:
+      ...     sizes = bw.chroms()       # dict[str, int]
+      ...     vals = bw.values("chr1", 100_000, 100_100, numpy=True)
+      ...     mean = bw.stats("chr1", 100_000, 200_000, type="mean", exact=True)[0]
+      >>> reader.close()  # safe to call multiple times
+
+    Notes:
+      See pyBigWig usage and method semantics (values/stats/intervals).  # noqa: E501
+    """
+
+    path: Path
+    mode: str = "r"
+
+    _bw: object | None = dataclasses.field(default=None, init=False, repr=False)
+
+    # --------------------------- lifecycle ---------------------------------
+
+    def _ensure_open(self) -> "pyBigWig.pyBigWig":
+        """Open the file if needed and return the live pyBigWig handle.
+
+        Returns:
+          pyBigWig.pyBigWig: Live handle.
+
+        Raises:
+          FileNotFoundError: If ``path`` does not exist.
+          ImportError: If ``pyBigWig`` is not installed.
+          RuntimeError: If opening the file fails.
+        """
+        if self._bw is not None:
+            return _t.cast("pyBigWig.pyBigWig", self._bw)
+
+        if pyBigWig is None:
+            raise ImportError(
+                "pyBigWig is required to read BigWig files. "
+                "Install with `pip install pyBigWig` or "
+                "`conda install -c conda-forge -c bioconda pybigwig`."
+            )
+        if not self.path.exists():
+            raise FileNotFoundError(str(self.path))
+
+        bw = pyBigWig.open(str(self.path), self.mode)  # type: ignore[attr-defined]
+        if bw is None:  # pyBigWig returns None on failure
+            raise RuntimeError(f"Failed to open BigWig file: {self.path}")
+        self._bw = bw
+        return bw
+
+    def close(self) -> None:
+        """Close the underlying pyBigWig handle if open."""
+        if self._bw is not None:
+            try:
+                self._bw.close()  # type: ignore[call-arg]
+            finally:
+                self._bw = None
+
+    def __enter__(self) -> "pyBigWig.pyBigWig":
+        return self._ensure_open()
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    # ------------------------- convenience API -----------------------------
+
+    def is_open(self) -> bool:
+        """Return True if the underlying handle is open."""
+        return self._bw is not None
+
+    def chroms(self, chrom: str | None = None) -> _t.Union[dict[str, int], int, None]:
+        """Return chromosome lengths, or a single length.
+
+        Args:
+          chrom: If provided, return only the length for this chromosome.
+
+        Returns:
+          dict[str, int] | int | None: Mapping of chromosome names to lengths,
+          a single integer if ``chrom`` is provided, or ``None`` if not present.
+        """
+        bw = self._ensure_open()
+        return bw.chroms(chrom) if chrom else bw.chroms()
+
+    def header(self) -> dict[str, _t.Any]:
+        """Return the BigWig header metadata.
+
+        Keys typically include: ``version``, ``nLevels``, ``nBasesCovered``,
+        ``minVal``, ``maxVal``, ``sumData``, ``sumSquared``.
+        """
+        bw = self._ensure_open()
+        return _t.cast(dict[str, _t.Any], bw.header())
+
+    def values(
+        self,
+        chrom: str,
+        start: int,
+        end: int,
+        *,
+        numpy: bool | None = None,
+    ) -> _t.Sequence[float]:
+        """Return per-base values over a half-open interval [start, end).
+
+        Args:
+          chrom: Chromosome name.
+          start: 0-based inclusive start (>= 0).
+          end: 0-based exclusive end (> start).
+          numpy: If True, return a NumPy array; if False, return a list.
+            If None, let pyBigWig default (list).
+
+        Returns:
+          Sequence[float]: Values for each base; missing bases are NaN.
+        """
+        bw = self._ensure_open()
+        return bw.values(chrom, int(start), int(end), numpy=numpy)
+
+    def stats(
+        self,
+        chrom: str,
+        start: int | None = None,
+        end: int | None = None,
+        *,
+        type: str = "mean",
+        n_bins: int | None = None,
+        exact: bool | None = None,
+    ) -> list[float | None]:
+        """Return summary statistic(s) over an interval or whole chromosome.
+
+        Args:
+          chrom: Chromosome name.
+          start: Optional 0-based start (inclusive).
+          end: Optional 0-based end (exclusive).
+          type: Statistic type; e.g., "mean", "max", "min", "sum", "std",
+            "coverage", "variance", "percentile".
+          n_bins: If provided, compute evenly spaced bins across the interval.
+          exact: If True, compute exact statistics ignoring zoom levels.
+
+        Returns:
+          list[float | None]: Single-item list by default; length = ``n_bins``
+          when ``n_bins`` is provided.
+
+        Notes:
+          pyBigWig approximate vs exact behavior is controlled via ``exact``.
+        """
+        bw = self._ensure_open()
+        kwargs = {"type": type}
+        if n_bins is not None:
+            kwargs["nBins"] = int(n_bins)
+        if exact is not None:
+            kwargs["exact"] = bool(exact)
+        # pyBigWig permits omitting start/end to summarize the whole chrom
+        if start is None or end is None:
+            return bw.stats(chrom, **kwargs)
+        return bw.stats(chrom, int(start), int(end), **kwargs)
+
+    def intervals(
+        self,
+        chrom: str,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> _t.Sequence[tuple[int, int, float]] | None:
+        """Return interval triples (start, end, value) overlapping a region.
+
+        Args:
+          chrom: Chromosome name.
+          start: Optional 0-based start (inclusive).
+          end: Optional 0-based end (exclusive).
+
+        Returns:
+          Sequence[tuple[int, int, float]] | None: Intervals or ``None`` when
+          no intervals exist on the queried contig.
+        """
+        bw = self._ensure_open()
+        if start is None or end is None:
+            return bw.intervals(chrom)
+        return bw.intervals(chrom, int(start), int(end))
 
 # ---------------------------------------------------------------------------
 # Discovery/search helpers
@@ -876,6 +1126,35 @@ def _as_tuple(value: _StringOrIterable) -> _t.Tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
     return tuple(value)
+
+
+FieldSpec = _t.Union[_StringOrIterable, _t.Callable[[object | None], bool], None]
+"""Type alias for field selection criteria.
+
+A ``FieldSpec`` can be:
+  * ``None``            -> no filter on that field
+  * a string            -> exact-match on that single value
+  * an iterable[str]    -> ANY-of these values
+  * a predicate         -> ``callable(value) -> bool`` evaluated on the field
+"""
+
+def _match_spec(value: object | None, spec: FieldSpec) -> bool:
+    """Return True if ``value`` satisfies the selection ``spec``.
+
+    Args:
+      value: The attribute value from a resource description (may be ``None``).
+      spec: See :data:`FieldSpec`.
+
+    Returns:
+      bool: True if the spec is ``None`` (no filter), if the value is in
+      the provided set of values, or if the predicate returns True.
+    """
+    if spec is None:
+        return True
+    if callable(spec):
+        return bool(spec(value))
+    # Tuple-of-strings semantics: match any-of
+    return _as_tuple(spec) and value in _as_tuple(spec)
 
 
 def _build_param_grid(resource_type: str, **required_values: _StringOrIterable) -> list[dict[str, str]]:
@@ -1059,37 +1338,264 @@ def search_data_source_metadata(
 # Aggregation / materialization conveniences
 # ---------------------------------------------------------------------------
 
-@dataclasses.dataclass(slots=True)
-class Recount3Bundle:
-    """Container for a set of R3Resource objects and (optionally) loaded data.
+def _count_compat_keys(res: R3Resource) -> tuple[str, str]:
+    """Return (family, feature_key) for a count resource.
 
-    - Holds the resources themselves.
-    - Optionally caches the loaded tabular objects (DataFrames if pandas is
-      available, else list-of-dicts).
+    The *family* label coarsely separates major count types:
+      - "gene_or_exon" for :data:`"count_files_gene_or_exon"`
+      - "junctions"    for :data:`"count_files_junctions"`
+
+    The *feature_key* tightens compatibility:
+      - For gene/exon counts: "gene_or_exon:<genomic_unit>"
+        (prevents gene↔exon stacking)
+      - For junction counts: "junctions:<junction_type>:<junction_file_extension>"
+
+    Args:
+      res: The resource to categorize.
+
+    Returns:
+      tuple[str, str]: (family, feature_key)
+
+    Raises:
+      ValueError: If the resource is not a recognized count-file type.
     """
+    rtype = getattr(res.description, "resource_type", None)
+    if rtype == "count_files_gene_or_exon":
+        gu = getattr(res.description, "genomic_unit", None) or ""
+        family = "gene_or_exon"
+        feature_key = f"{family}:{gu}"
+        return family, feature_key
+
+    if rtype == "count_files_junctions":
+        jt = getattr(res.description, "junction_type", None) or ""
+        jext = getattr(res.description, "junction_file_extension", None) or ""
+        family = "junctions"
+        feature_key = f"{family}:{jt}:{jext}"
+        return family, feature_key
+
+    raise ValueError(
+        "Resource is not a recognized count-file type for stacking: "
+        f"{rtype!r}"
+    )
+
+@dataclasses.dataclass(slots=True)
+class R3ResourceBundle:
+    """Container for a set of `R3Resource` objects.
+
+    The bundle no longer maintains a separate `loaded` mapping. Each
+    `R3Resource` owns its loaded object in-memory. Methods in this class
+    operate by delegating to each resource.
+
+    Attributes:
+      resources: The resources held by this bundle.
+    """
+
     resources: list[R3Resource] = dataclasses.field(default_factory=list)
-    loaded: dict[str, list[object]] = dataclasses.field(default_factory=dict)
+
 
     def add(self, resource: R3Resource) -> None:
         """Add a resource to the bundle."""
         self.resources.append(resource)
 
-    def load_all(self, *, strict: bool = True) -> "Recount3Bundle":
-        """Load all resources and cache by resource_type."""
+    def extend(self, resources: _t.Iterable[R3Resource]) -> None:
+        """Extend the bundle with multiple resources."""
+        self.resources.extend(resources)
+
+
+    def load(self, *, strict: bool = True, force: bool = False) -> "R3ResourceBundle":
+        """Load all resources and cache on each resource instance.
+
+        Args:
+          strict: If True, raise on first failure; otherwise skip failures.
+          force: If True, re-load even if a resource already has cached data.
+
+        Returns:
+          R3ResourceBundle: self for chaining.
+        """
         for res in self.resources:
             try:
-                obj = res.load()
+                res.load(force=force)
             except Exception:
                 if strict:
                     raise
+                # non-strict: skip failed resource
                 continue
-            key = getattr(res.description, "resource_type", "unknown")
-            self.loaded.setdefault(key, []).append(obj)
         return self
 
-    def get_loaded(self, resource_type: str) -> list[object]:
-        """Return previously loaded objects for a given resource type."""
-        return self.loaded.get(resource_type, [])
+    def iter_loaded(
+        self,
+        *,
+        resource_type: str | None = None,
+        autoload: bool = False,
+    ) -> _t.Iterable[tuple[R3Resource, object]]:
+        """Yield (resource, object) pairs for resources with loaded data.
+
+        Args:
+          resource_type: Optional filter by `description.resource_type`.
+          autoload: If True, call `load()` for resources that are not loaded.
+
+        Yields:
+          Tuple[R3Resource, object]: The resource and its loaded object.
+        """
+        for res in self.resources:
+            if resource_type and getattr(res.description, "resource_type", None) != resource_type:
+                continue
+            if not res.is_loaded():
+                if autoload:
+                    try:
+                        res.load()
+                    except Exception:
+                        continue
+                else:
+                    continue
+            obj = res.get_loaded()
+            if obj is not None:
+                yield res, obj
+
+    def iter_bigwig(self, *, autoload: bool = True) -> _t.Iterable[tuple[R3Resource, BigWigReader]]:
+        """Yield (resource, BigWigReader) for BigWig resources.
+
+        Args:
+        autoload: If True, call ``load()`` for resources not yet loaded.
+
+        Yields:
+        Tuple[R3Resource, BigWigReader]: Resource and its BigWig reader.
+        """
+        for res, obj in self.iter_loaded(resource_type="bigwig_files", autoload=autoload):
+            if isinstance(obj, BigWigReader):
+                yield res, obj
+
+    def get_loaded(
+        self, *, resource_type: str | None = None, autoload: bool = False
+    ) -> list[object]:
+        """Return loaded objects for resources in the bundle.
+
+        Args:
+          resource_type: Optional filter by type.
+          autoload: If True, load missing resources first.
+
+        Returns:
+          list[object]: Loaded objects.
+        """
+        return [obj for _, obj in self.iter_loaded(resource_type=resource_type, autoload=autoload)]
+
+    def filter(  # noqa: D401  (summary expanded in docstring below)
+        self,
+        *,
+        resource_type: FieldSpec = None,
+        organism: FieldSpec = None,
+        data_source: FieldSpec = None,
+        genomic_unit: FieldSpec = None,
+        project: FieldSpec = None,
+        sample: FieldSpec = None,
+        table_name: FieldSpec = None,
+        junction_type: FieldSpec = None,
+        predicate: _t.Callable[[R3Resource], bool] | None = None,
+        invert: bool = False,
+    ) -> "R3ResourceBundle":
+        """Return a new bundle containing only resources that match criteria.
+
+        Filtering is **AND**-combined across named fields (e.g., ``project`` *and*
+        ``organism`` must both match if provided). Within a single field, multiple
+        values are treated as **OR** (i.e., “any-of”). For advanced logic, supply
+        a ``predicate`` that receives the full :class:`R3Resource`.
+
+        The returned bundle *references the same* :class:`R3Resource` instances,
+        so any previously loaded data (owned by the resource) remains available.
+        This design enables fluent chaining:
+
+            >>> counts = bundle.filter(
+            ...     resource_type=("count_files_gene_or_exon", "count_files_junctions"),
+            ...     organism="human",
+            ... ).load()
+
+        Args:
+          resource_type: Filter by description ``resource_type``. Accepts a single
+            string, an iterable of strings (any-of), a predicate, or ``None``.
+          organism: Filter by description ``organism``.
+          data_source: Filter by description ``data_source``.
+          genomic_unit: Filter by description ``genomic_unit``.
+          project: Filter by description ``project``.
+          sample: Filter by description ``sample``.
+          table_name: Filter by description ``table_name``.
+          junction_type: Filter by description ``junction_type``.
+          predicate: Optional function ``(R3Resource) -> bool`` for custom logic.
+            It is evaluated in addition to the named field filters.
+          invert: If True, return resources that **do not** match the criteria.
+
+        Returns:
+          R3ResourceBundle: A new bundle that references only the selected
+          resources. No deep copies are made.
+
+        Raises:
+          None.
+
+        Notes:
+          * Matching is exact-string by default. For case-insensitive or
+            regex-based selection, supply a ``predicate`` (e.g., with ``re``).
+          * Because resources are not copied, their in-memory loaded state
+            (see ``R3Resource.get_loaded()``) is preserved in the filtered view.
+        """
+        # Collect desired field filters (skip Nones to avoid extra getattr calls).
+        field_specs: dict[str, FieldSpec] = {
+            "resource_type": resource_type,
+            "organism": organism,
+            "data_source": data_source,
+            "genomic_unit": genomic_unit,
+            "project": project,
+            "sample": sample,
+            "table_name": table_name,
+            "junction_type": junction_type,
+        }
+        field_specs = {k: v for k, v in field_specs.items() if v is not None}
+
+        selected: list[R3Resource] = []
+        for res in self.resources:
+            desc = res.description
+
+            # All named-field criteria must match (AND).
+            fields_ok = all(_match_spec(getattr(desc, name, None), spec)
+                            for name, spec in field_specs.items())
+
+            # Optional whole-resource predicate.
+            pred_ok = True
+            if predicate is not None:
+                try:
+                    pred_ok = bool(predicate(res))
+                except Exception:
+                    # Conservative stance: if predicate crashes, treat as non-match.
+                    pred_ok = False
+
+            match = fields_ok and pred_ok
+            if invert:
+                match = not match
+
+            if match:
+                selected.append(res)
+
+        return R3ResourceBundle(resources=selected)
+
+    def only_counts(self) -> "R3ResourceBundle":
+        """Return only gene/exon or junction count-file resources."""
+        return self.filter(
+            resource_type=("count_files_gene_or_exon", "count_files_junctions")
+        )
+
+    def only_metadata(self) -> "R3ResourceBundle":
+        """Return only metadata-file resources."""
+        return self.filter(resource_type="metadata_files")
+
+    def exclude_metadata(self) -> "R3ResourceBundle":
+        """Return a bundle with metadata-file resources removed."""
+        return self.filter(resource_type="metadata_files", invert=True)
+
+    def where(self, predicate: _t.Callable[[R3Resource], bool]) -> "R3ResourceBundle":
+        """Predicate-based alias for ``filter(predicate=...)``."""
+        return self.filter(predicate=predicate)
+
+    # ------------------------------------------------------------------
+    # Domain-specific helpers
+    # ------------------------------------------------------------------
 
     def stack_count_matrices(
         self,
@@ -1098,67 +1604,117 @@ class Recount3Bundle:
         axis: int = 1,
         verify_integrity: bool = False,
         autoload: bool = True,
+        compat: CompatibilityMode = "family",
     ):
         """Concatenate count matrices (gene/exon or junction) as DataFrames.
 
+        The operation is **restricted to compatible types** to avoid producing
+        biologically meaningless results. By default (``compat="family"``),
+        the function allows stacking only within the same *family*:
+
+          - gene/exon counts with gene/exon counts
+          - junction counts with junction counts
+
+        If stricter validation is needed, use ``compat="feature"`` to require
+        that the feature-defining key also matches (e.g., gene vs exon must be
+        identical; junction subtype/extension must be identical).
+
         Args:
-          join: 'inner' or 'outer' join on index.
-          axis: 1 to stack by columns (default), 0 to stack by rows.
-          verify_integrity: Passed to pandas.concat.
-          autoload: If True, call load() for any count resources that aren't
-            already cached in self.loaded.
+          join: Join strategy on the index for ``pandas.concat`` ('inner' or 'outer').
+          axis: Concatenation axis; 1 stacks by columns (default), 0 stacks by rows.
+          verify_integrity: Passed through to ``pandas.concat``.
+          autoload: If True, load any count resources that are not yet loaded.
+          compat: Compatibility mode. See :data:`CompatibilityMode`.
 
         Returns:
-          pandas.DataFrame
+          pandas.DataFrame: The stacked matrix.
 
         Raises:
           ImportError: If pandas is unavailable.
-          ValueError: If there are no count resources in the bundle.
+          ValueError: If no applicable resources are present, or the selection
+            mixes incompatible types for the chosen compatibility mode.
+          TypeError: If any loaded object is not a ``pandas.DataFrame``.
+
+        Notes:
+          * This method validates compatibility **before** building the output
+            matrix to prevent silent mixing of unrelated feature spaces.
+          * To split by type before stacking, consider chaining with
+            :meth:`filter`, e.g., ``bundle.filter(resource_type="count_files_junctions")``.
         """
         if pd is None:
             raise ImportError("pandas is required for stack_count_matrices().")
 
-        # Collect appropriate resources
-        wanted = {
-            "count_files_gene_or_exon",
-            "count_files_junctions",
-        }
-        count_res = [r for r in self.resources if getattr(r.description, "resource_type", "") in wanted]
+        # Identify candidate count resources first (no I/O yet).
+        wanted = {"count_files_gene_or_exon", "count_files_junctions"}
+        count_res = [
+            r for r in self.resources
+            if getattr(r.description, "resource_type", None) in wanted
+        ]
         if not count_res:
             raise ValueError("No count-file resources available to stack.")
 
-        # Ensure loaded objects are present
-        dfs: list[pd.DataFrame] = []
+        # ---- Compatibility pre-check (no loading needed) -----------------
+        families: set[str] = set()
+        features: set[str] = set()
+        family_counts: dict[str, int] = {}
+
         for r in count_res:
-            key = getattr(r.description, "resource_type", "unknown")
-            cache = self.loaded.setdefault(key, [])
-            df = None
-            # try cache
-            if cache:
-                # consume one matching object if it's a DataFrame
-                for i, obj in enumerate(cache):
-                    if isinstance(obj, pd.DataFrame):
-                        df = cache.pop(i)
-                        break
-            # load if needed
-            if df is None:
-                if not autoload:
-                    raise ValueError(f"Resource {r.url} not loaded and autoload=False.")
-                obj = r.load()
-                if not isinstance(obj, pd.DataFrame):
-                    raise TypeError(f"Loaded object for {r.url} is not a DataFrame.")
-                df = obj
-            dfs.append(df)  # type: ignore
+            try:
+                fam, feat = _count_compat_keys(r)
+            except ValueError:
+                # Not a count resource; skip (defensive).
+                continue
+            families.add(fam)
+            features.add(feat)
+            family_counts[fam] = family_counts.get(fam, 0) + 1
 
-        return pd.concat(  # type: ignore
-            dfs,
-            axis=axis,  # type: ignore
-            join=join,  # type: ignore
-            verify_integrity=verify_integrity,
-        )
+        if compat == "family":
+            if len(families) > 1:
+                # Build a helpful message and guidance.
+                details = ", ".join(f"{k}={v}" for k, v in sorted(family_counts.items()))
+                raise ValueError(
+                    "Incompatible count families selected for stacking. "
+                    f"Found families: {sorted(families)} ({details}). "
+                    "Stack gene/exon with gene/exon, and junctions with junctions. "
+                    "Hint: filter first, e.g., "
+                    'bundle.filter(resource_type="count_files_gene_or_exon") '
+                    "or bundle.filter(resource_type=\"count_files_junctions\")."
+                )
+        elif compat == "feature":
+            if len(features) > 1:
+                # Provide examples of distinct feature keys to aid debugging.
+                examples = ", ".join(sorted(features))
+                raise ValueError(
+                    "Feature-level incompatibility detected. All inputs must share "
+                    "the same feature key (e.g., gene vs exon; junction subtype). "
+                    f"Distinct feature keys observed: {examples}. "
+                    "Hint: filter by `genomic_unit` for gene/exon or by "
+                    "`junction_type`/`junction_file_extension` for junctions."
+                )
+        else:
+            raise ValueError(f"Unknown compat mode: {compat!r}")
+
+        # ---- Load and collect DataFrames --------------------------------
+        dfs: list[pd.DataFrame] = []
+        for res, obj in self.iter_loaded(autoload=autoload):
+            rtype = getattr(res.description, "resource_type", None)
+            if rtype not in wanted:
+                continue
+            if not isinstance(obj, pd.DataFrame):
+                raise TypeError(f"Loaded object for {res.url} is not a DataFrame.")
+            dfs.append(obj)
+
+        if not dfs:
+            # Either none loaded or autoload=False with empty cache.
+            raise ValueError(
+                "No loaded count matrices found. "
+                "Try autoload=True or call bundle.load() first."
+            )
+
+        return pd.concat(dfs, axis=axis, join=join, verify_integrity=verify_integrity)
 
 
-def materialize_resource(
+def materialize_resource(  #TODO: Possibly remove.
     resource: R3Resource,
     *,
     destination_directory: str = ".",
@@ -1173,7 +1729,7 @@ def materialize_resource(
     return out
 
 
-def materialize_bundle(
+def materialize_bundle(  #TODO: Possibly remove.
     resources: _t.Iterable[R3Resource],
     *,
     destination_directory: str = ".",
@@ -1181,7 +1737,7 @@ def materialize_bundle(
     strict: bool = True,
     load: bool = False,
     overwrite: bool = False,
-) -> Recount3Bundle:
+) -> R3ResourceBundle:
     """Download (and optionally load) a list of resources into a bundle.
 
     Args:
@@ -1189,21 +1745,19 @@ def materialize_bundle(
       destination_directory: Directory to materialize files via link/copy.
       cache_mode: Passed through to R3Resource.download.
       strict: If True, abort on first failure; else skip bad entries.
-      load: If True, call R3Resource.load() and cache in the bundle.
+      load: If True, call res.load() so each resource owns its data.
       overwrite: Overwrite existing files when materializing.
 
     Returns:
-      Recount3Bundle
+      R3ResourceBundle
     """
-    bundle = Recount3Bundle()
+    bundle = R3ResourceBundle()
     for r in resources:
         try:
             r.download(path=destination_directory, cache_mode=cache_mode, overwrite=overwrite)
             bundle.add(r)
             if load:
-                obj = r.load()
-                key = getattr(r.description, "resource_type", "unknown")
-                bundle.loaded.setdefault(key, []).append(obj)
+                r.load()  # resource owns its own loaded object
         except Exception:
             if strict:
                 raise
