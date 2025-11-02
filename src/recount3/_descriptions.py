@@ -7,9 +7,7 @@ URL paths.
 
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
 
 _VALID_ORGANISMS = {"human", "mouse"}

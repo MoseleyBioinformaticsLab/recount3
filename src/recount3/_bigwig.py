@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Any, Sequence, cast
+from typing import Any, cast
 
 
 try:  # Optional dependency; import lazily in _ensure_open for clarity.

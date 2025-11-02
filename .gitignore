@@ -73,3 +73,19 @@ logs/
 
 samplist.txt
 projlist.txt
+
+__pycache__/
+docs/_build/
+docs/_autosummary/
+gh-pages/
+wheelhouse/
+coverage.xml
+.python-version
+.envrc
+.direnv/
+.benchmarks/
+*.orig
+*.rej
+recount3-smoke/
+*.jsonl
+*.ndjson

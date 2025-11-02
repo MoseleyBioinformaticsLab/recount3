@@ -26,7 +26,6 @@ from .config import Config, default_config
 from .errors import (
     CompatibilityError,
     ConfigurationError,
-    DeprecationError,
     DownloadError,
     LoadError,
     Recount3Error,
@@ -66,7 +65,6 @@ __all__ = [
     # Errors
     "Recount3Error",
     "ConfigurationError",
-    "DeprecationError",
     "DownloadError",
     "LoadError",
     "CompatibilityError",
