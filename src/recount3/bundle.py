@@ -12,7 +12,7 @@ from typing import Iterable, Tuple
 
 import pandas as pd
 
-from .bigwig import BigWigFile
+from ._bigwig import BigWigFile
 from .errors import CompatibilityError
 from .resource import R3Resource
 from .types import CompatibilityMode

@@ -16,13 +16,14 @@ from typing import Optional
 import pandas as pd  # Required dependency in the original script.
 
 from .config import Config, default_config
-from .descriptions import R3ResourceDescription
+from ._descriptions import R3ResourceDescription
 from .errors import LoadError
 from .types import CacheMode
-from .bigwig import BigWigFile
-from ._internal.cache import _cache_path
-from ._internal.fs import _ensure_dir, _hardlink_or_copy
-from ._internal.http import (
+from ._bigwig import BigWigFile
+from ._utils import (
+    _cache_path,
+    _ensure_dir,
+    _hardlink_or_copy,
     download_stream_to_zip,
     download_to_file,
     write_cached_file_to_zip,

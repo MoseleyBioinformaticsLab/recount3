@@ -5,7 +5,15 @@
   2) Run a small smoke test that prints example URLs and attempts downloads
      into the current directory.
 
-The CLI is minimal to keep the library import cost low.
+TODO: Primarily search and download.
+Search in the API.
+Ability to save search into standard output or json/tsv/similar.
+Download in the API. Facilitated by a file          ^.
+Indicate what to download, or list of things in file.
+Immediate search+download. "search --download"/similar
+
+Replace with test.py until unit tests complete. 
+Docopt for CLI.
 """
 
 from __future__ import annotations
@@ -14,7 +22,7 @@ import logging
 import traceback
 from pathlib import Path
 
-from .descriptions import R3ResourceDescription
+from ._descriptions import R3ResourceDescription
 from .resource import R3Resource
 from .search import create_sample_project_lists
 

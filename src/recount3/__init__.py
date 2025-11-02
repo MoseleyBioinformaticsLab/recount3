@@ -33,7 +33,7 @@ from .errors import (
 )
 from .types import CacheMode, CompatibilityMode, FieldSpec, StringOrIterable
 
-from .descriptions import (
+from ._descriptions import (
     R3Annotations,
     R3BigWig,
     R3DataSourceMetadata,
@@ -45,7 +45,7 @@ from .descriptions import (
 )
 
 from .resource import R3Resource
-from .bigwig import BigWigFile
+from ._bigwig import BigWigFile
 from .bundle import R3ResourceBundle
 from .search import (
     create_sample_project_lists,

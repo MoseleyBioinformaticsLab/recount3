@@ -10,9 +10,9 @@ import itertools
 from collections.abc import Iterable
 from typing import Callable
 
-from .descriptions import (
+from ._descriptions import (
     R3ResourceDescription,
-    _VALID_DATA_SOURCES,  # internal, but used as before
+    _VALID_DATA_SOURCES,
 )
 from .resource import R3Resource
 from .types import FieldSpec, StringOrIterable
