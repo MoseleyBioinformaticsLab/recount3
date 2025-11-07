@@ -37,13 +37,13 @@ ids
 
   Flags:
     --organism=human|mouse|""   Empty means all organisms.
-    --samples-out=<file>        Write samples to file (else stdout).
-    --projects-out=<file>       Write projects to file (else stdout).
+    --samples-out=<file>        Write samples to plain text file (else stdout).
+    --projects-out=<file>       Write projects to plain text file (else stdout).
 
 search
-  Discover resources and print a manifest (JSONL or TSV). Filters are passed
-  as space-separated key=value tokens.
-
+  Discover resources and print a manifest (JSONL or TSV). Filters are passed  #TODO: Be able to give project ID and find ALL from that project. + Download and Load as a bundle. 
+  as space-separated key=value tokens.                                        #TODO: Then potentially concat multiple (at search/download level)
+                                                                              #TODO: Methods to make and return rangedsummarizedexperiment, usually 1 per project, or sometimes 1 for many projects.
   Output:
     By default results are written to stdout (pipe-friendly). Use
     ``--output <file>`` to write a specific file, or ``--outdir <dir>`` to
@@ -57,6 +57,13 @@ search
                   (optional: junction_type=ALL, junction_file_extension=MM)
     metadata      organism, data_source, table_name, project
     bigwig        organism, data_source, project, sample
+    project       organism, data_source, project
+                  (optional: genomic_unit=gene,exon;
+                  annotation=default|all|G026,G029;
+                  junction_type=ALL;
+                  junction_file_extension=MM,RR,ID;
+                  include_metadata=true|false;
+                  include_bigwig=true|false)
     sources       organism
     source-meta   organism, data_source
 
@@ -80,7 +87,7 @@ download
   Behavior:
     --jobs=<n>            Max parallel downloads (default 4).
     --cache=enable|disable|update
-                          Cache behavior:
+                          Cache behavior:  #TODO: set cache directory too "--cache-dir"
                             enable - use cache (default).
                             disable - stream straight to dest.
                             update - refresh cache, then use it.
@@ -362,6 +369,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "               (optional: junction_type=ALL, junction_file_extension=MM)\n"
             "  metadata:    organism, data_source, table_name, project\n"
             "  bigwig:      organism, data_source, project, sample\n"
+            "  project:     organism, data_source, project\n"
+            "               (optional: genomic_unit=gene,exon; "
+            "annotation=default|all|G026,G029; "
+            "junction_file_extension=MM,RR,ID; "
+            "include_metadata=true|false; include_bigwig=true|false)\n"
             "  sources:     organism\n"
             "  source-meta: organism, data_source\n"
             "\nExamples:\n"
@@ -379,6 +391,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "junctions",
             "metadata",
             "bigwig",
+            "project",
             "sources",
             "source-meta",
         ),
@@ -808,20 +821,47 @@ def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
 
 
 def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
-    """Implement the ``search`` subcommand.
+    """Execute the 'search' subcommand.
 
-    Parses key=value filters, invokes the appropriate :mod:`recount3.search`
-    function, and writes a manifest in the requested format.
+    Dispatches to one of the supported modes and writes a manifest to
+    stdout or to a file when --output is provided.
+
+    Supported modes:
+      annotations   : List supported annotation file extensions.
+      gene-exon     : Gene/exon count files for a filter set.
+      junctions     : Junction artifacts (MM/RR/ID) for a filter set.
+      metadata      : Project-level metadata tables.
+      bigwig        : Per-sample coverage files.
+      project       : Validate a project and enumerate all related files.
+      sources       : List available data sources for an organism.
+      source-meta   : Data-source-level metadata tables.
+
+    Project mode filters:
+      Required: organism, data_source, project
+      Optional:
+        genomic_unit=gene,exon
+        annotation=default|all|G026,G029
+        annotation_file_extension=G026,G029   # overrides 'annotation'
+        junction_type=ALL
+        junction_file_extension=MM,RR,ID
+        include_metadata=true|false
+        include_bigwig=true|false
+
+    Notes:
+      * The values for comma-separated filters (for example, genomic_unit
+        and junction_file_extension) are parsed as CSV.
+      * Boolean filters accept 1/0, true/false, t/f, yes/no, y/n, on/off.
+      * The emitted manifest can be consumed by 'recount3 download'.
 
     Args:
-      args: Parsed CLI arguments for the ``search`` subcommand.
-      cfg: :class:`Config` used to construct :class:`R3Resource` objects.
+      args: Parsed command-line arguments for the 'search' subcommand.
+      cfg: Global configuration (I/O settings, concurrency, cache).
 
     Returns:
-      Process exit code (0 for success).
+      Zero on success; non-zero on error.
 
     Raises:
-      ValueError: If required filters are missing for the chosen mode.
+      ValueError: If required filters are missing or invalid for a mode.
     """
     filters = _parse_filters(args.filters)
     mode = args.mode
@@ -888,6 +928,49 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             data_source=filters["data_source"],
             project=filters["project"],
             sample=filters["sample"],
+        )
+
+    elif mode == "project":
+        # search_project_all(*, organism, data_source, project, ...)
+        _require("organism", "data_source", "project")
+
+        def _as_bool(s: str | None, default: bool = False) -> bool:
+            if s is None:
+                return default
+            return s.lower() in ("1", "true", "t", "yes", "y", "on")
+
+        def _csv_or_default(
+            s: str | None, default: tuple[str, ...]
+        ) -> tuple[str, ...]:
+            if not s:
+                return default
+            return tuple(p.strip() for p in s.split(",") if p.strip())
+
+        gu = _csv_or_default(filters.get("genomic_unit"), ("gene", "exon"))
+        # Accept either "annotation=..." or "annotation_file_extension=..."
+        annotations = filters.get("annotation", "default")
+        ann_ext = _csv_or_default(
+            filters.get("annotation_file_extension"), tuple()
+        )
+        jext = _csv_or_default(
+            filters.get("junction_file_extension"), ("MM",)
+        )
+        jtype = filters.get("junction_type", "ALL")
+        inc_meta = _as_bool(filters.get("include_metadata"), True)
+        inc_bw = _as_bool(filters.get("include_bigwig"), False)
+
+        # Delegate to library helper.
+        found = r3_search.search_project_all(
+            organism=filters["organism"],
+            data_source=filters["data_source"],
+            project=filters["project"],
+            genomic_units=gu,
+            # Pass either explicit exts (wins) or the higher-level "annotation"
+            annotations=ann_ext if ann_ext else annotations,
+            junction_type=jtype,
+            junction_file_extension=jext,
+            include_metadata=inc_meta,
+            include_bigwig=inc_bw,
         )
 
     elif mode == "sources":

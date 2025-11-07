@@ -46,7 +46,10 @@ from ._descriptions import (
 from .resource import R3Resource
 from ._bigwig import BigWigFile
 from .bundle import R3ResourceBundle
+from .project import R3Project
 from .search import (
+    samples_for_project,
+    search_project_all,
     create_sample_project_lists,
     search_annotations,
     search_bigwig_files,
@@ -86,7 +89,10 @@ __all__ = [
     "R3Resource",
     "BigWigFile",
     "R3ResourceBundle",
+    "R3Project",
     # Search
+    "samples_for_project",
+    "search_project_all",
     "search_annotations",
     "search_count_files_gene_or_exon",
     "search_count_files_junctions",
