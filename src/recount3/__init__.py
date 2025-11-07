@@ -47,6 +47,10 @@ from .resource import R3Resource
 from ._bigwig import BigWigFile
 from .bundle import R3ResourceBundle
 from .project import R3Project
+from .se import (  # noqa: F401
+    build_summarized_experiment,
+    build_ranged_summarized_experiment,
+)
 from .search import (
     samples_for_project,
     search_project_all,
@@ -90,6 +94,9 @@ __all__ = [
     "BigWigFile",
     "R3ResourceBundle",
     "R3Project",
+    # Builders
+    "build_ranged_summarized_experiment",
+    "build_summarized_experiment",
     # Search
     "samples_for_project",
     "search_project_all",

@@ -237,6 +237,60 @@ class R3Resource:
             self._cached_data = reader
             return reader
 
+        rtype = getattr(self.description, "resource_type", None)
+        if rtype == "count_files_gene_or_exon":
+            # Ensure bytes are present locally (cache).
+            self.download(path=None, cache_mode="enable")
+            cached = self._cached_path()
+            if not cached.exists():
+                raise FileNotFoundError(str(cached))
+            if pd is None:
+                raise LoadError(
+                    "pandas is required to read gene/exon count matrices."
+                )
+            try:
+                df = pd.read_csv(
+                    cached,
+                    compression="infer",
+                    sep="\t",
+                    header=0,
+                    comment="#",
+                    index_col=None,
+                    engine="c",
+                    low_memory=False,
+                )
+            except Exception:
+                # Fallback: auto-detect delimiter (tabs/spaces), slower but robust.
+                df = pd.read_csv(
+                    cached,
+                    compression="infer",
+                    sep=None,            # auto-sniff
+                    header=0,
+                    comment="#",
+                    index_col=None,
+                    engine="python",
+                )
+            if df.empty or df.shape[1] < 2:
+                raise LoadError(
+                    f"Parsed an empty or 1-column matrix from {cached.name!r}."
+                )
+            # First column should be the feature id (gene/exon). Detect by name
+            # or position and move it to the index.
+            cols_lower = [str(c).strip().lower() for c in df.columns]
+            try_index = None
+            for candidate in ("gene_id", "exon_id", "feature_id"):
+                if candidate in cols_lower:
+                    try_index = df.columns[cols_lower.index(candidate)]
+                    break
+            if try_index is None:
+                try_index = df.columns[0]
+            df = df.set_index(try_index)
+            # Normalize labels to str for stable merges/joins later.
+            df.columns = [str(c) for c in df.columns]
+            df.index = df.index.astype(str)
+            self._cached_data = df
+            return df
+
         # Ensure bytes are present locally (cache).
         self.download(path=None, cache_mode="enable")
         cached = self._cached_path()
@@ -245,7 +299,7 @@ class R3Resource:
 
         name = cached.name.lower()
         if name.endswith(".tsv") or name.endswith(".tsv.gz") or name.endswith(".md.gz"):
-            if pd is not None:
+            if pd is not None:  #TODO: Make Pandas required.
                 obj = pd.read_table(cached, compression="infer")
                 self._cached_data = obj
                 return obj

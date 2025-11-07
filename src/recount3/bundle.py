@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Iterable, Tuple
+from typing import Iterable
 
 import pandas as pd
 
@@ -108,6 +108,8 @@ class R3ResourceBundle:
         sample=None,
         table_name=None,
         junction_type=None,
+        annotation_file_extension=None,
+        junction_file_extension=None,
         predicate=None,
         invert: bool = False,
     ) -> "R3ResourceBundle":
@@ -121,6 +123,8 @@ class R3ResourceBundle:
             "sample": sample,
             "table_name": table_name,
             "junction_type": junction_type,
+            "annotation_file_extension": annotation_file_extension,
+            "junction_file_extension": junction_file_extension,
         }
         field_specs = {k: v for k, v in field_specs.items() if v is not None}
 
@@ -129,7 +133,7 @@ class R3ResourceBundle:
         selected: list[R3Resource] = []
         for res in self.resources:
             desc = res.description
-            fields_ok = all(_match_spec(getattr(desc, name, None), spec) for name, spec in field_specs.items())
+            fields_ok = all(_match_spec(getattr(desc, name, None), spec) for name, spec in field_specs.items())  # type: ignore
 
             pred_ok = True
             if predicate is not None:
@@ -243,3 +247,90 @@ class R3ResourceBundle:
             )
 
         return pd.concat(dfs, axis=axis, join=join, verify_integrity=verify_integrity)  # type: ignore
+    
+    def to_summarized_experiment(
+        self,
+        *,
+        genomic_unit: str,
+        annotation_file_extension: str | None = None,
+        assay_name: str = "counts",
+        join: str = "inner",
+        autoload: bool = True,
+    ):
+        """Return a BiocPy SummarizedExperiment built from this bundle.
+
+        This is a thin convenience wrapper over
+        :func:`recount3.se.build_summarized_experiment`.
+
+        Args:
+          genomic_unit: 'gene', 'exon', or 'junction'.
+          annotation_file_extension: Optional gene/exon annotation key.
+          assay_name: Name for the count assay.
+          join: Join policy across projects when concatenating.
+          autoload: If True, load resources when needed.
+
+        Returns:
+          A :class:`summarizedexperiment.SummarizedExperiment`.
+
+        Raises:
+          ImportError: If BiocPy packages are not installed.
+          ValueError: For unknown `genomic_unit` or if no counts exist.
+        """
+        from .se import build_summarized_experiment  # Lazy optional dep.
+
+        return build_summarized_experiment(
+            self,
+            genomic_unit=genomic_unit,
+            annotation_file_extension=annotation_file_extension,
+            assay_name=assay_name,
+            join=join,
+            autoload=autoload,
+        )
+
+    def to_ranged_summarized_experiment(
+        self,
+        *,
+        genomic_unit: str,
+        annotation_file_extension: str | None = None,
+        junction_rr_preferred: bool = True,
+        assay_name: str = "counts",
+        join: str = "inner",
+        autoload: bool = True,
+        allow_fallback_to_se: bool = False,
+    ):
+        """Return a BiocPy RangedSummarizedExperiment when ranges are resolvable.
+
+        This is a thin convenience wrapper over
+        :func:`recount3.se.build_ranged_summarized_experiment`.
+
+        Args:
+          genomic_unit: 'gene', 'exon', or 'junction'.
+          annotation_file_extension: Optional gene/exon annotation key.
+          junction_rr_preferred: Use RR file for junction coordinates if present.
+          assay_name: Name for the count assay.
+          join: Join policy for count concatenation.
+          autoload: If True, load resources lazily.
+          allow_fallback_to_se: Return a plain SE if ranges cannot be built.
+
+        Returns:
+          A :class:`summarizedexperiment.RangedSummarizedExperiment` or
+          a :class:`summarizedexperiment.SummarizedExperiment` when
+          `allow_fallback_to_se` is True and ranges are unavailable.
+
+        Raises:
+          ImportError: If BiocPy packages are not installed.
+          ValueError: For unsupported `genomic_unit` or missing counts.
+        """
+        from .se import build_ranged_summarized_experiment  # Lazy optional dep.
+
+        return build_ranged_summarized_experiment(
+            self,
+            genomic_unit=genomic_unit,
+            annotation_file_extension=annotation_file_extension,
+            junction_rr_preferred=junction_rr_preferred,
+            assay_name=assay_name,
+            join=join,
+            autoload=autoload,
+            allow_fallback_to_se=allow_fallback_to_se,
+        )
+

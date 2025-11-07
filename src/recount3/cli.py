@@ -519,6 +519,91 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output file (.tsv, .tsv.gz, or .parquet).",
     )
 
+    # se
+    p_se = sp_bundle.add_parser(
+        "se",
+        help="Build a SummarizedExperiment from a manifest.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    p_se.add_argument(
+        "--from",
+        dest="manifest",
+        required=True,
+        help="Path to a JSONL manifest (or '-' for stdin).",
+    )
+    p_se.add_argument(
+        "--genomic-unit",
+        choices=("gene", "exon", "junction"),
+        required=True,
+        help="Feature family to assemble into an SE.",
+    )
+    p_se.add_argument(
+        "--annotation",
+        default=None,
+        help="Annotation key for gene/exon (e.g., 'G026', 'V29').",
+    )
+    p_se.add_argument(
+        "--assay-name",
+        default="counts",
+        help="Assay name in the SE.",
+    )
+    p_se.add_argument(
+        "--join",
+        choices=("inner", "outer"),
+        default="inner",
+        help="Join policy across projects when stacking.",
+    )
+    p_se.add_argument(
+        "--out",
+        required=True,
+        help="Output file (.pkl or .h5ad if anndata is available).",
+    )
+
+    # rse
+    p_rse = sp_bundle.add_parser(
+        "rse",
+        help="Build a RangedSummarizedExperiment from a manifest.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    p_rse.add_argument(
+        "--from",
+        dest="manifest",
+        required=True,
+        help="Path to a JSONL manifest (or '-' for stdin).",
+    )
+    p_rse.add_argument(
+        "--genomic-unit",
+        choices=("gene", "exon", "junction"),
+        required=True,
+        help="Feature family to assemble into an RSE.",
+    )
+    p_rse.add_argument(
+        "--annotation",
+        default=None,
+        help="Annotation key for gene/exon (e.g., 'G026', 'V29').",
+    )
+    p_rse.add_argument(
+        "--assay-name",
+        default="counts",
+        help="Assay name in the RSE.",
+    )
+    p_rse.add_argument(
+        "--join",
+        choices=("inner", "outer"),
+        default="inner",
+        help="Join policy across projects when stacking.",
+    )
+    p_rse.add_argument(
+        "--allow-fallback-to-se",
+        action="store_true",
+        help="If ranges cannot be derived, emit a plain SE.",
+    )
+    p_rse.add_argument(
+        "--out",
+        required=True,
+        help="Output file (.pkl or .h5ad if anndata is available).",
+    )
+
     # smoke-test
     p_smoke = subparsers.add_parser(
         "smoke-test",
@@ -1192,6 +1277,109 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
     logging.info("Wrote stacked table to: %s", out)
     return 0
 
+def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
+    """Implement ``bundle se`` subcommand.
+
+    Loads resources from a manifest and assembles a SummarizedExperiment.
+
+    Args:
+      args: Parsed CLI arguments for ``bundle se``.
+      cfg: :class:`Config` used for resource loading.
+
+    Returns:
+      Process exit code (0 for success, non-zero for failure).
+    """
+    resources = list(_iter_manifest(args.manifest, cfg))
+    bundle = R3ResourceBundle()
+    bundle.extend(resources)
+
+    try:
+        se = bundle.to_summarized_experiment(
+            genomic_unit=args.genomic_unit,
+            annotation_file_extension=args.annotation,
+            assay_name=args.assay_name,
+            join=args.join,
+            autoload=True,
+        )
+    except ImportError as exc:
+        logging.error("Missing optional dependency: %s", exc)
+        return 3
+    except Exception as exc:
+        logging.error("Failed to build SE (reason: %r).", exc)
+        return 2
+
+    # Default to pickle; optionally write h5ad through AnnData.
+    out = Path(args.out)
+    try:
+        if out.suffix.lower() == ".h5ad":
+            import anndata as ad  # Optional dependency
+
+            adata = se.to_anndata()
+            adata.write_h5ad(out)
+        else:
+            import pickle
+
+            with open(out, "wb") as fh:
+                pickle.dump(se, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception as exc:
+        logging.error("Failed to write output (reason: %r): %s", exc, out)
+        return 2
+
+    logging.info("Wrote SummarizedExperiment to: %s", out)
+    return 0
+
+
+def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
+    """Implement ``bundle rse`` subcommand.
+
+    Loads resources from a manifest and assembles a RangedSummarizedExperiment.
+
+    Args:
+      args: Parsed CLI arguments for ``bundle rse``.
+      cfg: :class:`Config` used for resource loading.
+
+    Returns:
+      Process exit code (0 for success, non-zero for failure).
+    """
+    resources = list(_iter_manifest(args.manifest, cfg))
+    bundle = R3ResourceBundle()
+    bundle.extend(resources)
+
+    try:
+        rse = bundle.to_ranged_summarized_experiment(
+            genomic_unit=args.genomic_unit,
+            annotation_file_extension=args.annotation,
+            assay_name=args.assay_name,
+            join=args.join,
+            autoload=True,
+            allow_fallback_to_se=bool(args.allow_fallback_to_se),
+        )
+    except ImportError as exc:
+        logging.error("Missing optional dependency: %s", exc)
+        return 3
+    except Exception as exc:
+        logging.error("Failed to build RSE (reason: %r).", exc)
+        return 2
+
+    out = Path(args.out)
+    try:
+        if out.suffix.lower() == ".h5ad":
+            import anndata as ad  # Optional dependency
+
+            adata = rse.to_anndata()
+            adata.write_h5ad(out)
+        else:
+            import pickle
+
+            with open(out, "wb") as fh:
+                pickle.dump(rse, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception as exc:
+        logging.error("Failed to write output (reason: %r): %s", exc, out)
+        return 2
+
+    logging.info("Wrote (Ranged)SummarizedExperiment to: %s", out)
+    return 0
+
 
 def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
     """Implement the ``smoke-test`` subcommand (small connectivity test).
@@ -1248,6 +1436,10 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
     if args.command == "bundle":
         if args.bundle_cmd == "stack-counts":
             return _cmd_bundle_stack_counts(args, cfg)
+        if args.bundle_cmd == "se":
+            return _cmd_bundle_se(args, cfg)
+        if args.bundle_cmd == "rse":
+            return _cmd_bundle_rse(args, cfg)
         raise ValueError("Unknown bundle subcommand: %r" % args.bundle_cmd)
     if args.command == "smoke-test":
         return _cmd_smoke_test(args, cfg)
