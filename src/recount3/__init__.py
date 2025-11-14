@@ -62,6 +62,9 @@ from .search import (
     search_data_source_metadata,
     search_data_sources,
     search_metadata_files,
+    annotation_ext,
+    annotation_options,
+
 )
 
 __all__ = [
@@ -108,4 +111,6 @@ __all__ = [
     "search_data_sources",
     "search_data_source_metadata",
     "create_sample_project_lists",
+    "annotation_ext",
+    "annotation_options",
 ]

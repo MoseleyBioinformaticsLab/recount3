@@ -7,6 +7,7 @@ preserve the original behavior.
 from __future__ import annotations
 
 import itertools
+import os
 from collections.abc import Iterable
 from typing import Final
 
@@ -15,6 +16,7 @@ import pandas as pd
 from ._descriptions import (
     R3ResourceDescription,
     _VALID_DATA_SOURCES,
+    _VALID_ORGANISMS,
 )
 from .resource import R3Resource
 from .types import FieldSpec, StringOrIterable
@@ -275,6 +277,321 @@ def create_sample_project_lists(organism: str = "") -> tuple[list[str], list[str
 
     return sorted(samples), sorted(projects)
 
+def _normalize_organism_name(organism: str) -> str:
+    """Return canonical lowercase organism name.
+
+    Args:
+      organism: Organism name, typically "human" or "mouse".
+
+    Returns:
+      Canonical lowercase organism name ("human" or "mouse").
+
+    Raises:
+      ValueError: If the organism is not supported.
+    """
+    org = organism.strip().lower()
+    if org not in _VALID_ORGANISMS:
+        raise ValueError(
+            f"Unsupported organism {organism!r}; "
+            f"expected one of {sorted(_VALID_ORGANISMS)!r}."
+        )
+    return org
+
+
+def _strip_md_prefix(df: pd.DataFrame) -> pd.DataFrame:
+    """Strip recount3-style prefixes from metadata column names.
+
+    Per-data-source metadata tables usually prefix columns with a source-
+    specific string such as "sra." or "gtex.". This helper removes
+    everything up to the last dot.
+
+    Args:
+      df: Input DataFrame.
+
+    Returns:
+      A copy of ``df`` with cleaned column names.
+    """
+    out = df.copy()
+    out.columns = [str(c).rsplit(".", 1)[-1] for c in out.columns]
+    return out
+
+
+def _path_basename(path: str) -> str:
+    """Return basename of a POSIX-style path without trailing slash."""
+    if not path:
+        return path
+    return os.path.basename(path.rstrip("/"))
+
+
+def _path_dirname(path: str) -> str:
+    """Return dirname of a POSIX-style path without trailing slash."""
+    if not path:
+        return ""
+    return os.path.dirname(path.rstrip("/"))
+
+
+def available_samples(
+    *,
+    organism: str = "human",
+    data_sources: StringOrIterable | None = None,
+    strict: bool = True,
+) -> pd.DataFrame:
+    """Return a sample-level overview similar to recount3::available_samples().
+
+    This reads the per-data-source ``*.recount_project.MD.gz`` tables and
+    returns a normalized DataFrame describing all samples for the requested
+    organism.
+
+    Args:
+      organism: Organism to query ("human" or "mouse").
+      data_sources: Optional subset of data sources to include (for example,
+        "sra", "gtex", "tcga"). By default all known data sources are used.
+      strict: If True, raise a ValueError when no metadata can be found.
+        If False, return an empty DataFrame instead.
+
+    Returns:
+      A DataFrame with at least the following columns when available:
+
+      * ``external_id`` - Sample identifier in the original source.
+      * ``project`` - Project or study identifier.
+      * ``organism`` - Canonical organism label ("human" or "mouse").
+      * ``file_source`` - Origin of the raw data (basename only).
+      * ``date_processed`` - Processing date in YYYY-MM-DD format.
+      * ``project_home`` - recount3 project home path.
+      * ``project_type`` - High-level project type (for example,
+        "data_sources").
+
+      Additional columns present in the raw metadata are preserved.
+
+    Raises:
+      ValueError: If inputs are invalid or no metadata resources are found
+        and ``strict`` is True.
+      RuntimeError: If metadata resources are found but all fail to load.
+    """
+    org = _normalize_organism_name(organism)
+
+    if data_sources is None:
+        selected_sources = sorted(_VALID_DATA_SOURCES)
+    else:
+        selected_sources = list(_as_tuple(data_sources))
+        invalid = [s for s in selected_sources if s not in _VALID_DATA_SOURCES]
+        if invalid:
+            raise ValueError(
+                "Unsupported data_sources "
+                f"{invalid!r}; expected a subset of "
+                f"{sorted(_VALID_DATA_SOURCES)!r}."
+            )
+
+    if not selected_sources:
+        if strict:
+            raise ValueError("No data_sources specified.")
+        return pd.DataFrame()
+
+    resources = search_data_source_metadata(
+        organism=org,
+        data_source=tuple(selected_sources),
+        strict=strict,
+        deduplicate=True,
+    )
+
+    if not resources:
+        if strict:
+            raise ValueError(
+                "No data-source metadata resources found for "
+                f"organism {org!r} and data_sources "
+                f"{tuple(selected_sources)!r}."
+            )
+        return pd.DataFrame()
+
+    frames: list[pd.DataFrame] = []
+    load_errors: list[tuple[str | None, Exception]] = []
+
+    for res in resources:
+        try:
+            obj = res.load()
+        except Exception as exc:  # pylint: disable=broad-except
+            load_errors.append((res.url, exc))
+            continue
+
+        if isinstance(obj, pd.DataFrame):
+            frames.append(_strip_md_prefix(obj))
+
+    if not frames:
+        if load_errors:
+            first_url, first_exc = load_errors[0]
+            raise RuntimeError(
+                "Failed to load any data-source metadata table. "
+                f"First error: {first_exc!r} (while loading {first_url!r})."
+            ) from first_exc
+        if strict:
+            raise ValueError(
+                "Metadata resources were located but produced no usable "
+                "tables."
+            )
+        return pd.DataFrame()
+
+    samples = pd.concat(frames, axis=0, ignore_index=True)
+
+    # Normalize column names to simple strings.
+    samples.columns = [str(c) for c in samples.columns]
+
+    # Normalize organism labels where present; otherwise fill from argument.
+    if "organism" in samples.columns:
+        samples["organism"] = samples["organism"].astype(str).replace(
+            {"Homo sapiens": "human", "Mus musculus": "mouse"}
+        )
+    else:
+        samples["organism"] = org
+
+    # Ensure we have a 'project' column and drop redundant 'study' if present.
+    if "project" not in samples.columns and "study" in samples.columns:
+        samples = samples.rename(columns={"study": "project"})
+    elif "project" in samples.columns and "study" in samples.columns:
+        if not samples["project"].equals(samples["study"]):
+            raise ValueError(
+                "Metadata columns 'project' and 'study' are not identical; "
+                "this violates recount3 expectations."
+            )
+        samples = samples.drop(columns=["study"])
+
+    # Normalize file_source to a basename-like form.
+    if "file_source" in samples.columns:
+        samples["file_source"] = samples["file_source"].astype(str).map(
+            _path_basename
+        )
+
+    # Derive project_home and project_type from metadata_source when needed.
+    if (
+        "project_home" not in samples.columns
+        and "metadata_source" in samples.columns
+    ):
+        samples["project_home"] = samples["metadata_source"]
+        samples = samples.drop(columns=["metadata_source"])
+
+    if "project_home" in samples.columns:
+        samples["project_type"] = samples["project_home"].astype(str).map(
+            _path_dirname
+        )
+
+    # Drop low-level technical identifiers that are usually not required.
+    for col in ("rail_id",):
+        if col in samples.columns:
+            samples = samples.drop(columns=[col])
+
+    # Reorder columns for a stable, user-friendly layout.
+    preferred = [
+        "external_id",
+        "project",
+        "organism",
+        "file_source",
+        "date_processed",
+        "project_home",
+        "project_type",
+    ]
+    present = [c for c in preferred if c in samples.columns]
+    remaining = [c for c in samples.columns if c not in present]
+
+    return samples.loc[:, present + remaining]
+
+
+def available_projects(
+    *,
+    organism: str = "human",
+    data_sources: StringOrIterable | None = None,
+    strict: bool = True,
+) -> pd.DataFrame:
+    """Return a project-level overview like recount3::available_projects().
+
+    This aggregates the sample-level metadata from :func:`available_samples`
+    and summarizes it at the project level.
+
+    Args:
+      organism: Organism to query ("human" or "mouse").
+      data_sources: Optional subset of data sources to include.
+      strict: Passed through to :func:`available_samples`.
+
+    Returns:
+      A DataFrame with one row per project and at least:
+
+      * ``project`` - Project or study identifier.
+      * ``organism`` - Canonical organism label.
+      * ``file_source`` - Origin of the raw data (basename only).
+      * ``project_home`` - recount3 project home path.
+      * ``project_type`` - High-level project type (for example,
+        "data_sources").
+      * ``n_samples`` - Number of samples in the project.
+
+      Additional project-level columns are preserved.
+    """
+    samples = available_samples(
+        organism=organism,
+        data_sources=data_sources,
+        strict=strict,
+    )
+
+    if samples.empty:
+        columns = [
+            "project",
+            "organism",
+            "file_source",
+            "project_home",
+            "project_type",
+            "n_samples",
+        ]
+        return pd.DataFrame(columns=columns)
+
+    # Work on a copy to avoid surprising the caller.
+    df = samples.copy()
+
+    # Drop sample-level columns that are no longer needed.
+    for col in ("external_id", "date_processed"):
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
+    # Project type will be re-derived from project_home for uniqueness.
+    if "project_type" in df.columns:
+        df = df.drop(columns=["project_type"])
+
+    # Collapse to unique project rows.
+    projects = df.drop_duplicates().reset_index(drop=True)
+
+    if "project_home" in projects.columns:
+        projects["project_type"] = projects["project_home"].astype(str).map(
+            _path_dirname
+        )
+
+    # Count samples per (project, organism, project_home) combination.
+    key_cols = [
+        c
+        for c in ("project", "organism", "project_home")
+        if c in df.columns
+    ]
+
+    if key_cols:
+        sample_keys = df[key_cols].astype(str).agg("_".join, axis=1)
+        counts = sample_keys.value_counts()
+
+        project_keys = projects[key_cols].astype(str).agg("_".join, axis=1)
+        projects["n_samples"] = project_keys.map(counts).astype("Int64")
+    else:
+        # No key columns; n_samples is undefined.
+        projects["n_samples"] = pd.Series(dtype="Int64")
+
+    # Reorder columns for a stable, user-friendly layout.
+    preferred = [
+        "project",
+        "organism",
+        "file_source",
+        "project_home",
+        "project_type",
+        "n_samples",
+    ]
+    present = [c for c in preferred if c in projects.columns]
+    remaining = [c for c in projects.columns if c not in present]
+
+    return projects.loc[:, present + remaining]
+
+
 #   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)
 # Human:  G026 (Gencode v26), G029 (Gencode v29), F006 (FANTOM6_cat),
 #         R109 (RefSeq), ERCC (ERCC), SIRV (SIRV)
@@ -287,7 +604,94 @@ _ANN_EXT_HUMAN: Final[tuple[str, ...]] = (
     "ERCC",
     "SIRV",
 )
+
 _ANN_EXT_MOUSE: Final[tuple[str, ...]] = ("M023",)
+
+_ANNOTATION_NAME_TO_EXT_HUMAN: Final[dict[str, str]] = {
+    "gencode_v26": "G026",
+    "gencode_v29": "G029",
+    "fantom6_cat": "F006",
+    "refseq": "R109",
+    "ercc": "ERCC",
+    "sirv": "SIRV",
+}
+
+_ANNOTATION_NAME_TO_EXT_MOUSE: Final[dict[str, str]] = {
+    "gencode_v23": "M023",
+}
+
+
+def annotation_options(organism: str) -> dict[str, str]:
+    """Return annotation options for a given organism.
+
+    Args:
+      organism: Organism name ("human" or "mouse"), case-insensitive.
+
+    Returns:
+      A new dict mapping canonical annotation names (for example,
+      "gencode_v26") to recount3 annotation file extensions (for
+      example, "G026").
+
+    Raises:
+      ValueError: If the organism is not recognized.
+    """
+    org = organism.strip().lower()
+    if org == "human":
+        mapping = _ANNOTATION_NAME_TO_EXT_HUMAN
+    elif org == "mouse":
+        mapping = _ANNOTATION_NAME_TO_EXT_MOUSE
+    else:
+        raise ValueError(f"Invalid organism: {organism!r}")
+    return dict(mapping)
+
+
+def annotation_ext(organism: str, annotation: str) -> str:
+    """Return the recount3 annotation extension for a given annotation.
+
+    This helper is analogous to the R recount3::annotation_ext() function.
+    It accepts either a canonical annotation name (for example,
+    "gencode_v26") or a raw extension code (for example, "G026").
+
+    Args:
+      organism: Organism name ("human" or "mouse"), case-insensitive.
+      annotation: Annotation name or extension code.
+
+    Returns:
+      The recount3 annotation file extension (for example, "G026").
+
+    Raises:
+      ValueError: If the organism or annotation is not recognized.
+    """
+    if not annotation or not annotation.strip():
+        raise ValueError("annotation must be a non-empty string.")
+
+    org = organism.strip().lower()
+    name_key = annotation.strip().lower()
+    ext_candidate = annotation.strip().upper()
+
+    if org == "human":
+        valid_exts = _ANN_EXT_HUMAN
+        mapping = _ANNOTATION_NAME_TO_EXT_HUMAN
+    elif org == "mouse":
+        valid_exts = _ANN_EXT_MOUSE
+        mapping = _ANNOTATION_NAME_TO_EXT_MOUSE
+    else:
+        raise ValueError(f"Invalid organism: {organism!r}")
+
+    if ext_candidate in valid_exts:
+        return ext_candidate
+
+    try:
+        return mapping[name_key]
+    except KeyError as exc:
+        valid_names = sorted(mapping.keys())
+        valid_ext_list = ", ".join(valid_exts)
+        valid_name_list = ", ".join(valid_names)
+        message = (
+            "Unknown annotation {!r} for organism {!r}. Valid names are: {}. "
+            "Valid extensions are: {}."
+        ).format(annotation, organism, valid_name_list, valid_ext_list)
+        raise ValueError(message) from exc
 
 
 def _resolve_annotation_exts(
@@ -416,7 +820,7 @@ def search_project_all(
     This function composes the existing search helpers to implement a
     one-shot, project-scoped discovery routine. It adheres to recount3's
     raw file layout documented at:
-    https://rna.recount.bio/docs/raw-files.html (Sections 6.2–6.4). :contentReference[oaicite:1]{index=1}
+    https://rna.recount.bio/docs/raw-files.html (Sections 6.2-6.4).
 
     Args:
       organism: "human" or "mouse".
