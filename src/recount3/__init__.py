@@ -46,7 +46,6 @@ from ._descriptions import (
 from .resource import R3Resource
 from ._bigwig import BigWigFile
 from .bundle import R3ResourceBundle
-from .project import R3Project
 from .se import (  # noqa: F401
     build_summarized_experiment,
     build_ranged_summarized_experiment,
@@ -96,7 +95,6 @@ __all__ = [
     "R3Resource",
     "BigWigFile",
     "R3ResourceBundle",
-    "R3Project",
     # Builders
     "build_ranged_summarized_experiment",
     "build_summarized_experiment",
