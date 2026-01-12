@@ -1706,6 +1706,8 @@ class R3ResourceBundle:
             gtf_res = next(iter(ann_bundle.resources), None)
             if gtf_res is not None:
                 try:
+                    if autoload:
+                        gtf_res.download(path=None, cache_mode="enable")
                     gtf = _read_gtf_dataframe(gtf_res)
                     feature_kind = "gene" if genomic_unit == "gene" else "exon"
                     ranges = _ranges_from_gtf(

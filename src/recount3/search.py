@@ -982,6 +982,14 @@ def search_project_all(
             deduplicate=deduplicate,
         )
 
+        found += search_annotations(
+            organism=organism,
+            genomic_unit=tuple(units),
+            annotation_file_extension=ann_exts,
+            strict=strict,
+            deduplicate=deduplicate,   
+        )
+
     # Junctions: counts (MM) and optional RR/ID artifacts.
     if junction_file_extension:
         found += search_count_files_junctions(
