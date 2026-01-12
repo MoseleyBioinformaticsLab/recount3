@@ -208,77 +208,88 @@ def search_data_source_metadata(
 
 # ---------------------------------------------------------------------------
 
-def create_sample_project_lists(organism: str = "") -> tuple[list[str], list[str]]:
-    """Return (samples, projects) discovered from per-data-source metadata.
+def create_sample_project_lists(
+    organism: str = "",
+) -> tuple[list[str], list[str]]:
+    """Return (samples, projects) discovered from metadata tables.
 
-    This follows the original approach by iterating known data sources and
-    extracting sample/project identifiers from their metadata tables.
+    This is a compatibility wrapper around :func:`available_samples` and
+    :func:`available_projects`. It preserves the original ``ids`` CLI
+    behavior (simple ID lists) but now benefits from the richer and more
+    robust metadata parsing.
 
     Args:
-      organism: Optional organism filter ("human" or "mouse", case-insensitive).
+      organism: Optional organism filter. Accepts "human" or "mouse"
+        (case-insensitive). An empty string means "all supported
+        organisms".
 
     Returns:
-      (samples, projects): Sorted unique IDs.
+      A tuple (samples, projects), where each element is a sorted list
+      of unique identifier strings.
     """
-    import pandas as pd  # local, to keep module import cost small
-
-    data_sources = sorted(_VALID_DATA_SOURCES)
-
-    samples: set[str] = set()
-    projects: set[str] = set()
-
-    def _rows(obj) -> list[dict]:
-        if pd is not None and isinstance(obj, pd.DataFrame):
-            return obj.to_dict("records")
-        return list(obj)
-
-    proj_keys = ("project", "project_id", "study", "study_accession")
-    samp_keys = ("sample", "sample_id", "run", "run_accession", "external_id")
-    org_keys = ("organism", "species")
-
-    for ds in data_sources:
-        try:
-            res = R3Resource(
-                R3ResourceDescription(
-                    resource_type="data_source_metadata",
-                    organism="human",
-                    data_source=ds,
-                )
+    # Collect per-organism sample and project tables.
+    if organism:
+        org = _normalize_organism_name(organism)
+        samples_df = available_samples(organism=org, strict=False)
+        projects_df = available_projects(organism=org, strict=False)
+    else:
+        sample_frames: list[pd.DataFrame] = []
+        project_frames: list[pd.DataFrame] = []
+        for org in sorted(_VALID_ORGANISMS):
+            sample_frames.append(
+                available_samples(organism=org, strict=False)
             )
-            meta = res.load()
-        except Exception:
-            continue
+            project_frames.append(
+                available_projects(organism=org, strict=False)
+            )
+        samples_df = (
+            pd.concat(sample_frames, ignore_index=True)
+            if sample_frames
+            else pd.DataFrame()
+        )
+        projects_df = (
+            pd.concat(project_frames, ignore_index=True)
+            if project_frames
+            else pd.DataFrame()
+        )
 
-        for row in _rows(meta):
-            if organism:
-                ov = None
-                for k in org_keys:
-                    if k in row and row[k]:
-                        ov = str(row[k]).lower()
-                        break
-                if ov and ov != organism.lower():
-                    continue
+    # Extract sample IDs, preferring "external_id" where available.
+    sample_ids: list[str] = []
+    if not samples_df.empty:
+        for col in (
+            "external_id",
+            "sample",
+            "sample_id",
+            "run",
+            "run_accession",
+        ):
+            if col in samples_df.columns:
+                sample_ids = sorted(
+                    {
+                        str(x)
+                        for x in samples_df[col]
+                        .dropna()
+                        .astype(str)
+                    }
+                )
+                break
 
-            pv = None
-            for k in proj_keys:
-                if k in row and row[k]:
-                    pv = str(row[k])
-                    break
-            if pv:
-                projects.add(pv)
+    # Extract project IDs from the project-level table.
+    project_ids: list[str] = []
+    if not projects_df.empty and "project" in projects_df.columns:
+        project_ids = sorted(
+            {
+                str(x)
+                for x in projects_df["project"]
+                .dropna()
+                .astype(str)
+            }
+        )
 
-            sv = None
-            for k in samp_keys:
-                if k in row and row[k]:
-                    sv = str(row[k])
-                    break
-            if sv:
-                samples.add(sv)
-
-    return sorted(samples), sorted(projects)
+    return sample_ids, project_ids
 
 def _normalize_organism_name(organism: str) -> str:
-    """Return canonical lowercase organism name.
+    """Return a canonical lowercase organism name.
 
     Args:
       organism: Organism name, typically "human" or "mouse".
@@ -291,18 +302,20 @@ def _normalize_organism_name(organism: str) -> str:
     """
     org = organism.strip().lower()
     if org not in _VALID_ORGANISMS:
-        raise ValueError(
-            f"Unsupported organism {organism!r}; "
-            f"expected one of {sorted(_VALID_ORGANISMS)!r}."
+        expected = sorted(_VALID_ORGANISMS)
+        msg = (
+            f"Unsupported organism {organism!r}; expected one of "
+            f"{expected!r}."
         )
+        raise ValueError(msg)
     return org
 
 
 def _strip_md_prefix(df: pd.DataFrame) -> pd.DataFrame:
     """Strip recount3-style prefixes from metadata column names.
 
-    Per-data-source metadata tables usually prefix columns with a source-
-    specific string such as "sra." or "gtex.". This helper removes
+    Per-data-source metadata tables usually prefix columns with a
+    source-specific string such as "sra." or "gtex.". This helper removes
     everything up to the last dot.
 
     Args:
@@ -317,14 +330,30 @@ def _strip_md_prefix(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _path_basename(path: str) -> str:
-    """Return basename of a POSIX-style path without trailing slash."""
+    """Return the basename of a POSIX-style path without trailing slash.
+
+    Args:
+      path: POSIX-like path string.
+
+    Returns:
+      Basename component of the path. If ``path`` is empty, returns an
+      empty string.
+    """
     if not path:
-        return path
+        return ""
     return os.path.basename(path.rstrip("/"))
 
 
 def _path_dirname(path: str) -> str:
-    """Return dirname of a POSIX-style path without trailing slash."""
+    """Return the dirname of a POSIX-style path without trailing slash.
+
+    Args:
+      path: POSIX-like path string.
+
+    Returns:
+      Directory component of the path, or an empty string for top-level
+      paths or empty input.
+    """
     if not path:
         return ""
     return os.path.dirname(path.rstrip("/"))
@@ -336,9 +365,9 @@ def available_samples(
     data_sources: StringOrIterable | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
-    """Return a sample-level overview similar to recount3::available_samples().
+    """Return a sample overview similar to recount3::available_samples().
 
-    This reads the per-data-source ``*.recount_project.MD.gz`` tables and
+    This reads per-data-source ``*.recount_project.MD.gz`` tables and
     returns a normalized DataFrame describing all samples for the requested
     organism.
 
@@ -352,14 +381,14 @@ def available_samples(
     Returns:
       A DataFrame with at least the following columns when available:
 
-      * ``external_id`` - Sample identifier in the original source.
-      * ``project`` - Project or study identifier.
-      * ``organism`` - Canonical organism label ("human" or "mouse").
-      * ``file_source`` - Origin of the raw data (basename only).
-      * ``date_processed`` - Processing date in YYYY-MM-DD format.
-      * ``project_home`` - recount3 project home path.
-      * ``project_type`` - High-level project type (for example,
-        "data_sources").
+      * ``external_id``: Sample identifier in the original source.
+      * ``project``: Project or study identifier.
+      * ``organism``: Canonical organism label ("human" or "mouse").
+      * ``file_source``: Origin of the raw data (basename only).
+      * ``date_processed``: Processing date in YYYY-MM-DD format.
+      * ``project_home``: recount3 project home path.
+      * ``project_type``: High-level project type (for example,
+        "data_sources" or "collections").
 
       Additional columns present in the raw metadata are preserved.
 
@@ -374,13 +403,18 @@ def available_samples(
         selected_sources = sorted(_VALID_DATA_SOURCES)
     else:
         selected_sources = list(_as_tuple(data_sources))
-        invalid = [s for s in selected_sources if s not in _VALID_DATA_SOURCES]
+        invalid = [
+            source
+            for source in selected_sources
+            if source not in _VALID_DATA_SOURCES
+        ]
         if invalid:
-            raise ValueError(
+            msg = (
                 "Unsupported data_sources "
                 f"{invalid!r}; expected a subset of "
                 f"{sorted(_VALID_DATA_SOURCES)!r}."
             )
+            raise ValueError(msg)
 
     if not selected_sources:
         if strict:
@@ -396,11 +430,11 @@ def available_samples(
 
     if not resources:
         if strict:
-            raise ValueError(
-                "No data-source metadata resources found for "
-                f"organism {org!r} and data_sources "
-                f"{tuple(selected_sources)!r}."
+            msg = (
+                "No data-source metadata resources found for organism "
+                f"{org!r} and data_sources {tuple(selected_sources)!r}."
             )
+            raise ValueError(msg)
         return pd.DataFrame()
 
     frames: list[pd.DataFrame] = []
@@ -419,10 +453,11 @@ def available_samples(
     if not frames:
         if load_errors:
             first_url, first_exc = load_errors[0]
-            raise RuntimeError(
+            msg = (
                 "Failed to load any data-source metadata table. "
                 f"First error: {first_exc!r} (while loading {first_url!r})."
-            ) from first_exc
+            )
+            raise RuntimeError(msg) from first_exc
         if strict:
             raise ValueError(
                 "Metadata resources were located but produced no usable "
@@ -448,16 +483,17 @@ def available_samples(
         samples = samples.rename(columns={"study": "project"})
     elif "project" in samples.columns and "study" in samples.columns:
         if not samples["project"].equals(samples["study"]):
-            raise ValueError(
+            msg = (
                 "Metadata columns 'project' and 'study' are not identical; "
                 "this violates recount3 expectations."
             )
+            raise ValueError(msg)
         samples = samples.drop(columns=["study"])
 
     # Normalize file_source to a basename-like form.
     if "file_source" in samples.columns:
-        samples["file_source"] = samples["file_source"].astype(str).map(
-            _path_basename
+        samples["file_source"] = (
+            samples["file_source"].astype(str).map(_path_basename)
         )
 
     # Derive project_home and project_type from metadata_source when needed.
@@ -469,8 +505,8 @@ def available_samples(
         samples = samples.drop(columns=["metadata_source"])
 
     if "project_home" in samples.columns:
-        samples["project_type"] = samples["project_home"].astype(str).map(
-            _path_dirname
+        samples["project_type"] = (
+            samples["project_home"].astype(str).map(_path_dirname)
         )
 
     # Drop low-level technical identifiers that are usually not required.
@@ -500,7 +536,7 @@ def available_projects(
     data_sources: StringOrIterable | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
-    """Return a project-level overview like recount3::available_projects().
+    """Return a project overview like recount3::available_projects().
 
     This aggregates the sample-level metadata from :func:`available_samples`
     and summarizes it at the project level.
@@ -513,13 +549,13 @@ def available_projects(
     Returns:
       A DataFrame with one row per project and at least:
 
-      * ``project`` - Project or study identifier.
-      * ``organism`` - Canonical organism label.
-      * ``file_source`` - Origin of the raw data (basename only).
-      * ``project_home`` - recount3 project home path.
-      * ``project_type`` - High-level project type (for example,
-        "data_sources").
-      * ``n_samples`` - Number of samples in the project.
+      * ``project``: Project or study identifier.
+      * ``organism``: Canonical organism label.
+      * ``file_source``: Origin of the raw data (basename only).
+      * ``project_home``: recount3 project home path.
+      * ``project_type``: High-level project type (for example,
+        "data_sources" or "collections").
+      * ``n_samples``: Number of samples in the project.
 
       Additional project-level columns are preserved.
     """
@@ -556,22 +592,26 @@ def available_projects(
     projects = df.drop_duplicates().reset_index(drop=True)
 
     if "project_home" in projects.columns:
-        projects["project_type"] = projects["project_home"].astype(str).map(
-            _path_dirname
+        projects["project_type"] = (
+            projects["project_home"].astype(str).map(_path_dirname)
         )
 
     # Count samples per (project, organism, project_home) combination.
     key_cols = [
-        c
-        for c in ("project", "organism", "project_home")
-        if c in df.columns
+        col
+        for col in ("project", "organism", "project_home")
+        if col in df.columns
     ]
 
     if key_cols:
         sample_keys = df[key_cols].astype(str).agg("_".join, axis=1)
         counts = sample_keys.value_counts()
 
-        project_keys = projects[key_cols].astype(str).agg("_".join, axis=1)
+        project_keys = (
+            projects[key_cols]
+            .astype(str)
+            .agg("_".join, axis=1)
+        )
         projects["n_samples"] = project_keys.map(counts).astype("Int64")
     else:
         # No key columns; n_samples is undefined.
@@ -590,6 +630,69 @@ def available_projects(
     remaining = [c for c in projects.columns if c not in present]
 
     return projects.loc[:, present + remaining]
+
+def project_homes(
+    *,
+    organism: str = "human",
+    data_sources: StringOrIterable | None = None,
+    strict: bool = True,
+) -> pd.DataFrame:
+    """Return a project home summary similar to recount3::project_homes().
+
+    This is a thin layer on top of :func:`available_projects` that
+    collapses projects down to unique ``project_home`` paths.
+
+    Args:
+      organism: Organism to query ("human" or "mouse").
+      data_sources: Optional subset of data sources to include.
+      strict: Passed through to :func:`available_projects`.
+
+    Returns:
+      A DataFrame with one row per project home and at least the
+      following columns:
+
+      * ``project_home``: recount3 project home path.
+      * ``project_type``: High-level project type (for example,
+        "data_sources" or "collections").
+      * ``organism``: Canonical organism label.
+      * ``file_source``: Data source label when available.
+      * ``n_projects``: Number of projects using this home.
+
+      Additional columns from :func:`available_projects` may appear.
+    """
+    projects = available_projects(
+        organism=organism,
+        data_sources=data_sources,
+        strict=strict,
+    )
+
+    if projects.empty or "project_home" not in projects.columns:
+        columns = [
+            "project_home",
+            "project_type",
+            "organism",
+            "file_source",
+            "n_projects",
+        ]
+        return pd.DataFrame(columns=columns)
+
+    # Ensure required columns exist before grouping.
+    if "project_type" not in projects.columns:
+        projects["project_type"] = (
+            projects["project_home"].astype(str).map(_path_dirname)
+        )
+
+    if "file_source" not in projects.columns:
+        projects["file_source"] = pd.NA
+
+    group_cols = ["project_home", "project_type", "organism", "file_source"]
+    grouped = (
+        projects.groupby(group_cols, dropna=False)["project"]
+        .nunique()
+        .reset_index(name="n_projects")
+    )
+
+    return grouped
 
 
 #   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)

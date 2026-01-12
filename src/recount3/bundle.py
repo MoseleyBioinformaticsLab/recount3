@@ -29,9 +29,10 @@ Typical usage example:
 from __future__ import annotations
 
 import dataclasses
+import functools
 import logging
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Optional
+from typing import Any, Optional, TYPE_CHECKING
 
 import pandas as pd
 
@@ -44,36 +45,71 @@ from recount3 import types as r3_types
 # Optional BiocPy imports. These are used only when constructing
 # SummarizedExperiment-style objects and are not required for core
 # bundle functionality.
-try:  # pragma: no cover - exercised only when BiocPy is installed.
+if TYPE_CHECKING:
     from biocframe import BiocFrame  # type: ignore[import-not-found]
     from genomicranges import GenomicRanges  # type: ignore[import-not-found]
     from summarizedexperiment import (  # type: ignore[import-not-found]
         RangedSummarizedExperiment,
         SummarizedExperiment,
     )
-except Exception:  # pragma: no cover
-    BiocFrame = None
-    GenomicRanges = None
-    SummarizedExperiment = None
-    RangedSummarizedExperiment = None
+
+# Runtime caches for optional BiocPy classes.
+_BiocFrame: type[Any] | None = None
+_GenomicRanges: type[Any] | None = None
+_SummarizedExperiment: type[Any] | None = None
+_RangedSummarizedExperiment: type[Any] | None = None
 
 
-def _require_biocpy() -> None:
+def _require_biocpy() -> tuple[type[Any], type[Any], type[Any], type[Any]]:
     """Ensure that the BiocPy packages used here are importable.
+
+    Returns:
+      (BiocFrame, GenomicRanges, SummarizedExperiment, RangedSummarizedExperiment)
+      classes.
 
     Raises:
       ImportError: If any required BiocPy package is missing.
     """
-    if any(
-        x is None
-        for x in (BiocFrame, GenomicRanges, SummarizedExperiment)
+    global _BiocFrame, _GenomicRanges, _SummarizedExperiment, _RangedSummarizedExperiment
+
+    if (
+        _BiocFrame is None
+        or _GenomicRanges is None
+        or _SummarizedExperiment is None
+        or _RangedSummarizedExperiment is None
     ):
-        raise ImportError(
-            "BiocPy integration requires the 'summarizedexperiment', "
-            "'biocframe', and 'genomicranges' packages. Install them with:\n"
-            "  pip install summarizedexperiment biocframe genomicranges\n"
-            "or via conda (conda-forge)."
-        )
+        try:  # pragma: no cover - exercised only when BiocPy is installed.
+            from biocframe import BiocFrame as BF
+            from genomicranges import GenomicRanges as GR
+            from summarizedexperiment import (
+                SummarizedExperiment as SE,
+                RangedSummarizedExperiment as RSE,
+            )
+        except Exception as e:  # pragma: no cover
+            raise ImportError(
+                "BiocPy integration requires the 'summarizedexperiment', "
+                "'biocframe', and 'genomicranges' packages. Install them with:\n"
+                "  pip install summarizedexperiment biocframe genomicranges\n"
+                "or via conda (conda-forge)."
+            ) from e
+
+        _BiocFrame = BF
+        _GenomicRanges = GR
+        _SummarizedExperiment = SE
+        _RangedSummarizedExperiment = RSE
+
+    # Help type checkers see these as non-optional
+    assert _BiocFrame is not None
+    assert _GenomicRanges is not None
+    assert _SummarizedExperiment is not None
+    assert _RangedSummarizedExperiment is not None
+
+    return (
+        _BiocFrame,
+        _GenomicRanges,
+        _SummarizedExperiment,
+        _RangedSummarizedExperiment,
+    )
 
 
 def _ensure_unique_columns(
@@ -114,6 +150,196 @@ def _ensure_unique_columns(
 
     out.columns = new_cols
     return out
+
+
+_METADATA_MERGE_KEYS = ("rail_id", "external_id", "study")
+_METADATA_KEY_SYNONYMS = {
+    # Backwards-compatibility with older recount3 metadata.
+    "study_acc": "study",
+    "run_acc": "external_id",
+    "run_accession": "external_id",
+    "run": "external_id",
+}
+_METADATA_NAMESPACE_SEPARATOR = "__"
+
+
+def _standardize_metadata_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize metadata column names and key fields.
+
+    This function normalizes column names to lower-case strings, applies a small
+    set of known backwards-compatible key renames, and ensures the standard key
+    columns exist.
+
+    Args:
+      df: Raw metadata table.
+
+    Returns:
+      A copy of ``df`` with standardized columns.
+    """
+    out = df.copy()
+    out.columns = [str(col).strip().lower() for col in out.columns]
+
+    rename: dict[str, str] = {}
+    for old, new in _METADATA_KEY_SYNONYMS.items():
+        if old in out.columns and new not in out.columns:
+            rename[old] = new
+    if rename:
+        out = out.rename(columns=rename)
+
+    for key in _METADATA_MERGE_KEYS:
+        if key not in out.columns:
+            out[key] = pd.NA
+
+    for key in _METADATA_MERGE_KEYS:
+        out[key] = out[key].astype("string")
+
+    return out
+
+
+def _metadata_origin(res: resource.R3Resource) -> str:
+    """Return a stable origin prefix for a metadata resource.
+
+    Args:
+      res: A metadata resource.
+
+    Returns:
+      A short string used to namespace the resource's non-key columns.
+    """
+    desc = res.description
+    origin = (
+        getattr(desc, "table_name", None)
+        or getattr(desc, "resource_type", None)
+    )
+    if not origin:
+        origin = "metadata"
+    return str(origin).strip().lower()
+
+
+def _namespace_metadata_columns(
+    df: pd.DataFrame,
+    *,
+    origin: str,
+    keys: Sequence[str] = _METADATA_MERGE_KEYS,
+    sep: str = _METADATA_NAMESPACE_SEPARATOR,
+) -> tuple[pd.DataFrame, dict[str, tuple[str, str]]]:
+    """Namespace non-key columns with an origin prefix.
+
+    Args:
+      df: Standardized metadata table.
+      origin: Prefix string (e.g. ``"recount_qc"``).
+      keys: Column names to leave unmodified.
+      sep: Separator used between origin and the original column name.
+
+    Returns:
+      A tuple (namespaced_df, provenance) where provenance maps new column names
+      to (origin, original_name).
+    """
+    provenance: dict[str, tuple[str, str]] = {}
+    rename: dict[str, str] = {}
+
+    for col in df.columns:
+        if col in keys:
+            continue
+        new_name = f"{origin}{sep}{col}"
+        rename[col] = new_name
+        provenance[new_name] = (origin, col)
+
+    out = df.rename(columns=rename)
+    out = _ensure_unique_columns(out, empty_prefix="col")
+    return out, provenance
+
+
+def _outer_merge_metadata_frames(
+    frames: Sequence[pd.DataFrame],
+    *,
+    keys: Sequence[str] = _METADATA_MERGE_KEYS,
+) -> pd.DataFrame:
+    """Outer-merge metadata frames on a fixed set of key columns."""
+    if not frames:
+        return pd.DataFrame(columns=list(keys))
+
+    def merge_two(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
+        return pd.merge(left, right, on=list(keys), how="outer")
+
+    return functools.reduce(merge_two, frames)
+
+
+def _choose_alignment_key(
+    *,
+    sample_ids: Sequence[str],
+    merged: pd.DataFrame,
+) -> str:
+    """Choose the metadata column that best matches the assay sample IDs."""
+    candidates = ("external_id", "rail_id")
+    sample_set = set(sample_ids)
+
+    best_key = "external_id"
+    best_matches = -1
+    for key in candidates:
+        if key not in merged.columns:
+            continue
+        matches = merged[key].astype("string").isin(sample_set).sum()
+        if matches > best_matches:
+            best_matches = int(matches)
+            best_key = key
+    return best_key
+
+
+def _collapse_rows_by_key(df: pd.DataFrame, *, key: str) -> pd.DataFrame:
+    """Collapse duplicated keys by taking the first non-null value per column."""
+    if key not in df.columns:
+        return df
+
+    def first_non_null(values: pd.Series) -> Any:
+        non_null = values.dropna()
+        if non_null.empty:
+            return pd.NA
+        return non_null.iloc[0]
+
+    # groupby(..., dropna=False) keeps rows with missing keys as a group.
+    collapsed = (
+        df.groupby(key, dropna=False, sort=False)
+        .aggregate(first_non_null)
+        .reset_index()
+    )
+    return collapsed
+
+
+def _maybe_relabel_counts_columns_to_external_id(
+    counts_df: pd.DataFrame,
+    col_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Relabel assay columns to external_id when a complete mapping exists."""
+    if "external_id" not in col_df.columns:
+        return counts_df, col_df
+
+    external_ids = list(col_df["external_id"].astype("string"))
+    if len(external_ids) != len(counts_df.columns):
+        return counts_df, col_df
+
+    missing_external_id = any(
+        val is pd.NA or val is None or str(val).strip() == ""
+        for val in external_ids
+    )
+    if missing_external_id:
+        return counts_df, col_df
+
+    external_ids_str = [str(x) for x in external_ids]
+    if len(set(external_ids_str)) != len(external_ids_str):
+        return counts_df, col_df
+
+    current_ids = [str(c) for c in counts_df.columns]
+    if current_ids == external_ids_str:
+        return counts_df, col_df
+
+    renamed_counts = counts_df.copy()
+    renamed_counts.columns = external_ids_str
+
+    renamed_col = col_df.copy()
+    renamed_col.index = external_ids_str
+    renamed_col["external_id"] = external_ids_str
+
+    return renamed_counts, renamed_col
 
 
 def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
@@ -289,15 +515,15 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
       ImportError: If :mod:`genomicranges` cannot be imported.
       TypeError: If no supported constructor is available.
     """
-    _require_biocpy()
+    _, GenomicRangesCls, _, _ = _require_biocpy()
 
     # Preferred recent API: classmethod from_pandas.
-    if hasattr(GenomicRanges, "from_pandas"):
-        return GenomicRanges.from_pandas(ranges_df)
+    if hasattr(GenomicRangesCls, "from_pandas"):
+        return GenomicRangesCls.from_pandas(ranges_df)
 
     # Older classmethod name.
-    if hasattr(GenomicRanges, "fromPandas"):  # pragma: no cover - legacy.
-        return GenomicRanges.fromPandas(ranges_df)
+    if hasattr(GenomicRangesCls, "fromPandas"):  # pragma: no cover - legacy.
+        return GenomicRangesCls.fromPandas(ranges_df)
 
     # Module-level constructor used in some releases.
     try:  # pragma: no cover - optional compatibility path.
@@ -309,7 +535,7 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
         ) from exc
 
     if hasattr(genomicranges_module, "from_pandas"):
-        return genomicranges_module.from_pandas(ranges_df)
+        return genomicranges_module.from_pandas(ranges_df)  # type: ignore
 
     raise TypeError(
         "Could not construct a GenomicRanges object from a pandas DataFrame. "
@@ -355,7 +581,7 @@ def _construct_se_compat(
       TypeError: If no constructor variant is accepted by the installed
         :mod:`summarizedexperiment` package.
     """
-    _require_biocpy()
+    _, _, SummarizedExperimentCls, _ = _require_biocpy()
 
     n_features, n_samples = counts_df.shape
     if n_features == 0 or n_samples == 0:
@@ -384,7 +610,7 @@ def _construct_se_compat(
 
     # Variant 1: dict[str, ndarray] + column_data
     try:
-        return SummarizedExperiment(
+        return SummarizedExperimentCls(
             assays={assay_name: counts_np},
             row_data=row_data,
             column_data=col_data,
@@ -394,19 +620,21 @@ def _construct_se_compat(
 
     # Variant 2: list[ndarray] + assay_names + column_data
     try:
-        return SummarizedExperiment(
+        return SummarizedExperimentCls(
             assays=[counts_np],
             assay_names=[assay_name],
             row_data=row_data,
             column_data=col_data,
         )
     except Exception as exc:  # pylint: disable=broad-except
-        errors_seen.append("list[ndarray] + assay_names + column_data "
-                           f"→ {exc!r}")
+        errors_seen.append(
+            "list[ndarray] + assay_names + column_data "
+            f"→ {exc!r}"
+        )
 
     # Variant 3: swap keyword to col_data
     try:
-        return SummarizedExperiment(
+        return SummarizedExperimentCls(
             assays={assay_name: counts_np},
             row_data=row_data,
             col_data=col_data,
@@ -1242,50 +1470,74 @@ class R3ResourceBundle:
     ) -> pd.DataFrame:
         """Merge available metadata tables and align rows to samples.
 
-        This method aligns metadata to the assay columns by trying common
-        sample keys present in recount3 tables, such as ``external_id``,
-        ``rail_id``, ``run``, and related fields.
+        1. Load each per-project metadata table.
+        2. Standardize column names and key fields.
+        3. Namespace non-key columns with the metadata table name.
+        4. Outer-merge all tables on ``rail_id``, ``external_id``, and
+            ``study``.
+        5. Align the merged rows to ``sample_ids``.
 
         Args:
-          sample_ids: Column names of the counts matrix to align to.
-          autoload: If :data:`True`, load metadata resources on demand.
+            sample_ids: Column names of the counts matrix to align to.
+            autoload: If True, load metadata resources on demand.
 
         Returns:
-          A :class:`pandas.DataFrame` indexed by ``sample_ids``. Missing
-          values are represented as NaN.
-        """
-        keys = (
-            "external_id",
-            "rail_id",
-            "run",
-            "run_accession",
-            "sample",
-            "sample_id",
-        )
+            A DataFrame indexed by ``sample_ids`` containing merged, namespaced
+            metadata.
 
-        parts: list[pd.DataFrame] = []
+        The returned DataFrame columns are guaranteed to be unique.
+
+        Raises:
+            ValueError: If metadata cannot be aligned to the requested samples.
+        """
+        sample_ids = [str(s) for s in sample_ids]
+        frames: list[pd.DataFrame] = []
+        provenance: dict[str, tuple[str, str]] = {}
+
         for res, obj in self.only_metadata().iter_loaded(autoload=autoload):
             if not isinstance(obj, pd.DataFrame):
                 continue
+            origin = _metadata_origin(res)
+            standardized = _standardize_metadata_frame(obj)
+            namespaced, prov = _namespace_metadata_columns(
+                standardized,
+                origin=origin,
+            )
+            frames.append(namespaced)
+            provenance.update(prov)
 
-            df = obj.copy()
-            df.columns = [str(col).strip() for col in df.columns]
-            key = next((k for k in keys if k in df.columns), None)
-            if not key:
-                continue
+        if not frames:
+            out = pd.DataFrame(
+                index=sample_ids,
+                data={"external_id": sample_ids},
+            )
+            out.index.name = None
+            return _ensure_unique_columns(out, empty_prefix="col")
 
-            df = df.set_index(key)
-            aligned = df.reindex(sample_ids)
-            parts.append(aligned)
+        merged = _outer_merge_metadata_frames(frames)
 
-        if not parts:
-            # Provide a minimal column_data when nothing is available.
-            return pd.DataFrame(index=list(sample_ids), data={"external_id": sample_ids})
+        align_key = _choose_alignment_key(sample_ids=sample_ids, merged=merged)
+        merged = _collapse_rows_by_key(merged, key=align_key)
 
-        out = pd.concat(parts, axis=1, join="outer")
-        out = out.reindex(sample_ids)
-        out.index.name = None
-        return out
+        if align_key not in merged.columns:
+            raise ValueError(
+                f"Cannot align metadata: missing alignment key {align_key!r}."
+            )
+
+        aligned = merged.set_index(align_key, drop=False).reindex(sample_ids)
+        aligned.index.name = None
+
+        # Always expose external_id as the canonical user-facing sample ID.
+        if "external_id" not in aligned.columns:
+            aligned["external_id"] = sample_ids
+        elif aligned["external_id"].isna().any():
+            aligned["external_id"] = aligned["external_id"].fillna(
+                pd.Series(sample_ids, index=aligned.index)
+            )
+
+        aligned = _ensure_unique_columns(aligned, empty_prefix="col")
+        aligned.attrs["recount3_metadata_provenance"] = provenance
+        return aligned
 
     def to_summarized_experiment(
         self,
@@ -1345,10 +1597,16 @@ class R3ResourceBundle:
             autoload=autoload,
         )
 
-        sample_ids = [str(col) for col in counts_df.columns]
+        counts_df.index = [str(i) for i in counts_df.index]
+        counts_df.columns = [str(c) for c in counts_df.columns]
+
         col_df = self._normalize_sample_metadata(
-            sample_ids=sample_ids,
+            sample_ids=list(counts_df.columns),
             autoload=autoload,
+        )
+        counts_df, col_df = _maybe_relabel_counts_columns_to_external_id(
+            counts_df,
+            col_df,
         )
 
         row_df = pd.DataFrame(
@@ -1410,18 +1668,25 @@ class R3ResourceBundle:
             :class:`RangedSummarizedExperiment` constructor rejects all
             compatibility variants.
         """
-        _require_biocpy()
+        BiocFrameCls, GenomicRangesCls, SummarizedExperimentCls, RangedSummarizedExperimentCls = _require_biocpy()
 
-        counts_df = self._stack_counts_for(
+        working = self
+        counts_df = working._stack_counts_for(
             genomic_unit=genomic_unit,
             join=join,
             autoload=autoload,
         )
 
-        sample_ids = [str(col) for col in counts_df.columns]
+        counts_df.index = [str(i) for i in counts_df.index]
+        counts_df.columns = [str(c) for c in counts_df.columns]
+
         col_df = self._normalize_sample_metadata(
-            sample_ids=sample_ids,
+            sample_ids=list(counts_df.columns),
             autoload=autoload,
+        )
+        counts_df, col_df = _maybe_relabel_counts_columns_to_external_id(
+            counts_df,
+            col_df,
         )
 
         row_data_df = pd.DataFrame(
@@ -1555,8 +1820,13 @@ class R3ResourceBundle:
 
         row_data = row_data_df.copy()
         row_data.index = counts_df.index
+
         col_data = col_df.copy()
         col_data.index = counts_df.columns
+
+        row_data = _ensure_unique_columns(row_data, empty_prefix="row")
+        col_data = _ensure_unique_columns(col_data, empty_prefix="col")
+
         counts_numeric = counts_df.apply(pd.to_numeric, errors="coerce").fillna(0)
 
         gr = _to_genomic_ranges(ranges_df)
@@ -1565,40 +1835,46 @@ class R3ResourceBundle:
 
         # Variant 1: dict[str, ndarray] + column_data
         try:
-            return RangedSummarizedExperiment(
+            return RangedSummarizedExperimentCls(
                 assays={assay_name: counts_numeric.to_numpy(copy=False)},
                 row_data=row_data,
                 row_ranges=gr,
                 column_data=col_data,
             )
-        except Exception as exc:  # pylint: disable=broad-except
-            errors_seen.append("dict[str, ndarray] + column_data → "
-                               f"{exc!r}")
+        except Exception as exc:
+            errors_seen.append(
+                "dict[str, ndarray] + column_data → "
+                f"{exc!r}"
+            )
 
         # Variant 2: list[ndarray] + assay_names + column_data
         try:
-            return RangedSummarizedExperiment(
+            return RangedSummarizedExperimentCls(
                 assays=[counts_numeric.to_numpy(copy=False)],
                 assay_names=[assay_name],
                 row_data=row_data,
                 row_ranges=gr,
                 column_data=col_data,
             )
-        except Exception as exc:  # pylint: disable=broad-except
-            errors_seen.append("list[ndarray] + assay_names + column_data "
-                               f"→ {exc!r}")
+        except Exception as exc:
+            errors_seen.append(
+                "list[ndarray] + assay_names + column_data "
+                f"→ {exc!r}"
+            )
 
         # Variant 3: swap keyword to col_data
         try:
-            return RangedSummarizedExperiment(
+            return RangedSummarizedExperimentCls(
                 assays={assay_name: counts_numeric.to_numpy(copy=False)},
                 row_data=row_data,
                 row_ranges=gr,
                 col_data=col_data,
             )
-        except Exception as exc:  # pylint: disable=broad-except
-            errors_seen.append("dict[str, ndarray] + col_data → "
-                               f"{exc!r}")
+        except Exception as exc:
+            errors_seen.append(
+                "dict[str, ndarray] + col_data → "
+                f"{exc!r}"
+            )
 
         raise TypeError(
             "Failed to construct RangedSummarizedExperiment; tried variants: "

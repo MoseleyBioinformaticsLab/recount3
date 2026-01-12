@@ -19,7 +19,6 @@ Typical usage example:
 
   from recount3 import se
 
-  # High-level one-shot helper, mirroring the R create_rse() API.
   rse = se.create_rse(
       project="SRP009615",
       genomic_unit="gene",
@@ -31,42 +30,64 @@ Typical usage example:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import logging
+import numpy as np
 import pandas as pd
 
 from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
 
-# Optional BiocPy imports, used only for expand_sra_attributes().
-try:  # pragma: no cover - optional, exercised only when installed.
-    from biocframe import BiocFrame  # type: ignore[import-not-found]
-    from summarizedexperiment import (  # type: ignore[import-not-found]
+if TYPE_CHECKING:  # only for static type checkers
+    from biocframe import BiocFrame
+    from summarizedexperiment import (
         RangedSummarizedExperiment,
         SummarizedExperiment,
     )
-except Exception:  # pragma: no cover
-    BiocFrame = None
-    SummarizedExperiment = None
-    RangedSummarizedExperiment = None
+
+# Runtime caches for the optional BiocPy classes
+_BiocFrame: type[Any] | None = None
+_SummarizedExperiment: type[Any] | None = None
+_RangedSummarizedExperiment: type[Any] | None = None
 
 
-def _require_biocpy() -> None:
+def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:
     """Ensure BiocPy packages are importable for SE/RSE utilities.
+
+    Returns:
+        (BiocFrame, SummarizedExperiment, RangedSummarizedExperiment) classes.
 
     Raises:
       ImportError: If any required BiocPy package is missing.
     """
-    if any(
-        x is None
-        for x in (BiocFrame, SummarizedExperiment, RangedSummarizedExperiment)
+    global _BiocFrame, _SummarizedExperiment, _RangedSummarizedExperiment
+
+    if (
+        _BiocFrame is None
+        or _SummarizedExperiment is None
+        or _RangedSummarizedExperiment is None
     ):
-        raise ImportError(
-            "This feature requires BiocPy packages. Install with:\n"
-            "  pip install summarizedexperiment biocframe genomicranges\n"
-            "or via conda (conda-forge)."
-        )
+        try:  # pragma: no cover - optional, exercised only when installed.
+            from biocframe import BiocFrame as BF
+            from summarizedexperiment import (
+                SummarizedExperiment as SE,
+                RangedSummarizedExperiment as RSE,
+            )
+        except Exception as e:  # pragma: no cover
+            raise ImportError(
+                "This feature requires BiocPy packages. Install with:\n"
+                "  pip install summarizedexperiment biocframe genomicranges\n"
+                "or via conda (conda-forge)."
+            ) from e
+
+        _BiocFrame = BF
+        _SummarizedExperiment = SE
+        _RangedSummarizedExperiment = RSE
+
+    # At this point mypy/pyright know these are not None (because of the
+    # explicit return type and the guard above).
+    return _BiocFrame, _SummarizedExperiment, _RangedSummarizedExperiment
 
 
 def _expand_sra_attributes_df(
@@ -211,9 +232,7 @@ def build_summarized_experiment(
     """Create a SummarizedExperiment from a resource bundle.
 
     This is a convenience wrapper around
-    :meth:`recount3.bundle.R3ResourceBundle.to_summarized_experiment`
-    that preserves the original functional API of the early Python
-    recount3 prototypes.
+    :meth:`recount3.bundle.R3ResourceBundle.to_summarized_experiment`.
 
     Args:
       bundle: Resource bundle containing counts and metadata.
@@ -499,9 +518,9 @@ def expand_sra_attributes(
             prefix=prefix,
         )
 
-    _require_biocpy()
+    BiocFrameCls, SummarizedExperimentCls, RangedSummarizedExperimentCls = _require_biocpy()
 
-    if not isinstance(obj, (SummarizedExperiment, RangedSummarizedExperiment)):
+    if not isinstance(obj, (SummarizedExperimentCls, RangedSummarizedExperimentCls)):
         raise TypeError(
             "expand_sra_attributes() expects a pandas DataFrame or a BiocPy "
             "SummarizedExperiment/RangedSummarizedExperiment; got "
@@ -530,5 +549,239 @@ def expand_sra_attributes(
         column=column,
         prefix=prefix,
     )
-    expanded_bf = BiocFrame.from_pandas(expanded_df)
+    expanded_bf = BiocFrameCls.from_pandas(expanded_df)
     return obj.set_column_data(expanded_bf)
+
+
+def _find_metadata_column(
+    df: pd.DataFrame,
+    candidates: Sequence[str],
+) -> pd.Series | None:
+    """Find a column in a DataFrame matching one of the candidate names.
+
+    Matches exact names first, then suffix matches (e.g., 'avg_len' matches
+    'recount_seq_qc.avg_len'). This handles the variable prefixing behavior
+    of recount3 metadata tables.
+
+    Args:
+      df: The DataFrame to search.
+      candidates: A sequence of column names to look for.
+
+    Returns:
+      The matching Series if found, or None.
+    """
+    columns = [str(c) for c in df.columns]
+    
+    # 1. Exact match
+    for cand in candidates:
+        if cand in columns:
+            return df[cand]
+
+    # 2. Suffix match (e.g. 'recount_seq_qc.avg_len' matches 'avg_len')
+    for cand in candidates:
+        suffix = f".{cand}"
+        matches = [col for col in columns if col.endswith(suffix)]
+        if matches:
+            # If multiple match, pick the shortest (most likely the canonical one)
+            # or the first one.
+            best = min(matches, key=len)
+            return df[best]
+            
+    return None
+
+
+def compute_read_counts(
+    rse: SummarizedExperiment,
+    *,
+    round_counts: bool = True,
+) -> pd.DataFrame:
+    """Compute estimated read counts from raw coverage sums.
+
+    recount3 stores data as "coverage sums" (Area Under Coverage). This function
+    converts them to approximate read counts by dividing by the average read
+    length per sample.
+
+    Args:
+      rse: A SummarizedExperiment or RangedSummarizedExperiment object
+        containing the raw coverage counts in the first assay.
+      round_counts: If True, round the resulting counts to the nearest integer.
+
+    Returns:
+      A pandas DataFrame of estimated read counts.
+
+    Raises:
+      ValueError: If the read length metadata cannot be found in col_data.
+      ImportError: If BiocPy packages are not installed.
+    """
+    _require_biocpy()
+
+    # 1. Get raw coverage (AUC)
+    # Assumes the first assay is the counts matrix.
+    if not rse.assays:
+        raise ValueError("RSE object contains no assays.")
+    
+    # Access first assay regardless of name ("counts", "raw_counts", etc.)
+    assay_name = rse.assay_names[0]
+    coverage_auc = pd.DataFrame(
+        rse.assay(assay_name),
+        index=rse.row_names,
+        columns=rse.col_names
+    )
+
+    # 2. Get average read length
+    # Check col_data for standard keys used in recount3 qc tables.
+    col_data = rse.col_data.to_pandas()
+    candidates = ("avg_len", "avg_read_length", "read_length")
+    avg_len = _find_metadata_column(col_data, candidates)
+
+    if avg_len is None:
+        raise ValueError(
+            "Could not find average read length in col_data. "
+            f"Searched for: {candidates}. "
+            "Ensure 'recount_seq_qc' metadata is included in the bundle."
+        )
+
+    # 3. Compute Read Counts = AUC / AvgReadLength
+    # Align avg_len to the columns of the coverage matrix
+    avg_len = avg_len.reindex(coverage_auc.columns)
+    
+    # Handle NaN lengths (div by zero protection)
+    if avg_len.isna().any():
+        logging.warning(
+            "Missing read lengths for %d samples; counts will be NaN.",
+            avg_len.isna().sum()
+        )
+
+    read_counts = coverage_auc.div(avg_len, axis=1)
+
+    if round_counts:
+        read_counts = read_counts.round()
+
+    return read_counts
+
+
+def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
+    """Compute Transcripts Per Million (TPM) from raw coverage sums.
+
+    TPM is calculated as:
+      1. Approximate Read Counts = Coverage AUC / Avg Read Length
+      2. RPK = Read Counts / (Feature Length / 1000)
+      3. Scale Factor = Sum(RPK) / 1,000,000
+      4. TPM = RPK / Scale Factor
+
+    Args:
+      rse: A RangedSummarizedExperiment object containing raw coverage sums.
+        Must have feature widths defined in rowRanges.
+
+    Returns:
+      A pandas DataFrame of TPM values.
+
+    Raises:
+      TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).
+      ValueError: If feature widths or read lengths are missing.
+    """
+    _require_biocpy()
+
+    if not isinstance(rse, RangedSummarizedExperiment):
+        raise TypeError(
+            "compute_tpm requires a RangedSummarizedExperiment with "
+            "defined rowRanges to determine feature lengths."
+        )
+
+    # 1. Get Read Counts
+    reads = compute_read_counts(rse, round_counts=False)
+
+    # 2. Get Feature Lengths (bp)
+    # biocutils/genomicranges exposes .width
+    try:
+        widths = np.array(rse.row_ranges.width)
+    except AttributeError as exc:
+        raise ValueError(
+            "Could not determine feature widths from rowRanges."
+        ) from exc
+
+    # 3. Calculate Reads Per Kilobase
+    # Numpy broadcasting: (n_features, n_samples) / (n_features, 1)
+    kb_widths = widths / 1000.0
+    rpk = reads.div(kb_widths, axis=0)
+
+    # 4. Calculate Scaling Factors (per sample)
+    # Sum of RPKs per sample / 1,000,000
+    scale_factors = rpk.sum(axis=0) / 1_000_000.0
+
+    # 5. Calculate TPM
+    tpm = rpk.div(scale_factors, axis=1)
+
+    return tpm
+
+
+def transform_counts(
+    rse: SummarizedExperiment,
+    *,
+    by: str = "raw",
+    round_counts: bool = True,
+) -> SummarizedExperiment:
+    """Transform the counts in a SummarizedExperiment.
+
+    Mirrors the behavior of recount3::transform_counts() in R. It returns a
+    new SummarizedExperiment with the assay transformed to the requested unit.
+
+    Args:
+      rse: Input SummarizedExperiment or RangedSummarizedExperiment with
+        raw coverage sums (AUC) in the first assay.
+      by: Transformation type.
+        * "raw": Return object unchanged (coverage sums).
+        * "read_counts": Estimate read counts (AUC / avg_read_len).
+        * "tpm": Transcripts Per Million (requires feature lengths).
+      round_counts: If True, round read_counts to integers. Ignored for TPM.
+
+    Returns:
+      A new SummarizedExperiment containing the transformed assay.
+      The assay name is updated to the value of `by`.
+
+    Raises:
+      ValueError: If `by` is unknown or metadata is missing.
+    """
+    _require_biocpy()
+
+    valid_modes = {"raw", "read_counts", "tpm"}
+    if by not in valid_modes:
+        raise ValueError(f"Invalid transformation 'by={by!r}'. Expected: {valid_modes}")
+
+    if by == "raw":
+        return rse
+
+    if by == "read_counts":
+        new_matrix = compute_read_counts(rse, round_counts=round_counts)
+    elif by == "tpm":
+        # TPM usually implies RSE input
+        if not isinstance(rse, RangedSummarizedExperiment):
+             raise TypeError("Transform 'tpm' requires a RangedSummarizedExperiment.")
+        new_matrix = compute_tpm(rse)
+    else:
+        # Should be unreachable due to check above
+        raise ValueError(f"Unknown mode: {by}")
+
+    # Construct new object with transformed assay
+    # Prefer to keep the existing metadata, col_data, etc.
+    # SE immutable-ish in design; construct a new one.
+    
+    # BiocPy constructors are flexible.
+    # Assume 'new_matrix' is a DataFrame; convert to numpy for the SE.
+    new_assay = new_matrix.to_numpy(copy=False)
+    
+    # Use the specific class constructor to preserve RSE vs SE nature
+    cls = type(rse)
+    
+    # Helper to extract row_ranges only if it exists (RSE)
+    kwargs = {
+        "assays": {by: new_assay},
+        "row_data": rse.row_data,
+        "col_data": rse.col_data,
+        "metadata": rse.metadata
+    }
+    
+    if isinstance(rse, RangedSummarizedExperiment):
+        kwargs["row_ranges"] = rse.row_ranges
+
+    return cls(**kwargs)
