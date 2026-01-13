@@ -31,6 +31,8 @@ from __future__ import annotations
 import dataclasses
 import functools
 import logging
+import re
+from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import Any, Optional, TYPE_CHECKING
 
@@ -59,6 +61,9 @@ _GenomicRanges: type[Any] | None = None
 _SummarizedExperiment: type[Any] | None = None
 _RangedSummarizedExperiment: type[Any] | None = None
 
+_GENE_ID_ATTR_RE = re.compile(r'\bgene_id\s+"([^"]+)"')
+_EXON_ID_ATTR_RE = re.compile(r'\bexon_id\s+"([^"]+)"')
+_RECOUNT_EXON_ID_ATTR_RE = re.compile(r'\brecount_exon_id\s+"([^"]+)"')
 
 def _require_biocpy() -> tuple[type[Any], type[Any], type[Any], type[Any]]:
     """Ensure that the BiocPy packages used here are importable.
@@ -457,34 +462,36 @@ def _ranges_from_gtf(
             columns=["seqnames", "starts", "ends", "strand", "feature_id"]
         )
 
-    import re
-
-    def _parse_attr(s: str) -> dict[str, str]:
-        items: dict[str, str] = {}
-        for part in re.split(r";\s*", s.strip().rstrip(";")):
-            if not part:
-                continue
-            match = re.match(r'([^ ]+)\s+"([^"]+)"', part)
-            if match:
-                items[match.group(1)] = match.group(2)
-        return items
-
-    attrs = df["attributes"].astype(str).map(_parse_attr)
-
+    attrs = df["attributes"].astype(str)
     if feature_kind == "gene":
-        feature_ids = [a.get("gene_id") for a in attrs]
+        feature_ids = attrs.str.extract(_GENE_ID_ATTR_RE, expand=False)
     else:
-        feature_ids: list[str] = []
-        for attr, (_, row) in zip(attrs, df.iterrows()):
-            eid = attr.get("exon_id")
-            if eid:
-                feature_ids.append(eid)
-                continue
-            # Fallback: coord-based ID; may not match counts index but is
-            # better than NaN.
-            feature_ids.append(
-                f"{row['seqname']}:{row['start']}-{row['end']}:{row['strand']}"
+        # recount3 exon count matrices are keyed by `recount_exon_id` in R.
+        feature_ids = attrs.str.extract(
+            _RECOUNT_EXON_ID_ATTR_RE,
+            expand=False,
+        )
+        missing = feature_ids.isna()
+        if missing.any():
+            exon_ids = attrs[missing].str.extract(
+                _EXON_ID_ATTR_RE,
+                expand=False,
             )
+            feature_ids = feature_ids.fillna(exon_ids)
+
+    missing = feature_ids.isna()
+    if missing.any():
+        # Last-resort fallback (does not guarantee compatibility with counts).
+        coords = (
+            df.loc[missing, "seqname"].astype(str)
+            + "|"
+            + df.loc[missing, "start"].astype(str)
+            + "|"
+            + df.loc[missing, "end"].astype(str)
+            + "|"
+            + df.loc[missing, "strand"].astype(str)
+        )
+        feature_ids.loc[missing] = coords.values
 
     out = pd.DataFrame(
         {
@@ -492,9 +499,35 @@ def _ranges_from_gtf(
             "starts": df["start"].astype(int).values,
             "ends": df["end"].astype(int).values,
             "strand": df["strand"].astype(str).values,
-            "feature_id": feature_ids,
+            "feature_id": feature_ids.astype(str).values,
         }
     )
+
+    if out["feature_id"].duplicated().any():
+        dup_mask = out["feature_id"].duplicated(keep=False)
+        dup = out.loc[
+            dup_mask,
+            ["feature_id", "seqnames", "starts", "ends", "strand"],
+        ]
+        nunique = dup.groupby("feature_id")[
+            ["seqnames", "starts", "ends", "strand"]
+        ].nunique()
+        conflicting = nunique.max(axis=1) > 1
+        if conflicting.any():
+            example_ids = list(nunique[conflicting].index[:5])
+            raise ValueError(
+                "GTF contains duplicate feature_id values with conflicting "
+                f"genomic ranges (example feature_id values: {example_ids})."
+            )
+
+        dropped = int(dup["feature_id"].nunique())
+        logging.info(
+            "Dropping duplicate GTF rows for %d feature_id values with "
+            "identical ranges.",
+            dropped,
+        )
+        out = out.drop_duplicates(subset=["feature_id"], keep="first")
+
     return out
 
 
@@ -688,6 +721,62 @@ def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
         "Resource is not a recognized count-file type for stacking: "
         f"{rtype!r}"
     )
+
+def _make_unique_names(
+    names: Sequence[str],
+    *,
+    suffix: str = "__dup",
+) -> list[str]:
+    """Return a stable, order-preserving unique-ified version of `names`.
+
+    Example:
+      ["a", "b", "a"] -> ["a", "b", "a__dup2"]
+    """
+    seen: Counter[str] = Counter()
+    out: list[str] = []
+    for name in names:
+        seen[name] += 1
+        if seen[name] == 1:
+            out.append(name)
+        else:
+            out.append(f"{name}{suffix}{seen[name]}")
+    return out
+
+
+def _dedupe_ranges_on_feature_id(ranges: pd.DataFrame) -> pd.DataFrame:
+    """Ensure `ranges.feature_id` is unique, erroring if duplicates disagree."""
+    if "feature_id" not in ranges.columns:
+        raise ValueError("ranges is missing required column 'feature_id'.")
+
+    dup_mask = ranges["feature_id"].duplicated(keep=False)
+    if not dup_mask.any():
+        return ranges
+
+    key_cols = ["seqnames", "starts", "ends", "strand"]
+    have_cols = [c for c in key_cols if c in ranges.columns]
+    if len(have_cols) != len(key_cols):
+        raise ValueError(
+            "ranges is missing one or more required columns: "
+            f"{set(key_cols) - set(have_cols)}"
+        )
+
+    dup = ranges.loc[dup_mask, ["feature_id"] + key_cols]
+    nunique = dup.groupby("feature_id", sort=False)[key_cols].nunique(
+        dropna=False
+    )
+    inconsistent = nunique.max(axis=1) > 1
+    if inconsistent.any():
+        bad_ids = list(inconsistent[inconsistent].index[:10])
+        raise ValueError(
+            "Duplicate feature_id values map to different coordinates; "
+            f"example feature_ids={bad_ids!r}"
+        )
+
+    logging.warning(
+        "Annotation ranges contain duplicate feature_id values; keeping the "
+        "first occurrence for alignment."
+    )
+    return ranges.drop_duplicates(subset=["feature_id"], keep="first")
 
 
 @dataclasses.dataclass(slots=True)
@@ -1609,8 +1698,24 @@ class R3ResourceBundle:
             col_df,
         )
 
+        original_feature_ids = list(counts_df.index)
+        dup_count = int(pd.Index(original_feature_ids).duplicated().sum())
+
+        row_names = original_feature_ids
+        if dup_count:
+            logging.warning(
+                "Counts contain %d duplicate feature IDs; generating unique row_names "
+                "and preserving originals in row_data['feature_id'].",
+                dup_count,
+            )
+            row_names = _make_unique_names(original_feature_ids)
+
+        counts_df = counts_df.copy()
+        counts_df.index = row_names
+
         row_df = pd.DataFrame(
-            {"feature_id": [str(idx) for idx in counts_df.index]}
+            {"feature_id": original_feature_ids},
+            index=row_names,
         )
 
         return _construct_se_compat(
@@ -1670,6 +1775,8 @@ class R3ResourceBundle:
         """
         BiocFrameCls, GenomicRangesCls, SummarizedExperimentCls, RangedSummarizedExperimentCls = _require_biocpy()
 
+        last_ranges_error: Exception | None = None
+
         working = self
         counts_df = working._stack_counts_for(
             genomic_unit=genomic_unit,
@@ -1689,10 +1796,27 @@ class R3ResourceBundle:
             col_df,
         )
 
+        original_feature_ids = list(counts_df.index)
+        dup_count = int(pd.Index(original_feature_ids).duplicated().sum())
+
+        row_names = original_feature_ids
+        if dup_count:
+            logging.warning(
+                "Counts contain %d duplicate feature IDs; generating unique row_names "
+                "and preserving originals in row_data['feature_id'].",
+                dup_count,
+            )
+            row_names = _make_unique_names(original_feature_ids)
+
+        counts_df = counts_df.copy()
+        counts_df.index = row_names
+
         row_data_df = pd.DataFrame(
-            {"feature_id": [str(idx) for idx in counts_df.index]}
+            {"feature_id": original_feature_ids},
+            index=row_names,
         )
-        feature_ids: list[str] = list(row_data_df["feature_id"])
+
+        feature_ids = original_feature_ids
 
         ranges_df: Optional[pd.DataFrame] = None
 
@@ -1714,11 +1838,11 @@ class R3ResourceBundle:
                         gtf,
                         feature_kind=feature_kind,
                     )
+                    ranges = _dedupe_ranges_on_feature_id(ranges)
                     idxed = ranges.set_index("feature_id").reindex(feature_ids)
-                    ranges_df = idxed[
-                        ["seqnames", "starts", "ends", "strand"]
-                    ].reset_index(drop=True)
 
+                    ranges_df = idxed[["seqnames", "starts", "ends", "strand"]].copy()
+                    ranges_df.index = row_names
                     enrich_cols = [
                         col
                         for col in ranges.columns
@@ -1732,16 +1856,9 @@ class R3ResourceBundle:
                         }
                     ]
                     if enrich_cols:
-                        anno_extra = ranges.set_index("feature_id")[
-                            enrich_cols
-                        ].reindex(feature_ids)
-                        row_data_df = pd.concat(
-                            [
-                                row_data_df.reset_index(drop=True),
-                                anno_extra.reset_index(drop=True),
-                            ],
-                            axis=1,
-                        )
+                        anno_extra = ranges.set_index("feature_id")[enrich_cols].reindex(feature_ids)
+                        anno_extra.index = row_names
+                        row_data_df = row_data_df.join(anno_extra)
                 except Exception as exc:  # pylint: disable=broad-except
                     logging.warning(
                         "Falling back: failed to parse GTF for %s ranges "
@@ -1749,6 +1866,7 @@ class R3ResourceBundle:
                         genomic_unit,
                         exc,
                     )
+                    last_ranges_error = exc
 
         elif genomic_unit == "junction" and junction_rr_preferred:
             rr_res = next(
@@ -1814,14 +1932,16 @@ class R3ResourceBundle:
                     join=join,
                     autoload=autoload,
                 )
-            raise ValueError(
+            message = (
                 "Could not derive genomic ranges for the requested object. "
                 "Pass allow_fallback_to_se=True to receive a plain "
                 "SummarizedExperiment."
             )
+            if last_ranges_error is not None:
+                raise ValueError(message) from last_ranges_error
+            raise ValueError(message)
 
         row_data = row_data_df.copy()
-        row_data.index = counts_df.index
 
         col_data = col_df.copy()
         col_data.index = counts_df.columns
