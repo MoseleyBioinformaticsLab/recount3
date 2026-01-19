@@ -385,6 +385,228 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
     return df
 
 
+_GTF_ATTR_PAIR_RE = re.compile(
+    r'\s*(?P<key>[^\s;]+)\s+"?(?P<value>[^";]+)"?\s*(?:;|$)'
+)
+
+def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
+    """Parse a GTF attributes column into a wide (column-per-key) DataFrame.
+
+    Args:
+      attrs: Series containing raw GTF attribute strings.
+
+    Returns:
+      DataFrame indexed like attrs, with one column per attribute key.
+    """
+    if attrs.empty:
+        return pd.DataFrame(index=attrs.index)
+
+    extracted = (
+        attrs.fillna("")
+        .astype("string")
+        .str.extractall(_GTF_ATTR_PAIR_RE)
+    )
+    if extracted.empty:
+        return pd.DataFrame(index=attrs.index)
+
+    extracted = extracted.reset_index(level=1, drop=True)
+    extracted.index.name = "_row"
+
+    wide = (
+        extracted.reset_index()
+        .pivot_table(
+            index="_row",
+            columns="key",
+            values="value",
+            aggfunc="first",  # pyright: ignore[reportArgumentType]
+        )
+        .reindex(attrs.index)
+    )
+    wide.columns = [str(c) for c in wide.columns]
+    return wide
+
+def _coerce_gtf_phase(frame: pd.Series) -> pd.Series:
+    """Coerce a GTF frame/phase column to a nullable integer Series.
+
+    GTF "frame" (a.k.a. phase) is typically one of {"0", "1", "2"} or "."
+    for features where it is not applicable. This returns a pandas nullable
+    integer (Int64) Series where "." and missing values become <NA>.
+
+    Args:
+      frame: A Series containing the 8th GTF column ("frame"/phase).
+
+    Returns:
+      A pandas Series of dtype Int64 with values in {0, 1, 2} or <NA>.
+    """
+    # Normalize to string to handle mixed types (object, int, float, NA).
+    frame_str = frame.astype("string").str.strip()
+
+    # GTF uses "." to indicate missing.
+    frame_str = frame_str.replace({".": pd.NA, "": pd.NA})
+
+    phase = pd.to_numeric(frame_str, errors="coerce").astype("Int64")
+
+    # Validate: phase should be 0/1/2 when present.
+    invalid = phase.notna() & ~phase.isin([0, 1, 2])
+    if invalid.any():
+        bad_values = sorted({str(v) for v in frame_str[invalid].dropna().unique()})
+        logging.warning(
+            "GTF phase/frame column contains unexpected values; "
+            "coercing them to <NA>. Values=%s",
+            bad_values[:10],
+        )
+        phase = phase.mask(invalid, pd.NA)
+
+    return phase
+
+
+def _coerce_gtf_bp_length(
+    score: pd.Series,
+    *,
+    starts: pd.Series,
+    ends: pd.Series,
+) -> pd.Series:
+    """Derive a bp_length column for GTF features.
+
+    Args:
+      score: GTF "score" column (6th column). Often "." in standard GTFs.
+      starts: Numeric start positions (1-based, inclusive).
+      ends: Numeric end positions (1-based, inclusive).
+
+    Returns:
+      A pandas Series of dtype Int64 giving bp_length (width).
+    """
+    starts_num = pd.to_numeric(starts, errors="coerce").astype("Int64")
+    ends_num = pd.to_numeric(ends, errors="coerce").astype("Int64")
+    width = (ends_num - starts_num + 1).astype("Int64")
+
+    # If score is "." everywhere (typical GTF), done.
+    score_str = score.astype("string").str.strip().replace({".": pd.NA, "": pd.NA})
+    score_num = pd.to_numeric(score_str, errors="coerce")
+
+    # Decide whether score looks like "length" by match rate vs width.
+    comparable = score_num.notna() & width.notna()
+    if not comparable.any():
+        return width
+
+    # Could be float; treat as integer-like only if near an integer.
+    score_rounded = score_num.round()
+    is_integer_like = (score_num - score_rounded).abs() <= 1e-6
+
+    score_int = score_rounded.astype("Int64")
+    matches_width = comparable & is_integer_like & (score_int == width)
+
+    match_rate = float(matches_width.sum()) / float(comparable.sum())
+
+    # Tolerate small noise.
+    if match_rate >= 0.95:
+        # Use score-derived integer when present; fallback to width otherwise.
+        return score_int.where(score_int.notna(), width)
+
+    return width
+
+_ENSEMBL_VERSION_SUFFIX_RE = r"\.\d+$"
+
+
+def _strip_ensembl_version(values: pd.Series) -> pd.Series:
+    """Strip trailing Ensembl version suffix (e.g. ENSG... .12 -> ENSG...).
+
+    Args:
+      values: Series of identifiers.
+
+    Returns:
+      Series with trailing '.<digits>' removed when present.
+    """
+    return (
+        values.astype("string")
+        .str.strip()
+        .str.replace(_ENSEMBL_VERSION_SUFFIX_RE, "", regex=True)
+    )
+
+
+def _align_ranges_to_features(
+    ranges: pd.DataFrame,
+    *,
+    feature_ids: Sequence[str],
+) -> pd.DataFrame:
+    """Align annotation ranges to a list of feature IDs.
+
+    Tries exact feature_id matching first. If any features are missing,
+    tries a secondary match after stripping Ensembl version suffixes
+    ('.<digits>') on both sides.
+
+    Args:
+      ranges: DataFrame containing a 'feature_id' column and coordinate columns.
+      feature_ids: Feature IDs from the counts matrix (in desired order).
+
+    Returns:
+      DataFrame reindexed to feature_ids order, containing the same columns as
+      `ranges` except for 'feature_id' (which is used as the index).
+
+    Raises:
+      ValueError: If required coordinate columns are missing from `ranges`, or if
+        version-stripped matching is ambiguous (conflicting coordinates).
+    """
+    required = {"feature_id", "seqnames", "starts", "ends", "strand"}
+    missing_cols = required - set(ranges.columns)
+    if missing_cols:
+        raise ValueError(
+            "ranges is missing required columns: "
+            f"{sorted(missing_cols)}"
+        )
+
+    feature_index = pd.Index([str(x) for x in feature_ids])
+
+    exact = ranges.set_index("feature_id").reindex(feature_index)
+
+    coord_cols = ["seqnames", "starts", "ends", "strand"]
+    missing_any = exact[coord_cols].isna().any(axis=1)
+    if not missing_any.any():
+        return exact
+
+    # Build a version-stripped index for the annotation ranges.
+    ranges_uv = ranges.copy()
+    ranges_uv["_feature_id_unversioned"] = _strip_ensembl_version(
+        ranges_uv["feature_id"]
+    )
+
+    dup_mask = ranges_uv["_feature_id_unversioned"].duplicated(keep=False)
+    if dup_mask.any():
+        dup = ranges_uv.loc[dup_mask, ["_feature_id_unversioned"] + coord_cols]
+        nunique = dup.groupby("_feature_id_unversioned", sort=False)[coord_cols].nunique(
+            dropna=False
+        )
+        conflicting = nunique.max(axis=1) > 1
+        if conflicting.any():
+            bad = list(nunique[conflicting].index[:10])
+            raise ValueError(
+                "After stripping Ensembl versions, multiple annotation rows map to "
+                "the same ID but with conflicting coordinates. Example IDs: "
+                f"{bad!r}"
+            )
+        ranges_uv = ranges_uv.drop_duplicates("_feature_id_unversioned", keep="first")
+
+    ranges_uv = ranges_uv.set_index("_feature_id_unversioned")
+
+    feat_uv = _strip_ensembl_version(pd.Series(feature_index, dtype="string"))
+    fallback = ranges_uv.reindex(pd.Index(feat_uv.astype(str)))
+    fallback.index = feature_index
+
+    # Fill missing exact matches with version-stripped matches.
+    filled = exact.combine_first(fallback)
+
+    if filled[coord_cols].isna().any(axis=1).any():
+        # Left to caller to decide whether to error
+        return filled
+
+    logging.info(
+        "Aligned annotation ranges using Ensembl version-stripped fallback for "
+        "%d features.",
+        int(missing_any.sum()),
+    )
+    return filled
+
+
 def _read_gtf_dataframe(res: resource.R3Resource) -> pd.DataFrame:
     """Read a GTF(.gz) annotation resource into a DataFrame.
 
@@ -462,9 +684,15 @@ def _ranges_from_gtf(
             columns=["seqnames", "starts", "ends", "strand", "feature_id"]
         )
 
-    attrs = df["attributes"].astype(str)
-    if feature_kind == "gene":
-        feature_ids = attrs.str.extract(_GENE_ID_ATTR_RE, expand=False)
+    attrs = df["attributes"].astype("string")
+    attrs_wide = _parse_gtf_attributes(attrs)
+
+    if feature_kind == "gene" and "gene_id" in attrs_wide.columns:
+        feature_ids = attrs_wide["gene_id"].astype("string")
+    elif feature_kind != "gene" and "recount_exon_id" in attrs_wide.columns:
+        feature_ids = attrs_wide["recount_exon_id"].astype("string")
+    elif feature_kind != "gene" and "exon_id" in attrs_wide.columns:
+        feature_ids = attrs_wide["exon_id"].astype("string")
     else:
         # recount3 exon count matrices are keyed by `recount_exon_id` in R.
         feature_ids = attrs.str.extract(
@@ -495,13 +723,27 @@ def _ranges_from_gtf(
 
     out = pd.DataFrame(
         {
-            "seqnames": df["seqname"].astype(str).values,
-            "starts": df["start"].astype(int).values,
-            "ends": df["end"].astype(int).values,
-            "strand": df["strand"].astype(str).values,
-            "feature_id": feature_ids.astype(str).values,
-        }
+            "seqnames": df["seqname"].astype("string"),
+            "starts": df["start"].astype(int),
+            "ends": df["end"].astype(int),
+            "strand": df["strand"].astype("string"),
+            "feature_id": feature_ids.astype("string"),
+            "source": df["source"].astype("string"),
+            "type": df["feature"].astype("string"),
+            "bp_length": _coerce_gtf_bp_length(
+                df["score"], starts=df["start"], ends=df["end"]
+            ),
+            "phase": _coerce_gtf_phase(df["frame"]),
+        },
+        index=df.index,
     )
+
+    if not attrs_wide.empty:
+        attrs_extra = attrs_wide.drop(columns=out.columns, errors="ignore")
+        out = out.join(attrs_extra)
+
+    if "level" in out.columns:
+        out["level"] = pd.to_numeric(out["level"], errors="coerce").astype("Int64")
 
     if out["feature_id"].duplicated().any():
         dup_mask = out["feature_id"].duplicated(keep=False)
@@ -530,6 +772,93 @@ def _ranges_from_gtf(
 
     return out
 
+
+def _peek_gtf_feature_counts(res: resource.R3Resource, *, max_lines: int = 50000) -> Counter[str]:
+    """Quickly scan the GTF and count feature types without loading the whole file."""
+    import gzip
+    import io
+
+    try:
+        path = res._cached_path()  # pylint: disable=protected-access
+    except Exception:
+        res.download(path=None, cache_mode="enable")
+        path = res._cached_path()  # pylint: disable=protected-access
+
+    opener = gzip.open if str(path).endswith(".gz") else open
+    counts: Counter[str] = Counter()
+    seen = 0
+    with opener(path, "rb") as fh:  # type: ignore[arg-type]
+        for line in io.TextIOWrapper(fh, encoding="utf-8"):
+            if not line or line.startswith("#"):
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) > 2:
+                counts[parts[2]] += 1
+                seen += 1
+            if seen >= max_lines:
+                break
+    return counts
+
+
+def _select_gtf_resource_for_unit(
+    bundle: "R3ResourceBundle",
+    *,
+    genomic_unit: str,
+    annotation_file_extension: Optional[str],
+) -> Optional[resource.R3Resource]:
+    """Pick the most appropriate annotation resource for gene/exon ranges."""
+    feature_kind = "gene" if genomic_unit == "gene" else "exon"
+
+    ann = bundle.filter(resource_type="annotations")
+    if annotation_file_extension:
+        ann = ann.filter(annotation_file_extension=annotation_file_extension)
+
+    candidates = list(ann.resources)
+    if not candidates:
+        return None
+
+    def score(res: resource.R3Resource) -> int:
+        desc = res.description
+        path = (desc.url_path() if hasattr(desc, "url_path") else "") or ""
+        url = res.url or ""
+        text = f"{path} {url}".lower()
+
+        s = 0
+        # Strong hint from description if present.
+        gu = getattr(desc, "genomic_unit", None)
+        if isinstance(gu, str) and gu.lower() == genomic_unit:
+            s += 200
+
+        # Filename/path heuristics.
+        if genomic_unit == "gene" and ("gene" in text or "genes" in text):
+            s += 120
+        if genomic_unit == "exon" and ("exon" in text or "exons" in text):
+            s += 120
+
+        # Prefer obvious GTFs.
+        if ".gtf" in text:
+            s += 20
+        return s
+
+    # Sort by heuristic score, then validate by peeking for required feature.
+    candidates = sorted(candidates, key=score, reverse=True)
+
+    for res in candidates:
+        try:
+            feats = _peek_gtf_feature_counts(res, max_lines=50000)
+            if feats.get(feature_kind, 0) > 0:
+                logging.info(
+                    "Selected annotation resource for %s: %s (peek features=%s)",
+                    genomic_unit,
+                    res.description.url_path(),
+                    dict(feats.most_common(5)),
+                )
+                return res
+        except Exception as exc:  # pragma: no cover
+            logging.warning("Failed to peek GTF features for %s: %r", res.url, exc)
+
+    # If none contain the feature kind, return the best-scoring one (will error later with a clearer message).
+    return candidates[0]
 
 def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
     """Construct a GenomicRanges object from a pandas DataFrame.
@@ -1508,7 +1837,8 @@ class R3ResourceBundle:
                     try:
                         res.load()
                     except Exception as exc:  # pylint: disable=broad-except
-                        load_errors.append((res.url, exc))
+                        url = res.url or f"<no-url:{res.description.url_path()}>"
+                        load_errors.append((url, exc))
 
             try:
                 return sel.stack_count_matrices(
@@ -1533,7 +1863,8 @@ class R3ResourceBundle:
                 try:
                     res.load()
                 except Exception as exc:  # pylint: disable=broad-except
-                    load_errors.append((res.url, exc))
+                    url = res.url or f"<no-url:{res.description.url_path()}>"
+                    load_errors.append((url, exc))
 
         try:
             return sel.stack_count_matrices(
@@ -1821,13 +2152,11 @@ class R3ResourceBundle:
         ranges_df: Optional[pd.DataFrame] = None
 
         if genomic_unit in {"gene", "exon"}:
-            ann_bundle = self.filter(resource_type="annotations")
-            if annotation_file_extension:
-                ann_bundle = ann_bundle.filter(
-                    annotation_file_extension=annotation_file_extension
-                )
-
-            gtf_res = next(iter(ann_bundle.resources), None)
+            gtf_res = _select_gtf_resource_for_unit(
+                self,
+                genomic_unit=genomic_unit,
+                annotation_file_extension=annotation_file_extension,
+            )
             if gtf_res is not None:
                 try:
                     if autoload:
@@ -1839,26 +2168,35 @@ class R3ResourceBundle:
                         feature_kind=feature_kind,
                     )
                     ranges = _dedupe_ranges_on_feature_id(ranges)
-                    idxed = ranges.set_index("feature_id").reindex(feature_ids)
+                    idxed = _align_ranges_to_features(ranges, feature_ids=feature_ids)
+                    missing_mask = (
+                        idxed["seqnames"].isna()
+                        | idxed["starts"].isna()
+                        | idxed["ends"].isna()
+                        | idxed["strand"].isna()
+                    )
+                    if missing_mask.any():
+                        missing_ids = [str(feature_ids[i]) for i, m in enumerate(missing_mask) if m][:10]
+                        raise ValueError(
+                            "Annotation does not contain ranges for some feature IDs present in "
+                            "the counts matrix. Example missing feature_ids: "
+                            f"{missing_ids}. This usually indicates an annotation mismatch; try "
+                            "setting annotation_file_extension to match the counts resource."
+                        )
 
                     ranges_df = idxed[["seqnames", "starts", "ends", "strand"]].copy()
                     ranges_df.index = row_names
                     enrich_cols = [
-                        col
-                        for col in ranges.columns
-                        if col
-                        not in {
-                            "seqnames",
-                            "starts",
-                            "ends",
-                            "strand",
-                            "feature_id",
-                        }
+                        col for col in ranges.columns
+                        if col not in {"seqnames", "starts", "ends", "strand", "feature_id"}
                     ]
+
+                    base_cols = ["seqnames", "starts", "ends", "strand"]
+                    ranges_df = idxed[base_cols + enrich_cols].copy()
+                    ranges_df.index = row_names
+
                     if enrich_cols:
-                        anno_extra = ranges.set_index("feature_id")[enrich_cols].reindex(feature_ids)
-                        anno_extra.index = row_names
-                        row_data_df = row_data_df.join(anno_extra)
+                        row_data_df = row_data_df.join(ranges_df[enrich_cols])
                 except Exception as exc:  # pylint: disable=broad-except
                     logging.warning(
                         "Falling back: failed to parse GTF for %s ranges "
@@ -1913,9 +2251,8 @@ class R3ResourceBundle:
                             )
                         if "strand" not in std.columns:
                             std["strand"] = "*"
-                        ranges_df = std[
-                            ["seqnames", "starts", "ends", "strand"]
-                        ].reset_index(drop=True)
+                        ranges_df = std[["seqnames", "starts", "ends", "strand"]].copy()
+                        ranges_df.index = row_names
                 except Exception as exc:  # pylint: disable=broad-except
                     logging.warning(
                         "Falling back: failed to use RR for junction ranges "
