@@ -33,6 +33,7 @@ from collections.abc import Sequence
 from typing import Any, TYPE_CHECKING
 
 import logging
+import numbers
 import numpy as np
 import pandas as pd
 
@@ -635,118 +636,113 @@ def _find_metadata_column(
 
 
 def compute_read_counts(
-    experiment: Any,
-    *,
-    assay_name: str | None = None,
+    rse: Any,
     round_counts: bool = True,
-    avg_read_length_column: str | None = None,
+    avg_mapped_read_length: str = "recount_qc.star.average_mapped_length",
 ) -> pd.DataFrame:
-    """Compute approximate read counts from recount3 coverage-sum assays.
+    """Convert coverage-sum counts into approximate read/fragment counts.
 
-    recount3 "counts" assays are typically coverage sums (area under coverage).
-    Approximate read counts are computed by dividing each sample's coverage-sum
-    vector by that sample's average read length.
+    The "raw_counts" assay used by recount3-style resources represents summed
+    per-base coverage over each feature (for example, total coverage across all
+    bases in a gene), not the number of reads/fragments overlapping the feature.
+    A common approximation for converting coverage-sum values into read/fragment
+    counts is to divide by the sample's average mapped read length.
+
+    For each feature i and sample j:
+
+      read_counts[i, j] = raw_counts[i, j] / avg_mapped_read_length[j]
+
+    This operation is performed column-wise: each sample column in the assay is
+    divided by a single scalar derived from that sample's metadata.
+
+    Rounding is optional. When enabled, values are rounded to 0 decimals to
+    produce integer-like counts, which is convenient for downstream methods that
+    assume counts are integer-valued.
 
     Args:
-      experiment: A SummarizedExperiment-like object with an assay matrix and
-        per-sample metadata (column data) containing average read length.
-      assay_name: Assay to transform. If None, uses the first assay.
-      round_counts: If True, round the output to the nearest integer-like value.
-        Output remains float to preserve NaNs and avoid surprising dtype changes.
-      avg_read_length_column: Optional override to pin the column used for
-        average read length. This may be either a canonical key (e.g. "avg_len")
-        or an exact/namespaced column name (e.g.
-        "recount_qc__star.average_mapped_length").
+      rse: A RangedSummarizedExperiment-like object containing a "raw_counts"
+        assay and sample metadata in `col_data`.
+      round_counts: If True, round the resulting values to 0 decimals.
+      avg_mapped_read_length: Name of the metadata column containing average
+        mapped read length per sample. The column must be present in `col_data`
+        and must contain numeric values.
 
     Returns:
-      A (features x samples) DataFrame of approximate read counts.
+      A pandas DataFrame of approximate read counts with the same shape as the
+      "raw_counts" assay (features x samples). Row and column names are
+      preserved when available.
 
     Raises:
-      TypeError: If `experiment` is not SummarizedExperiment-like.
-      ValueError: If the assay cannot be located, read-length metadata is
-        missing, or read lengths are non-positive.
+      ValueError: If `rse` is not a RangedSummarizedExperiment, if the
+        "raw_counts" assay is missing, if `avg_mapped_read_length` is missing
+        from `col_data`, or if the assay and metadata dimensions do not align.
+      TypeError: If `round_counts` is not a bool.
     """
-    _, summarized_experiment_cls, _ = _require_biocpy()
-    if not isinstance(experiment, summarized_experiment_cls):
-        raise TypeError(
-            "compute_read_counts expects a SummarizedExperiment-like object; "
-            f"got {type(experiment)!r}."
-        )
+    _, _, ranged_summarized_experiment_cls = _require_biocpy()
 
-    # Resolve assay name and extract matrix.
-    if assay_name is None:
-        if not getattr(experiment, "assay_names", None):
-            raise ValueError("No assays available on experiment.")
-        assay_name = experiment.assay_names[0]
-
-    try:
-        assay_matrix = experiment.assay(assay_name)
-    except Exception as exc:
-        raise ValueError(f"Could not access assay {assay_name!r}.") from exc
-
-    row_names = list(getattr(experiment, "row_names", []))
-    col_names = list(getattr(experiment, "col_names", []))
-    if not row_names or not col_names:
-        # Fall back to best-effort if names aren’t present.
-        row_count, col_count = np.asarray(assay_matrix).shape
-        row_names = row_names or [f"row_{i}" for i in range(row_count)]
-        col_names = col_names or [f"col_{i}" for i in range(col_count)]
-
-    coverage_auc = pd.DataFrame(
-        np.asarray(assay_matrix),
-        index=row_names,
-        columns=col_names,
-    )
-
-    col_data_df = experiment.col_data.to_pandas()
-
-    if avg_read_length_column is not None:
-        candidates: Sequence[str] = (avg_read_length_column,)
-    else:
-        candidates = _AVG_READ_LENGTH_CANDIDATES
-
-    avg_len = _find_metadata_column(col_data_df, candidates)
-    if avg_len is None:
-        likely_cols = [
-            c
-            for c in col_data_df.columns.astype(str)
-            if ("length" in c.lower() or "avg" in c.lower() or "len" in c.lower())
-        ]
-        preview = ", ".join(likely_cols[:10])
+    if not isinstance(rse, ranged_summarized_experiment_cls):
         raise ValueError(
-            "Could not find average read length in col_data. "
-            f"{candidates=}. "
-            "If using STAR QC, try avg_read_length_column="
-            "'recount_qc__star.average_mapped_length'. "
-            f"Nearby columns (first 10): {preview}"
+            "rse must be a RangedSummarizedExperiment to compute read counts."
         )
+    if not isinstance(round_counts, bool):
+        raise TypeError("round_counts must be a bool.")
 
-    # Align to assay columns (samples).
-    avg_len = avg_len.reindex(col_names)
+    assay_names = getattr(rse, "assay_names", None)
+    if not assay_names or "raw_counts" not in assay_names:
+        raise ValueError("rse must contain a 'raw_counts' assay.")
 
-    # Validate read lengths.
-    avg_len_numeric = pd.to_numeric(avg_len, errors="coerce")
-    if avg_len_numeric.isna().any():
-        missing = int(avg_len_numeric.isna().sum())
-        logging.warning(
-            "Average read length missing for %d sample(s); output will contain "
-            "NaN for those samples.",
-            missing,
-        )
-
-    non_positive = avg_len_numeric.dropna() <= 0
-    if non_positive.any():
-        bad_samples = list(avg_len_numeric.index[non_positive])[:10]
+    col_data = rse.col_data.to_pandas()
+    if avg_mapped_read_length not in col_data.columns:
         raise ValueError(
-            "Average read length must be positive for all samples. "
-            f"Found non-positive values for sample(s) (first 10): {bad_samples}"
+            "Required metadata column not found in col_data: "
+            f"{avg_mapped_read_length!r}."
         )
 
-    read_counts = coverage_auc.div(avg_len_numeric, axis=1)
+    raw_counts = np.asarray(rse.assay("raw_counts"), dtype=float)
+    if raw_counts.ndim != 2:
+        raise ValueError(
+            "'raw_counts' assay must be a 2D matrix "
+            f"(got shape {raw_counts.shape})."
+        )
+
+    avg_len_values = col_data[avg_mapped_read_length].to_numpy()
+
+    for value in avg_len_values:
+        if pd.isna(value):
+            continue
+        if isinstance(value, (str, bytes)):
+            raise ValueError(
+                f"Metadata column {avg_mapped_read_length!r} must be numeric; "
+                f"found {type(value).__name__} value {value!r}."
+            )
+        if not isinstance(value, numbers.Real):
+            raise ValueError(
+                f"Metadata column {avg_mapped_read_length!r} must be numeric; "
+                f"found {type(value).__name__}."
+            )
+
+    avg_len = avg_len_values.astype(float, copy=False)
+
+    if raw_counts.shape[1] != avg_len.shape[0]:
+        raise ValueError(
+            "Mismatch between number of samples in 'raw_counts' "
+            f"({raw_counts.shape[1]}) and length of "
+            f"{avg_mapped_read_length!r} ({avg_len.shape[0]})."
+        )
+
+    read_counts = raw_counts / avg_len
+
     if round_counts:
-        read_counts = read_counts.round()
+        read_counts = np.rint(read_counts)
 
-    return read_counts
+    row_names = getattr(rse, "row_names", None)
+    col_names = getattr(rse, "col_names", None)
+
+    return pd.DataFrame(
+        read_counts,
+        index=list(row_names) if row_names is not None else None,
+        columns=list(col_names) if col_names is not None else None,
+    )
 
 
 def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
@@ -919,65 +915,405 @@ def _construct_experiment_compat(
     )
 
 
-def transform_counts(
-    rse: SummarizedExperiment,
-    *,
-    by: str = "raw",
-    round_counts: bool = True,
-) -> SummarizedExperiment:
-    """Transform the counts in a SummarizedExperiment.
-
-    Mirrors the behavior of recount3::transform_counts() in R. It returns a
-    new SummarizedExperiment with the assay transformed to the requested unit.
+def _coerce_col_data_to_pandas(x: Any) -> pd.DataFrame:
+    """Coerce sample metadata into a pandas DataFrame.
 
     Args:
-      rse: Input SummarizedExperiment or RangedSummarizedExperiment with
-        raw coverage sums (AUC) in the first assay.
-      by: Transformation type.
-        * "raw": Return object unchanged (coverage sums).
-        * "read_counts": Estimate read counts (AUC / avg_read_len).
-        * "tpm": Transcripts Per Million (requires feature lengths).
-      round_counts: If True, round read_counts to integers. Ignored for TPM.
+        x: Either a BiocPy (Ranged)SummarizedExperiment-like object with a
+          `.col_data.to_pandas()` method, or a pandas DataFrame already.
 
     Returns:
-      A new SummarizedExperiment containing the transformed assay.
-      The assay name is updated to the value of `by`.
+        A pandas DataFrame of sample metadata.
 
     Raises:
-      ValueError: If `by` is unknown or metadata is missing.
+        TypeError: If `x` cannot be coerced to a pandas DataFrame.
     """
-    (
-        _,
-        summarized_experiment_cls,
-        ranged_summarized_experiment_cls,
-    ) = _require_biocpy()
+    if isinstance(x, pd.DataFrame):
+        return x
 
-    valid_modes = {"raw", "read_counts", "tpm"}
-    if by not in valid_modes:
-        raise ValueError(f"Invalid transformation 'by={by!r}'. Expected: {valid_modes}")
+    # If `x` is a (Ranged)SummarizedExperiment, use col_data like the R code.
+    if hasattr(x, "col_data") and hasattr(x.col_data, "to_pandas"):
+        return x.col_data.to_pandas()
 
-    if by == "raw":
-        return rse
-    
-    _, _, ranged_summarized_experiment_cls = _require_biocpy()
+    raise TypeError(
+        "Expected a pandas.DataFrame or a SummarizedExperiment-like object with "
+        "`col_data.to_pandas()`."
+    )
 
-    if by == "read_counts":
-        new_matrix = compute_read_counts(rse, round_counts=round_counts)
-    elif by == "tpm":
-        # TPM usually implies RSE input
-        if not isinstance(rse, ranged_summarized_experiment_cls):
-            raise TypeError(
-                "Transform 'tpm' requires a RangedSummarizedExperiment."
-            )
-        new_matrix = compute_tpm(rse)  # type: ignore
+
+def _resolve_metadata_column(
+    metadata: pd.DataFrame,
+    column_name: str,
+) -> pd.Series:
+    """Resolve a metadata column name robustly.
+
+    This mirrors the strictness of the recount3 R implementation (which expects
+    exact column names), but also supports the Python-side convention where the
+    namespace separator may be `__` instead of `.` for the first separator
+    (e.g., `recount_qc.star.average_mapped_length` vs
+    `recount_qc__star.average_mapped_length`).
+
+    Args:
+        metadata: Sample metadata.
+        column_name: Column name to resolve.
+
+    Returns:
+        The resolved column as a pandas Series.
+
+    Raises:
+        ValueError: If the column cannot be found.
+    """
+    # Case-insensitive exact match.
+    lower_to_actual = {str(c).lower(): c for c in metadata.columns}
+    key = column_name.lower()
+    if key in lower_to_actual:
+        return metadata[lower_to_actual[key]]
+
+    # Try swapping only the *first* namespace separator '.' -> '__'
+    # to match conventions used elsewhere in this Python package.
+    if "." in column_name:
+        namespace, rest = column_name.split(".", 1)
+        alt = f"{namespace}__{rest}".lower()
+        if alt in lower_to_actual:
+            return metadata[lower_to_actual[alt]]
+
+    raise ValueError(
+        f"Required metadata column {column_name!r} not found. "
+        "If your metadata uses '__' as a namespace separator, pass the "
+        "actual column name explicitly."
+    )
+
+
+def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
+    """Coerce a Series to numeric, erroring on non-numeric non-missing values.
+
+    Args:
+        series: Input Series.
+        column_name: Name used for error messages.
+
+    Returns:
+        Float Series.
+
+    Raises:
+        ValueError: If non-missing values cannot be coerced to numeric.
+    """
+    numeric = pd.to_numeric(series, errors="coerce")
+    invalid = series.notna() & numeric.isna()
+    if invalid.any():
+        examples = series[invalid].head(3).tolist()
+        raise ValueError(
+            f"Metadata column {column_name!r} contains non-numeric values "
+            f"(examples: {examples!r})."
+        )
+    return numeric.astype(float)
+
+
+def is_paired_end(
+    x: Any,
+    avg_mapped_read_length: str = "recount_qc.star.average_mapped_length",
+    avg_read_length: str = "recount_seq_qc.avg_len",
+) -> pd.Series:
+    """Infer paired-end status, matching recount3::is_paired_end().
+
+    In recount3 (R), paired-end status is inferred via:
+      ratio <- round(avg_mapped_read_length / avg_read_length, 0)
+      ratio must be 1 (single-end) or 2 (paired-end), otherwise NA with warning.
+      result <- ratio == 2, with names(result) = external_id.
+
+    Args:
+        x: Sample metadata (DataFrame) or a (Ranged)SummarizedExperiment-like
+          object with `col_data.to_pandas()`.
+        avg_mapped_read_length: Metadata column containing average mapped length.
+        avg_read_length: Metadata column containing average read length.
+
+    Returns:
+        A pandas Series of dtype "boolean" (True/False/pd.NA), indexed by
+        external_id.
+
+    Raises:
+        ValueError: If required metadata columns are missing or non-numeric.
+    """
+    metadata = _coerce_col_data_to_pandas(x)
+
+    external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
+    avg_mapped = _coerce_numeric_column(
+        _resolve_metadata_column(metadata, avg_mapped_read_length),
+        avg_mapped_read_length,
+    )
+    avg_len = _coerce_numeric_column(
+        _resolve_metadata_column(metadata, avg_read_length),
+        avg_read_length,
+    )
+
+    # R uses round(..., 0). numpy.rint matches "round to nearest, ties to even".
+    ratio = np.rint(avg_mapped.to_numpy() / avg_len.to_numpy())
+    ratio = pd.Series(ratio, index=external_id, dtype=float)
+
+    invalid = ratio.notna() & ~ratio.isin([1.0, 2.0])
+    if invalid.any():
+        logging.warning(
+            "Unable to determine if samples are paired-end for %d sample(s). "
+            "Setting paired_end=NA for those.",
+            int(invalid.sum()),
+        )
+        ratio.loc[invalid] = np.nan
+
+    paired_end = pd.Series(pd.NA, index=external_id, dtype="boolean")
+    paired_end.loc[ratio == 2.0] = True
+    paired_end.loc[ratio == 1.0] = False
+    return paired_end
+
+
+def compute_scale_factors(
+    x: Any,
+    by: str = "auc",
+    target_size: float = 4e7,
+    L: float = 100,
+    auc: str = "recount_qc.bc_auc.all_reads_all_bases",
+    avg_mapped_read_length: str = "recount_qc.star.average_mapped_length",
+    mapped_reads: str = "recount_qc.star.all_mapped_reads",
+    paired_end: Sequence[bool] | pd.Series | None = None,
+) -> pd.Series:
+    """Compute per-sample scaling factors for coverage-sum counts.
+
+    This function produces one scalar scale factor per sample. The intended use
+    is to multiply each sample column of a coverage-sum count matrix by the
+    corresponding factor to make samples comparable.
+
+    Let C[i, j] be the coverage-sum count for feature i in sample j. If s[j] is
+    the scale factor for sample j, scaled counts are computed as:
+
+      scaled[i, j] = C[i, j] * s[j]
+
+    Scale factors are derived from sample metadata. Samples are identified by
+    the `external_id` column, and the returned Series is indexed by external_id.
+
+    Two scaling methods are supported:
+
+    1) by="auc"
+       Uses a per-sample total coverage metric (AUC) to scale each sample to a
+       common target_size:
+
+         s[j] = target_size / auc[j]
+
+       This method preserves relative feature coverage within each sample while
+       adjusting overall sample magnitude to be comparable across samples.
+
+    2) by="mapped_reads"
+       Uses mapped read counts and read length to normalize samples to a common
+       target_size and a common target read length L:
+
+         s[j] = target_size * L * paired_multiplier[j] /
+                (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))
+
+       paired_multiplier is:
+         - 2 for paired-end samples
+         - 1 for single-end samples
+         - missing for samples whose paired-end status cannot be inferred
+
+       If `paired_end` is not provided, paired-end status is inferred from
+       metadata by comparing average mapped length to average read length:
+         ratio = round(avg_mapped_read_length / avg_read_length)
+       ratio==2 indicates paired-end, ratio==1 indicates single-end. Other
+       ratios are treated as unknown and produce missing paired multipliers.
+
+    Missing values in required metadata propagate to missing scale factors.
+    Non-numeric metadata values raise an error.
+
+    Args:
+      x: Sample metadata as a pandas DataFrame, or an object with
+        `col_data.to_pandas()` that yields sample metadata.
+      by: Scaling method: "auc" or "mapped_reads".
+      target_size: Target library size used to compute scale factors. Interpreted
+        as the number of single-end reads to scale each sample to.
+      L: Target read length used only when by="mapped_reads".
+      auc: Metadata column name for the per-sample AUC metric.
+      avg_mapped_read_length: Metadata column name for average mapped read length
+        per sample.
+      mapped_reads: Metadata column name for mapped read counts per sample.
+      paired_end: Optional paired-end indicator per sample. If provided, it must
+        align with the samples in `external_id`. If omitted, paired-end status
+        is inferred from metadata.
+
+    Returns:
+      A pandas Series of scale factors indexed by `external_id`. The Series name
+      is "scale_factor".
+
+    Raises:
+      ValueError: If `by` is invalid, required metadata columns are missing, or
+        non-numeric metadata values are present.
+      TypeError: If `target_size` or `L` are not numeric scalars.
+    """
+    if by not in ("auc", "mapped_reads"):
+        raise ValueError(f"{by=!r} must be either 'auc' or 'mapped_reads'.")
+
+    if not isinstance(target_size, numbers.Real) or isinstance(target_size, bool):
+        raise TypeError("target_size must be a numeric scalar.")
+    if not isinstance(L, numbers.Real) or isinstance(L, bool):
+        raise TypeError("L must be a numeric scalar.")
+
+    metadata = _coerce_col_data_to_pandas(x)
+
+    # Match recount3's stopifnot(): all of these must exist even if by="auc".
+    external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
+
+    auc_values = _coerce_numeric_column(
+        _resolve_metadata_column(metadata, auc),
+        auc,
+    )
+    avg_mapped_values = _coerce_numeric_column(
+        _resolve_metadata_column(metadata, avg_mapped_read_length),
+        avg_mapped_read_length,
+    )
+    mapped_reads_values = _coerce_numeric_column(
+        _resolve_metadata_column(metadata, mapped_reads),
+        mapped_reads,
+    )
+
+    auc_values.index = external_id
+    avg_mapped_values.index = external_id
+    mapped_reads_values.index = external_id
+
+    if paired_end is None:
+        paired_end_series = is_paired_end(
+            metadata,
+            avg_mapped_read_length=avg_mapped_read_length,
+        )
     else:
-        # Should be unreachable due to check above
-        raise ValueError(f"Unknown mode: {by}")
+        paired_end_series = pd.Series(
+            paired_end,
+            index=external_id,
+            dtype="boolean",
+        )
 
-    new_assay = new_matrix.to_numpy(copy=False)
-    
-    return _construct_experiment_compat(
+    if by == "auc":
+        scale_factor = float(target_size) / auc_values
+    else:
+        pe_multiplier = pd.Series(np.nan, index=external_id, dtype=float)
+        pe_multiplier.loc[paired_end_series == True] = 2.0
+        pe_multiplier.loc[paired_end_series == False] = 1.0
+
+        denom = mapped_reads_values * (avg_mapped_values**2)
+        scale_factor = float(target_size) * float(L) * pe_multiplier / denom
+
+    scale_factor.name = "scale_factor"
+    return scale_factor
+
+
+def transform_counts(
+    rse: Any,
+    by: str = "auc",
+    target_size: float = 4e7,
+    L: float = 100,
+    round_counts: bool = True,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """Scale coverage-sum counts to a common library size.
+
+    recount3 "raw_counts" represent summed per-base coverage over each feature,
+    not read/fragment counts. This function converts those coverage-sum values
+    into scaled counts that are comparable across samples by multiplying each
+    sample column by a sample-specific scale factor.
+
+    Scaling is applied independently per sample (per column). For feature i and
+    sample j, the returned matrix contains:
+
+      scaled[i, j] = raw_counts[i, j] * scale_factor[j]
+
+    The scale factors are computed from sample metadata (col_data) using one of
+    two methods:
+
+    - by="auc":
+        scale_factor[j] = target_size / auc[j]
+
+      where auc is a per-sample total coverage metric. This method scales each
+      sample to have total coverage approximately equal to target_size.
+
+    - by="mapped_reads":
+        scale_factor[j] = (
+            target_size * L * paired_multiplier[j]
+            / (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))
+        )
+
+      where paired_multiplier is 2 for paired-end samples, 1 for single-end
+      samples, and missing when paired-end status cannot be inferred. This
+      method incorporates mapped reads and read length so that samples with
+      different read lengths are normalized onto the same target read length L.
+
+    The returned values remain in the same feature-by-sample shape as the
+    input. If round_counts is True, values are rounded to integer-like counts.
+
+    Args:
+      rse: A RangedSummarizedExperiment-like object containing a "raw_counts"
+        assay and sample metadata in `col_data`.
+      by: Scaling method: "auc" or "mapped_reads".
+      target_size: Target library size used to compute scale factors. Interpreted
+        as the number of single-end reads to scale each sample to.
+      L: Target read length used only when by="mapped_reads".
+      round_counts: If True, round scaled values to 0 decimals.
+      **kwargs: Additional parameters forwarded to compute_scale_factors(). Use
+        this to override metadata column names (for example, `auc=...`,
+        `mapped_reads=...`, `avg_mapped_read_length=...`) or to provide
+        `paired_end=...` when paired-end status should not be inferred.
+
+    Returns:
+      A pandas DataFrame of scaled counts with the same dimensions as
+      `assay("raw_counts")`. Row and column names are preserved when available.
+
+    Raises:
+      ValueError: If `rse` is not a RangedSummarizedExperiment, if the required
+        assay or metadata columns are missing, if `by` is invalid, or if the
+        assay and metadata dimensions do not align.
+      TypeError: If `round_counts` is not a bool, or if numeric parameters are
+        not valid scalars.
+    """
+    BiocFrame, SummarizedExperiment, RangedSummarizedExperiment = _require_biocpy()
+
+    if not isinstance(rse, RangedSummarizedExperiment):
+        raise ValueError(
+            "rse must be a RangedSummarizedExperiment (BiocPy "
+            "summarizedexperiment)."
+        )
+
+    assay_names = getattr(rse, "assay_names", None)
+    if assay_names is None or "raw_counts" not in assay_names:
+        raise ValueError("rse must contain a 'raw_counts' assay.")
+
+    if not isinstance(round_counts, bool):
+        raise ValueError("round_counts must be a boolean scalar.")
+
+    counts = rse.assay("raw_counts")
+    counts_array = np.asarray(counts, dtype=float)
+
+    scale_factor = compute_scale_factors(
         rse,
-        assay=new_assay,
-        assay_name=by,
+        by=by,
+        target_size=target_size,
+        L=L,
+        **kwargs,
+    )
+
+    if counts_array.ndim != 2:
+        raise ValueError(
+            f"'raw_counts' assay must be 2D (got shape {counts_array.shape})."
+        )
+    if counts_array.shape[1] != len(scale_factor):
+        raise ValueError(
+            "Mismatch between number of samples in 'raw_counts' "
+            f"({counts_array.shape[1]}) and number of scale factors "
+            f"({len(scale_factor)})."
+        )
+
+    scaled = counts_array * scale_factor.to_numpy(dtype=float)
+
+    if round_counts:
+        scaled = np.rint(scaled)
+
+    row_names = getattr(rse, "row_names", None)
+    col_names = getattr(rse, "col_names", None)
+
+    return pd.DataFrame(
+        scaled,
+        index=list(row_names) if row_names is not None else None,
+        columns=list(col_names) if col_names is not None else None,
     )
