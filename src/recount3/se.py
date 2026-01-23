@@ -85,8 +85,6 @@ def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:
         _SummarizedExperiment = SE
         _RangedSummarizedExperiment = RSE
 
-    # At this point mypy/pyright know these are not None (because of the
-    # explicit return type and the guard above).
     return _BiocFrame, _SummarizedExperiment, _RangedSummarizedExperiment
 
 
@@ -529,7 +527,7 @@ def expand_sra_attributes(
 
     col_bf = obj.column_data
     try:
-        col_df = col_bf.to_pandas()
+        col_df = col_bf.to_pandas()  # type: ignore
     except AttributeError as exc:
         raise AttributeError(
             "Expected column_data to implement to_pandas(); got "
@@ -550,25 +548,7 @@ def expand_sra_attributes(
         prefix=prefix,
     )
     expanded_bf = BiocFrameCls.from_pandas(expanded_df)
-    return obj.set_column_data(expanded_bf)
-
-
-def _select_shortest_column_match(
-    matches: Sequence[tuple[Any, str, str]],
-) -> Any:
-    """Select the best column match from a list of candidate matches.
-
-    When multiple metadata columns match a canonical name, prefer the shortest
-    string representation (it is typically the least-prefixed column).
-
-    Args:
-      matches: Candidate matches as tuples (original, string, normalized).
-
-    Returns:
-      The original column label (as stored in ``df.columns``).
-    """
-    best = min(matches, key=lambda item: len(item[1]))
-    return best[0]
+    return obj.set_column_data(expanded_bf)  # type: ignore
 
 
 def compute_read_counts(
@@ -786,14 +766,12 @@ def _resolve_metadata_column(
     Raises:
         ValueError: If the column cannot be found.
     """
-    # Case-insensitive exact match.
     lower_to_actual = {str(c).lower(): c for c in metadata.columns}
     key = column_name.lower()
     if key in lower_to_actual:
         return metadata[lower_to_actual[key]]
 
-    # Try swapping only the *first* namespace separator '.' -> '__'
-    # to match conventions used elsewhere in this Python package.
+    # Try swapping only the first namespace separator '.' -> '__'
     if "." in column_name:
         namespace, rest = column_name.split(".", 1)
         alt = f"{namespace}__{rest}".lower()
@@ -1103,7 +1081,7 @@ def transform_counts(
         raise ValueError("rse must contain a 'raw_counts' assay.")
 
     if not isinstance(round_counts, bool):
-        raise ValueError("round_counts must be a boolean scalar.")
+        raise TypeError("round_counts must be a bool.")
 
     counts = rse.assay("raw_counts")
     counts_array = np.asarray(counts, dtype=float)
