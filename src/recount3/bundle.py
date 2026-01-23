@@ -44,10 +44,7 @@ from recount3 import resource
 from recount3 import search
 from recount3 import types as r3_types
 
-# Optional BiocPy imports. These are used only when constructing
-# SummarizedExperiment-style objects and are not required for core
-# bundle functionality.
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # for static type checkers
     from biocframe import BiocFrame  # type: ignore[import-not-found]
     from genomicranges import GenomicRanges  # type: ignore[import-not-found]
     from summarizedexperiment import (  # type: ignore[import-not-found]
@@ -55,7 +52,7 @@ if TYPE_CHECKING:
         SummarizedExperiment,
     )
 
-# Runtime caches for optional BiocPy classes.
+# Runtime caches for the optional BiocPy classes.
 _BiocFrame: type[Any] | None = None
 _GenomicRanges: type[Any] | None = None
 _SummarizedExperiment: type[Any] | None = None
@@ -2104,7 +2101,7 @@ class R3ResourceBundle:
             :class:`RangedSummarizedExperiment` constructor rejects all
             compatibility variants.
         """
-        BiocFrameCls, GenomicRangesCls, SummarizedExperimentCls, RangedSummarizedExperimentCls = _require_biocpy()
+        _, _, _, RangedSummarizedExperimentCls = _require_biocpy()
 
         last_ranges_error: Exception | None = None
 

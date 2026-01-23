@@ -40,7 +40,7 @@ import pandas as pd
 from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
 
-if TYPE_CHECKING:  # only for static type checkers
+if TYPE_CHECKING:  # for static type checkers
     from biocframe import BiocFrame
     from summarizedexperiment import (
         RangedSummarizedExperiment,
@@ -51,14 +51,6 @@ if TYPE_CHECKING:  # only for static type checkers
 _BiocFrame: type[Any] | None = None
 _SummarizedExperiment: type[Any] | None = None
 _RangedSummarizedExperiment: type[Any] | None = None
-
-_AVG_READ_LENGTH_CANDIDATES = (
-    "avg_len",
-    "avg_read_length",
-    "read_length",
-    "average_mapped_length",
-    "star.average_mapped_length",
-)
 
 def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:
     """Ensure BiocPy packages are importable for SE/RSE utilities.
@@ -579,62 +571,6 @@ def _select_shortest_column_match(
     return best[0]
 
 
-def _find_metadata_column(
-    df: pd.DataFrame,
-    candidates: Sequence[str],
-) -> pd.Series | None:
-    """Find a metadata column matching one of a set of canonical names.
-
-    recount3 metadata columns are sometimes prefixed with a namespace such as
-    ``recount_seq_qc``. Depending on where the metadata was sourced or how it
-    was serialized, the namespace separator may be ``.`` (for example,
-    ``recount_seq_qc.avg_len``) or ``__`` (for example,
-    ``recount_seq_qc__avg_len``).
-
-    This helper searches for:
-      1) An exact column-name match (case-insensitive).
-      2) A suffix match using either namespace separator.
-
-    If multiple columns match, the shortest matching name is preferred (it is
-    typically the least-prefixed/canonical column).
-
-    Args:
-      df: The DataFrame to search.
-      candidates: Candidate canonical column names (for example, ``avg_len``).
-
-    Returns:
-      The matching Series if found, or None.
-    """
-    column_entries: list[tuple[Any, str, str]] = []
-    for col in df.columns:
-        col_str = str(col)
-        column_entries.append((col, col_str, col_str.lower()))
-
-    # 1. Exact match (case-insensitive).
-    for cand in candidates:
-        cand_norm = cand.lower()
-        exact_matches = [
-            entry for entry in column_entries if entry[2] == cand_norm
-        ]
-        if exact_matches:
-            return df[_select_shortest_column_match(exact_matches)]
-
-    # 2. Namespace-suffix match (case-insensitive) for common separators.
-    namespace_separators = (".", "__")
-    for cand in candidates:
-        cand_norm = cand.lower()
-        suffix_matches: list[tuple[Any, str, str]] = []
-        for sep in namespace_separators:
-            suffix = f"{sep}{cand_norm}"
-            suffix_matches.extend(
-                [entry for entry in column_entries if entry[2].endswith(suffix)]
-            )
-        if suffix_matches:
-            return df[_select_shortest_column_match(suffix_matches)]
-
-    return None
-
-
 def compute_read_counts(
     rse: Any,
     round_counts: bool = True,
@@ -692,11 +628,13 @@ def compute_read_counts(
         raise ValueError("rse must contain a 'raw_counts' assay.")
 
     col_data = rse.col_data.to_pandas()
-    if avg_mapped_read_length not in col_data.columns:
+    try:
+        avg_len_series = _resolve_metadata_column(col_data, avg_mapped_read_length)
+    except ValueError as exc:
         raise ValueError(
             "Required metadata column not found in col_data: "
             f"{avg_mapped_read_length!r}."
-        )
+        ) from exc
 
     raw_counts = np.asarray(rse.assay("raw_counts"), dtype=float)
     if raw_counts.ndim != 2:
@@ -705,7 +643,7 @@ def compute_read_counts(
             f"(got shape {raw_counts.shape})."
         )
 
-    avg_len_values = col_data[avg_mapped_read_length].to_numpy()
+    avg_len_values = avg_len_series.to_numpy()
 
     for value in avg_len_values:
         if pd.isna(value):
@@ -798,121 +736,6 @@ def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
     tpm = rpk.div(scale_factors, axis=1)
 
     return tpm
-
-def _construct_experiment_compat(
-    experiment: Any,
-    *,
-    assay: np.ndarray,
-    assay_name: str,
-) -> Any:
-    """Construct a SE/RSE instance using version-compatible constructor args.
-
-    Args:
-      experiment: Existing SummarizedExperiment or RangedSummarizedExperiment.
-      assay: The new assay matrix as a NumPy array.
-      assay_name: Name to assign to the assay.
-
-    Returns:
-      A new experiment object of the same concrete class as `experiment`.
-
-    Raises:
-      TypeError: If no known constructor variant is accepted.
-      ValueError: If the new assay shape is incompatible with existing dims.
-    """
-    _, summarized_experiment_cls, ranged_summarized_experiment_cls = (
-        _require_biocpy()
-    )
-
-    # Basic shape validation to fail fast with a helpful error.
-    existing_assay = experiment.assay(experiment.assay_names[0])
-    if assay.shape != existing_assay.shape:
-        raise ValueError(
-            "New assay shape does not match existing assay shape: "
-            f"{assay.shape=} vs {existing_assay.shape=}."
-        )
-
-    cls = type(experiment)
-    if not issubclass(cls, summarized_experiment_cls):
-        raise TypeError(
-            "Expected a SummarizedExperiment-like object. "
-            f"Got: {cls!r}."
-        )
-
-    is_ranged = isinstance(experiment, ranged_summarized_experiment_cls)
-    row_data = experiment.row_data
-    col_data_obj = experiment.col_data
-    metadata = experiment.metadata
-
-    # Some versions require row_ranges for RSE construction.
-    row_ranges = experiment.row_ranges if is_ranged else None
-
-    # Try variants in a stable, explicit order.
-    errors_seen: list[str] = []
-
-    # Variant 1 (preferred): dict assays + column_data
-    try:
-        kwargs: dict[str, Any] = {
-            "assays": {assay_name: assay},
-            "row_data": row_data,
-            "column_data": col_data_obj,
-            "metadata": metadata,
-        }
-        if is_ranged:
-            kwargs["row_ranges"] = row_ranges
-        return cls(**kwargs)
-    except TypeError as exc:
-        errors_seen.append(f"dict assays + column_data → {exc!r}")
-
-    # Variant 2: list assays + assay_names + column_data
-    try:
-        kwargs = {
-            "assays": [assay],
-            "assay_names": [assay_name],
-            "row_data": row_data,
-            "column_data": col_data_obj,
-            "metadata": metadata,
-        }
-        if is_ranged:
-            kwargs["row_ranges"] = row_ranges
-        return cls(**kwargs)
-    except TypeError as exc:
-        errors_seen.append(
-            f"list assays + assay_names + column_data → {exc!r}"
-        )
-
-    # Variant 3: dict assays + col_data (older spelling)
-    try:
-        kwargs = {
-            "assays": {assay_name: assay},
-            "row_data": row_data,
-            "col_data": col_data_obj,
-            "metadata": metadata,
-        }
-        if is_ranged:
-            kwargs["row_ranges"] = row_ranges
-        return cls(**kwargs)
-    except TypeError as exc:
-        errors_seen.append(f"dict assays + col_data → {exc!r}")
-
-    # Variant 4: list assays + assay_names + col_data
-    try:
-        kwargs = {
-            "assays": [assay],
-            "assay_names": [assay_name],
-            "row_data": row_data,
-            "col_data": col_data_obj,
-            "metadata": metadata,
-        }
-        if is_ranged:
-            kwargs["row_ranges"] = row_ranges
-        return cls(**kwargs)
-    except TypeError as exc:
-        errors_seen.append(f"list assays + assay_names + col_data → {exc!r}")
-
-    raise TypeError(
-        "Failed to construct (Ranged)SummarizedExperiment; tried variants: "
-        + "; ".join(errors_seen)
-    )
 
 
 def _coerce_col_data_to_pandas(x: Any) -> pd.DataFrame:
@@ -1267,7 +1090,7 @@ def transform_counts(
       TypeError: If `round_counts` is not a bool, or if numeric parameters are
         not valid scalars.
     """
-    BiocFrame, SummarizedExperiment, RangedSummarizedExperiment = _require_biocpy()
+    _, _, RangedSummarizedExperiment = _require_biocpy()
 
     if not isinstance(rse, RangedSummarizedExperiment):
         raise ValueError(
