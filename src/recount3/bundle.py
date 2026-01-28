@@ -929,7 +929,7 @@ def _construct_se_compat(
         ``counts_df.index``.
       col_df: Column metadata. The index is replaced by
         ``counts_df.columns``.
-      assay_name: Name of the assay, for example, ``"counts"``.
+      assay_name: Name of the assay, for example, ``"raw_counts"``.
 
     Returns:
       A :class:`summarizedexperiment.SummarizedExperiment` instance.
@@ -1961,7 +1961,7 @@ class R3ResourceBundle:
         *,
         genomic_unit: str,
         annotation_file_extension: Optional[str] = None,
-        assay_name: str = "counts",
+        assay_name: str = "raw_counts",
         join: str = "inner",
         autoload: bool = True,
     ) -> SummarizedExperiment:
@@ -1980,8 +1980,8 @@ class R3ResourceBundle:
             exon summarizations (for example, ``"G026"``). When provided
             and ``genomic_unit`` is gene or exon, only count resources
             with matching annotation are used.
-          assay_name: Name assigned to the count assay within the
-            :class:`SummarizedExperiment`.
+          assay_name: Name assigned to the coverage-sum assay within the
+            :class:`SummarizedExperiment`. (default: ``"raw_counts"``).
           join: Join policy used when concatenating counts across
             resources.
           autoload: If :data:`True`, load resources when needed.
@@ -2059,7 +2059,7 @@ class R3ResourceBundle:
         genomic_unit: str,
         annotation_file_extension: Optional[str] = None,
         junction_rr_preferred: bool = True,
-        assay_name: str = "counts",
+        assay_name: str = "raw_counts",
         join: str = "inner",
         autoload: bool = True,
         allow_fallback_to_se: bool = False,
@@ -2081,7 +2081,8 @@ class R3ResourceBundle:
             assays, if desired.
           junction_rr_preferred: If :data:`True`, prefer RR junction
             files for coordinate definitions when they are available.
-          assay_name: Name assigned to the assay.
+          assay_name: Name assigned to the coverage-sum assay within the
+            :class:`SummarizedExperiment` (default: ``"raw_counts"``).
           join: Join policy across projects when stacking.
           autoload: If :data:`True`, load resources transparently.
           allow_fallback_to_se: If :data:`True`, construct a plain

@@ -52,7 +52,7 @@ _BiocFrame: type[Any] | None = None
 _SummarizedExperiment: type[Any] | None = None
 _RangedSummarizedExperiment: type[Any] | None = None
 
-def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:
+def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:  #TODO: Seperate submodule for handling?
     """Ensure BiocPy packages are importable for SE/RSE utilities.
 
     Returns:
@@ -218,12 +218,42 @@ def _resolve_annotation_extension(
     )
 
 
+def _resolve_counts_assay_name(
+    obj: Any,
+    *,
+    preferred: str = "raw_counts",
+    fallback: str = "counts",
+) -> str:
+    """Resolve the assay name that carries the recount3 coverage-sum matrix.
+
+    Prefers ``preferred`` when present; otherwise falls back to ``fallback``
+    with a warning for backwards compatibility.
+    """
+    assay_names = getattr(obj, "assay_names", None)
+    if assay_names and preferred in assay_names:
+        return preferred
+    if assay_names and fallback in assay_names:
+        logging.warning(
+            "Assay %r not found; falling back to legacy assay %r. "
+            "Rebuild the object with assay_name=%r to silence this warning.",
+            preferred,
+            fallback,
+            preferred,
+        )
+        return fallback
+    raise ValueError(
+        f"Object must contain a {preferred!r} assay"
+        + (f" (or legacy {fallback!r})" if fallback else "")
+        + "."
+    )
+
+
 def build_summarized_experiment(
     bundle: R3ResourceBundle,
     *,
     genomic_unit: str,
     annotation_file_extension: str | None = None,
-    assay_name: str = "counts",
+    assay_name: str = "raw_counts",
     join: str = "inner",
     autoload: bool = True,
 ) -> SummarizedExperiment:
@@ -260,7 +290,7 @@ def build_ranged_summarized_experiment(
     genomic_unit: str,
     annotation_file_extension: str | None = None,
     junction_rr_preferred: bool = True,
-    assay_name: str = "counts",
+    assay_name: str = "raw_counts",
     join: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
@@ -314,6 +344,7 @@ def create_ranged_summarized_experiment(
     junction_file_extensions: Sequence[str] | None = None,
     include_metadata: bool = True,
     include_bigwig: bool = False,
+    assay_name: str = "raw_counts",
     join: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
@@ -402,7 +433,7 @@ def create_ranged_summarized_experiment(
         genomic_unit=unit,
         annotation_file_extension=ann_ext,
         junction_rr_preferred=True,
-        assay_name="counts",
+        assay_name=assay_name,
         join=join,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
@@ -421,6 +452,7 @@ def create_rse(
     junction_file_extensions: Sequence[str] | None = None,
     include_metadata: bool = True,
     include_bigwig: bool = False,
+    assay_name: str = "raw_counts",
     join: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
@@ -442,6 +474,7 @@ def create_rse(
         junction_file_extensions=junction_file_extensions,
         include_metadata=include_metadata,
         include_bigwig=include_bigwig,
+        assay_name=assay_name,
         join=join,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
@@ -603,9 +636,7 @@ def compute_read_counts(
     if not isinstance(round_counts, bool):
         raise TypeError("round_counts must be a bool.")
 
-    assay_names = getattr(rse, "assay_names", None)
-    if not assay_names or "raw_counts" not in assay_names:
-        raise ValueError("rse must contain a 'raw_counts' assay.")
+    assay_name = _resolve_counts_assay_name(rse)
 
     col_data = rse.col_data.to_pandas()
     try:
@@ -616,10 +647,10 @@ def compute_read_counts(
             f"{avg_mapped_read_length!r}."
         ) from exc
 
-    raw_counts = np.asarray(rse.assay("raw_counts"), dtype=float)
+    raw_counts = np.asarray(rse.assay(assay_name), dtype=float)
     if raw_counts.ndim != 2:
         raise ValueError(
-            "'raw_counts' assay must be a 2D matrix "
+            f"{assay_name!r} assay must be a 2D matrix "
             f"(got shape {raw_counts.shape})."
         )
 
@@ -643,7 +674,7 @@ def compute_read_counts(
 
     if raw_counts.shape[1] != avg_len.shape[0]:
         raise ValueError(
-            "Mismatch between number of samples in 'raw_counts' "
+            f"Mismatch between number of samples in {assay_name!r} "
             f"({raw_counts.shape[1]}) and length of "
             f"{avg_mapped_read_length!r} ({avg_len.shape[0]})."
         )
@@ -866,7 +897,7 @@ def is_paired_end(
 
 
 def compute_scale_factors(
-    x: Any,
+    x: Any,  #RENAME: Column Metadata?
     by: str = "auc",
     target_size: float = 4e7,
     L: float = 100,
@@ -1002,7 +1033,7 @@ def compute_scale_factors(
 
 
 def transform_counts(
-    rse: Any,
+    rse: Any,  #TODO: Fix "Any", how? Find out.
     by: str = "auc",
     target_size: float = 4e7,
     L: float = 100,
@@ -1076,14 +1107,12 @@ def transform_counts(
             "summarizedexperiment)."
         )
 
-    assay_names = getattr(rse, "assay_names", None)
-    if assay_names is None or "raw_counts" not in assay_names:
-        raise ValueError("rse must contain a 'raw_counts' assay.")
+    assay_name = _resolve_counts_assay_name(rse)
 
     if not isinstance(round_counts, bool):
         raise TypeError("round_counts must be a bool.")
 
-    counts = rse.assay("raw_counts")
+    counts = rse.assay(assay_name)
     counts_array = np.asarray(counts, dtype=float)
 
     scale_factor = compute_scale_factors(
@@ -1096,11 +1125,11 @@ def transform_counts(
 
     if counts_array.ndim != 2:
         raise ValueError(
-            f"'raw_counts' assay must be 2D (got shape {counts_array.shape})."
+            f"{assay_name!r} assay must be 2D (got shape {counts_array.shape})."
         )
     if counts_array.shape[1] != len(scale_factor):
         raise ValueError(
-            "Mismatch between number of samples in 'raw_counts' "
+            f"Mismatch between number of samples in {assay_name!r} "
             f"({counts_array.shape[1]}) and number of scale factors "
             f"({len(scale_factor)})."
         )
@@ -1113,7 +1142,7 @@ def transform_counts(
     row_names = getattr(rse, "row_names", None)
     col_names = getattr(rse, "col_names", None)
 
-    return pd.DataFrame(
+    return pd.DataFrame(  #TODO: NP instead? Assay is NP array?
         scaled,
         index=list(row_names) if row_names is not None else None,
         columns=list(col_names) if col_names is not None else None,

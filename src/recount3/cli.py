@@ -544,7 +544,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_se.add_argument(
         "--assay-name",
-        default="counts",
+        default="raw_counts",
         help="Assay name in the SE.",
     )
     p_se.add_argument(
@@ -584,7 +584,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_rse.add_argument(
         "--assay-name",
-        default="counts",
+        default="raw_counts",
         help="Assay name in the RSE.",
     )
     p_rse.add_argument(
