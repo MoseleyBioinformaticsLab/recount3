@@ -91,8 +91,8 @@ def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:  #TODO: Seperat
 def _expand_sra_attributes_df(
     col_df: pd.DataFrame,
     *,
-    column: str = "sra.sample_attributes",
-    prefix: str = "sra_attribute.",
+    sra_attributes_column: str = "sra.sample_attributes",
+    attribute_column_prefix: str = "sra_attribute.",
 ) -> pd.DataFrame:
     """Return a copy of column metadata with SRA attributes expanded.
 
@@ -104,24 +104,24 @@ def _expand_sra_attributes_df(
     This helper mirrors the behavior of the recount3 R function
     ``expand_sra_attributes()``: each entry is split on ``'|'`` into
     individual attributes, then on ``';;'`` into ``key`` and ``value``
-    pairs. New columns named ``{prefix}{key}`` (with spaces in ``key``
+    pairs. New columns named ``{attribute_column_prefix}{key}`` (with spaces in ``key``
     replaced by ``'_'``) are appended to the metadata.
 
     Args:
       col_df: Column metadata DataFrame.
-      column: Name of the column carrying the raw SRA attribute strings.
+      sra_attributes_column: Name of the column carrying the raw SRA attribute strings.
         If this column is missing, ``col_df`` is returned unchanged.
-      prefix: Prefix to prepend to attribute names when forming new
+      attribute_column_prefix: Prefix to prepend to attribute names when forming new
         columns.
 
     Returns:
       A new DataFrame with the same index as ``col_df`` and additional
       columns containing one parsed SRA attribute per column.
     """
-    if column not in col_df.columns:
+    if sra_attributes_column not in col_df.columns:
         return col_df.copy()
 
-    ser = col_df[column]
+    ser = col_df[sra_attributes_column]
     rows: list[dict[str, Any]] = []
 
     for value in ser:
@@ -135,7 +135,7 @@ def _expand_sra_attributes_df(
                 key_clean = key.strip()
                 if not key_clean:
                     continue
-                col_name = f"{prefix}{key_clean.replace(' ', '_')}"
+                col_name = f"{attribute_column_prefix}{key_clean.replace(' ', '_')}"
                 row_map[col_name] = val.strip()
         rows.append(row_map)
 
@@ -174,24 +174,24 @@ def _resolve_annotation_extension(
     *,
     organism: str,
     genomic_unit: str,
-    annotation: str | None,
-    annotation_file_extension: str | None,
+    annotation_label: str | None,
+    annotation_extension: str | None,
 ) -> str | None:
     """Resolve a single annotation extension for create_rse-style helpers.
 
     For gene and exon assays, this helper maps a human-readable
     annotation name (for example, ``"gencode_v26"``) or an explicit
     extension (for example, ``"G026"``) to the underlying recount3
-    extension. When both ``annotation`` and
-    ``annotation_file_extension`` are provided, the explicit extension
+    extension. When both ``annotation_label`` and
+    ``annotation_extension`` are provided, the explicit extension
     wins.
 
     Args:
       organism: Organism identifier (``"human"`` or ``"mouse"``).
       genomic_unit: Normalized genomic unit (``"gene"``, ``"exon"``, or
         ``"junction"``).
-      annotation: Optional human-readable annotation label.
-      annotation_file_extension: Optional explicit annotation extension.
+      annotation_label: Optional human-readable annotation label.
+      annotation_extension: Optional explicit annotation extension.
 
     Returns:
       A single annotation extension string for gene/exon assays, or
@@ -201,11 +201,11 @@ def _resolve_annotation_extension(
     if genomic_unit not in {"gene", "exon"}:
         return None
 
-    if annotation_file_extension:
-        return str(annotation_file_extension).strip()
+    if annotation_extension:
+        return str(annotation_extension).strip()
 
-    if annotation:
-        return annotation_ext(organism=organism, annotation=annotation)
+    if annotation_label:
+        return annotation_ext(organism=organism, annotation=annotation_label)
 
     org = organism.strip().lower()
     if org == "human":
@@ -219,31 +219,31 @@ def _resolve_annotation_extension(
 
 
 def _resolve_counts_assay_name(
-    obj: Any,
+    se_like: Any,
     *,
-    preferred: str = "raw_counts",
-    fallback: str = "counts",
+    preferred_assay_name: str = "raw_counts",
+    fallback_assay_name: str = "counts",
 ) -> str:
     """Resolve the assay name that carries the recount3 coverage-sum matrix.
 
-    Prefers ``preferred`` when present; otherwise falls back to ``fallback``
-    with a warning for backwards compatibility.
+    Prefers ``preferred_assay_name`` when present; otherwise falls back to
+    ``fallback_assay_name`` with a warning for backwards compatibility.
     """
-    assay_names = getattr(obj, "assay_names", None)
-    if assay_names and preferred in assay_names:
-        return preferred
-    if assay_names and fallback in assay_names:
+    assay_names = getattr(se_like, "assay_names", None)
+    if assay_names and preferred_assay_name in assay_names:
+        return preferred_assay_name
+    if assay_names and fallback_assay_name in assay_names:
         logging.warning(
             "Assay %r not found; falling back to legacy assay %r. "
             "Rebuild the object with assay_name=%r to silence this warning.",
-            preferred,
-            fallback,
-            preferred,
+            preferred_assay_name,
+            fallback_assay_name,
+            preferred_assay_name,
         )
-        return fallback
+        return fallback_assay_name
     raise ValueError(
-        f"Object must contain a {preferred!r} assay"
-        + (f" (or legacy {fallback!r})" if fallback else "")
+        f"Object must contain a {preferred_assay_name!r} assay"
+        + (f" (or legacy {fallback_assay_name!r})" if fallback_assay_name else "")
         + "."
     )
 
@@ -252,9 +252,9 @@ def build_summarized_experiment(
     bundle: R3ResourceBundle,
     *,
     genomic_unit: str,
-    annotation_file_extension: str | None = None,
+    annotation_extension: str | None = None,
     assay_name: str = "raw_counts",
-    join: str = "inner",
+    join_policy: str = "inner",
     autoload: bool = True,
 ) -> SummarizedExperiment:
     """Create a SummarizedExperiment from a resource bundle.
@@ -265,10 +265,10 @@ def build_summarized_experiment(
     Args:
       bundle: Resource bundle containing counts and metadata.
       genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-      annotation_file_extension: Optional annotation code for gene/exon
+      annotation_extension: Optional annotation code for gene/exon
         assays (for example, ``"G026"``).
       assay_name: Name for the count assay in the SE.
-      join: Join policy across projects (pandas concatenation join).
+      join_policy: Join policy across projects (pandas concatenation join).
       autoload: If :data:`True`, load resources transparently.
 
     Returns:
@@ -277,9 +277,9 @@ def build_summarized_experiment(
     unit = _normalize_genomic_unit(genomic_unit)
     return bundle.to_summarized_experiment(
         genomic_unit=unit,
-        annotation_file_extension=annotation_file_extension,
+        annotation_extension=annotation_extension,
         assay_name=assay_name,
-        join=join,
+        join_policy=join_policy,
         autoload=autoload,
     )
 
@@ -288,10 +288,10 @@ def build_ranged_summarized_experiment(
     bundle: R3ResourceBundle,
     *,
     genomic_unit: str,
-    annotation_file_extension: str | None = None,
-    junction_rr_preferred: bool = True,
+    annotation_extension: str | None = None,
+    prefer_rr_junction_coordinates: bool = True,
     assay_name: str = "raw_counts",
-    join: str = "inner",
+    join_policy: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
 ) -> RangedSummarizedExperiment | SummarizedExperiment:
@@ -304,12 +304,12 @@ def build_ranged_summarized_experiment(
       bundle: Resources for counts, metadata, and (optionally)
         annotations.
       genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-      annotation_file_extension: Annotation code for gene/exon, if
+      annotation_extension: Annotation code for gene/exon, if
         desired.
-      junction_rr_preferred: Prefer RR for junction coordinates when
+      prefer_rr_junction_coordinates: Prefer RR for junction coordinates when
         present.
       assay_name: Name for the count assay in the output.
-      join: Join policy across projects when stacking.
+      join_policy: Join policy across projects when stacking.
       autoload: If :data:`True`, load resources transparently.
       allow_fallback_to_se: If :data:`True`, return a plain SE when
         ranges are unavailable.
@@ -323,10 +323,10 @@ def build_ranged_summarized_experiment(
     unit = _normalize_genomic_unit(genomic_unit)
     return bundle.to_ranged_summarized_experiment(
         genomic_unit=unit,
-        annotation_file_extension=annotation_file_extension,
-        junction_rr_preferred=junction_rr_preferred,
+        annotation_extension=annotation_extension,
+        prefer_rr_junction_coordinates=prefer_rr_junction_coordinates,
         assay_name=assay_name,
-        join=join,
+        join_policy=join_policy,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
     )
@@ -338,14 +338,14 @@ def create_ranged_summarized_experiment(
     genomic_unit: str = "gene",
     organism: str = "human",
     data_source: str = "sra",
-    annotation: str | None = None,
-    annotation_file_extension: str | None = None,
+    annotation_label: str | None = None,
+    annotation_extension: str | None = None,
     junction_type: str = "ALL",
     junction_file_extensions: Sequence[str] | None = None,
     include_metadata: bool = True,
     include_bigwig: bool = False,
     assay_name: str = "raw_counts",
-    join: str = "inner",
+    join_policy: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
@@ -366,12 +366,12 @@ def create_ranged_summarized_experiment(
       genomic_unit: One of ``{"gene", "exon", "junction"}``.
       organism: Organism identifier (``"human"`` or ``"mouse"``).
       data_source: Data source (``"sra"``, ``"gtex"``, or ``"tcga"``).
-      annotation: Optional human-readable annotation label for gene/exon
+      annotation_label: Optional human-readable annotation label for gene/exon
         assays, such as ``"gencode_v26"`` or ``"gencode_v29"``. Ignored
         for junction-level assays.
-      annotation_file_extension: Optional explicit annotation extension
+      annotation_extension: Optional explicit annotation extension
         (for example, ``"G026"``). When provided, this takes precedence
-        over ``annotation``. Ignored for junction-level assays.
+        over ``annotation_label``. Ignored for junction-level assays.
       junction_type: Junction type; typically ``"ALL"``.
       junction_file_extensions: Iterable of junction artifact extensions
         to include (for example, ``("MM",)`` or ``("MM", "RR")``). If
@@ -380,7 +380,7 @@ def create_ranged_summarized_experiment(
         tables in the underlying bundle (recommended).
       include_bigwig: Whether to include per-sample BigWig coverage
         resources in the bundle. These can be large.
-      join: Join policy across projects when stacking count matrices
+      join_policy: Join policy across projects when stacking count matrices
         (passed to :func:`build_ranged_summarized_experiment`).
       autoload: If :data:`True`, load resources transparently.
       allow_fallback_to_se: If :data:`True`, construct a plain SE when
@@ -406,8 +406,8 @@ def create_ranged_summarized_experiment(
     ann_ext = _resolve_annotation_extension(
         organism=organism,
         genomic_unit=unit,
-        annotation=annotation,
-        annotation_file_extension=annotation_file_extension,
+        annotation_label=annotation_label,
+        annotation_extension=annotation_extension,
     )
 
     if junction_file_extensions is None:
@@ -431,10 +431,10 @@ def create_ranged_summarized_experiment(
 
     return project_bundle.to_ranged_summarized_experiment(
         genomic_unit=unit,
-        annotation_file_extension=ann_ext,
-        junction_rr_preferred=True,
+        annotation_extension=ann_ext,
+        prefer_rr_junction_coordinates=True,
         assay_name=assay_name,
-        join=join,
+        join_policy=join_policy,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
     )
@@ -446,14 +446,14 @@ def create_rse(
     genomic_unit: str = "gene",
     organism: str = "human",
     data_source: str = "sra",
-    annotation: str | None = None,
-    annotation_file_extension: str | None = None,
+    annotation_label: str | None = None,
+    annotation_extension: str | None = None,
     junction_type: str = "ALL",
     junction_file_extensions: Sequence[str] | None = None,
     include_metadata: bool = True,
     include_bigwig: bool = False,
     assay_name: str = "raw_counts",
-    join: str = "inner",
+    join_policy: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
@@ -468,14 +468,14 @@ def create_rse(
         genomic_unit=genomic_unit,
         organism=organism,
         data_source=data_source,
-        annotation=annotation,
-        annotation_file_extension=annotation_file_extension,
+        annotation_label=annotation_label,
+        annotation_extension=annotation_extension,
         junction_type=junction_type,
         junction_file_extensions=junction_file_extensions,
         include_metadata=include_metadata,
         include_bigwig=include_bigwig,
         assay_name=assay_name,
-        join=join,
+        join_policy=join_policy,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
         strict=strict,
@@ -483,14 +483,14 @@ def create_rse(
 
 
 def expand_sra_attributes(
-    obj: (
+    experiment_or_coldata: (
         RangedSummarizedExperiment
         | SummarizedExperiment
         | pd.DataFrame
     ),
     *,
-    column: str = "sra.sample_attributes",
-    prefix: str = "sra_attribute.",
+    sra_attributes_column: str = "sra.sample_attributes",
+    attribute_column_prefix: str = "sra_attribute.",
 ) -> (
     RangedSummarizedExperiment
     | SummarizedExperiment
@@ -508,7 +508,7 @@ def expand_sra_attributes(
         "age;;67.78|biomaterial_provider;;LIBD|disease;;Control|..."
 
     Each ``key;;value`` pair becomes a new column named
-    ``{prefix}{key}`` (with spaces in ``key`` replaced by ``'_'``), and
+    ``{attribute_column_prefix}{key}`` (with spaces in ``key`` replaced by ``'_'``), and
     the parsed values are stored per sample. The original string column
     is preserved.
 
@@ -523,42 +523,42 @@ def expand_sra_attributes(
       ``column_data``.
 
     Args:
-      obj: Column metadata DataFrame or a BiocPy SE/RSE object.
-      column: Name of the column that holds the raw SRA attribute
+      experiment_or_coldata: Column metadata DataFrame or a BiocPy SE/RSE object.
+      sra_attributes_column: Name of the column that holds the raw SRA attribute
         strings.
-      prefix: Prefix to prepend to the generated attribute column names.
+      attribute_column_prefix: Prefix to prepend to the generated attribute column names.
 
     Returns:
-      A new object of the same type as ``obj`` with additional columns
+      A new object of the same type as ``experiment_or_coldata`` with additional columns
       corresponding to parsed SRA attributes. If the requested column is
-      missing, ``obj`` is returned unchanged.
+      missing, ``experiment_or_coldata`` is returned unchanged.
 
     Raises:
       ImportError: If a SummarizedExperiment/RangedSummarizedExperiment
         is supplied but BiocPy packages are not installed.
       AttributeError: If the BiocPy object does not expose
         ``column_data`` or ``set_column_data`` in the expected API.
-      TypeError: If ``obj`` is neither a pandas DataFrame nor a
+      TypeError: If ``experiment_or_coldata`` is neither a pandas DataFrame nor a
         supported BiocPy experiment object.
     """
     # DataFrame mode: no BiocPy dependency.
-    if isinstance(obj, pd.DataFrame):
+    if isinstance(experiment_or_coldata, pd.DataFrame):
         return _expand_sra_attributes_df(
-            obj,
-            column=column,
-            prefix=prefix,
+            experiment_or_coldata,
+            sra_attributes_column=sra_attributes_column,
+            attribute_column_prefix=attribute_column_prefix,
         )
 
     BiocFrameCls, SummarizedExperimentCls, RangedSummarizedExperimentCls = _require_biocpy()
 
-    if not isinstance(obj, (SummarizedExperimentCls, RangedSummarizedExperimentCls)):
+    if not isinstance(experiment_or_coldata, (SummarizedExperimentCls, RangedSummarizedExperimentCls)):
         raise TypeError(
             "expand_sra_attributes() expects a pandas DataFrame or a BiocPy "
             "SummarizedExperiment/RangedSummarizedExperiment; got "
-            f"{type(obj)!r}."
+            f"{type(experiment_or_coldata)!r}."
         )
 
-    col_bf = obj.column_data
+    col_bf = experiment_or_coldata.column_data
     try:
         col_df = col_bf.to_pandas()  # type: ignore
     except AttributeError as exc:
@@ -567,27 +567,27 @@ def expand_sra_attributes(
             f"{type(col_bf)!r} instead."
         ) from exc
 
-    if column not in col_df.columns:
+    if sra_attributes_column not in col_df.columns:
         logging.warning(
             "expand_sra_attributes: column %r not present in column_data; "
             "returning object unchanged.",
-            column,
+            sra_attributes_column,
         )
-        return obj
+        return experiment_or_coldata
 
     expanded_df = _expand_sra_attributes_df(
         col_df,
-        column=column,
-        prefix=prefix,
+        sra_attributes_column=sra_attributes_column,
+        attribute_column_prefix=attribute_column_prefix,
     )
     expanded_bf = BiocFrameCls.from_pandas(expanded_df)
-    return obj.set_column_data(expanded_bf)  # type: ignore
+    return experiment_or_coldata.set_column_data(expanded_bf)  # type: ignore
 
 
 def compute_read_counts(
     rse: Any,
-    round_counts: bool = True,
-    avg_mapped_read_length: str = "recount_qc.star.average_mapped_length",
+    round_to_integers: bool = True,
+    avg_mapped_read_length_column: str = "recount_qc.star.average_mapped_length",
 ) -> pd.DataFrame:
     """Convert coverage-sum counts into approximate read/fragment counts.
 
@@ -599,7 +599,7 @@ def compute_read_counts(
 
     For each feature i and sample j:
 
-      read_counts[i, j] = raw_counts[i, j] / avg_mapped_read_length[j]
+      read_counts[i, j] = raw_counts[i, j] / avg_mapped_read_length_column[j]
 
     This operation is performed column-wise: each sample column in the assay is
     divided by a single scalar derived from that sample's metadata.
@@ -611,8 +611,8 @@ def compute_read_counts(
     Args:
       rse: A RangedSummarizedExperiment-like object containing a "raw_counts"
         assay and sample metadata in `col_data`.
-      round_counts: If True, round the resulting values to 0 decimals.
-      avg_mapped_read_length: Name of the metadata column containing average
+      round_to_integers: If True, round the resulting values to 0 decimals.
+      avg_mapped_read_length_column: Name of the metadata column containing average
         mapped read length per sample. The column must be present in `col_data`
         and must contain numeric values.
 
@@ -623,9 +623,9 @@ def compute_read_counts(
 
     Raises:
       ValueError: If `rse` is not a RangedSummarizedExperiment, if the
-        "raw_counts" assay is missing, if `avg_mapped_read_length` is missing
+        "raw_counts" assay is missing, if `avg_mapped_read_length_column` is missing
         from `col_data`, or if the assay and metadata dimensions do not align.
-      TypeError: If `round_counts` is not a bool.
+      TypeError: If `round_to_integers` is not a bool.
     """
     _, _, ranged_summarized_experiment_cls = _require_biocpy()
 
@@ -633,18 +633,18 @@ def compute_read_counts(
         raise ValueError(
             "rse must be a RangedSummarizedExperiment to compute read counts."
         )
-    if not isinstance(round_counts, bool):
-        raise TypeError("round_counts must be a bool.")
+    if not isinstance(round_to_integers, bool):
+        raise TypeError("round_to_integers must be a bool.")
 
     assay_name = _resolve_counts_assay_name(rse)
 
     col_data = rse.col_data.to_pandas()
     try:
-        avg_len_series = _resolve_metadata_column(col_data, avg_mapped_read_length)
+        avg_len_series = _resolve_metadata_column(col_data, avg_mapped_read_length_column)
     except ValueError as exc:
         raise ValueError(
             "Required metadata column not found in col_data: "
-            f"{avg_mapped_read_length!r}."
+            f"{avg_mapped_read_length_column!r}."
         ) from exc
 
     raw_counts = np.asarray(rse.assay(assay_name), dtype=float)
@@ -661,12 +661,12 @@ def compute_read_counts(
             continue
         if isinstance(value, (str, bytes)):
             raise ValueError(
-                f"Metadata column {avg_mapped_read_length!r} must be numeric; "
+                f"Metadata column {avg_mapped_read_length_column!r} must be numeric; "
                 f"found {type(value).__name__} value {value!r}."
             )
         if not isinstance(value, numbers.Real):
             raise ValueError(
-                f"Metadata column {avg_mapped_read_length!r} must be numeric; "
+                f"Metadata column {avg_mapped_read_length_column!r} must be numeric; "
                 f"found {type(value).__name__}."
             )
 
@@ -676,12 +676,12 @@ def compute_read_counts(
         raise ValueError(
             f"Mismatch between number of samples in {assay_name!r} "
             f"({raw_counts.shape[1]}) and length of "
-            f"{avg_mapped_read_length!r} ({avg_len.shape[0]})."
+            f"{avg_mapped_read_length_column!r} ({avg_len.shape[0]})."
         )
 
     read_counts = raw_counts / avg_len
 
-    if round_counts:
+    if round_to_integers:
         read_counts = np.rint(read_counts)
 
     row_names = getattr(rse, "row_names", None)
@@ -723,7 +723,7 @@ def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
         )
 
     # 1. Get Read Counts
-    reads = compute_read_counts(rse, round_counts=False)
+    reads = compute_read_counts(rse, round_to_integers=False)
 
     # 2. Get Feature Lengths (bp)
     # biocutils/genomicranges exposes .width
@@ -749,25 +749,25 @@ def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
     return tpm
 
 
-def _coerce_col_data_to_pandas(x: Any) -> pd.DataFrame:
+def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
     """Coerce sample metadata into a pandas DataFrame.
 
     Args:
-        x: Either a BiocPy (Ranged)SummarizedExperiment-like object with a
+        sample_metadata_source: Either a BiocPy (Ranged)SummarizedExperiment-like object with a
           `.col_data.to_pandas()` method, or a pandas DataFrame already.
 
     Returns:
         A pandas DataFrame of sample metadata.
 
     Raises:
-        TypeError: If `x` cannot be coerced to a pandas DataFrame.
+        TypeError: If `sample_metadata_source` cannot be coerced to a pandas DataFrame.
     """
-    if isinstance(x, pd.DataFrame):
-        return x
+    if isinstance(sample_metadata_source, pd.DataFrame):
+        return sample_metadata_source
 
-    # If `x` is a (Ranged)SummarizedExperiment, use col_data like the R code.
-    if hasattr(x, "col_data") and hasattr(x.col_data, "to_pandas"):
-        return x.col_data.to_pandas()
+    # If `sample_metadata_source` is a (Ranged)SummarizedExperiment, use col_data like the R code.
+    if hasattr(sample_metadata_source, "col_data") and hasattr(sample_metadata_source.col_data, "to_pandas"):
+        return sample_metadata_source.col_data.to_pandas()
 
     raise TypeError(
         "Expected a pandas.DataFrame or a SummarizedExperiment-like object with "
@@ -776,7 +776,7 @@ def _coerce_col_data_to_pandas(x: Any) -> pd.DataFrame:
 
 
 def _resolve_metadata_column(
-    metadata: pd.DataFrame,
+    metadata_df: pd.DataFrame,
     column_name: str,
 ) -> pd.Series:
     """Resolve a metadata column name robustly.
@@ -788,7 +788,7 @@ def _resolve_metadata_column(
     `recount_qc__star.average_mapped_length`).
 
     Args:
-        metadata: Sample metadata.
+        metadata_df: Sample metadata.
         column_name: Column name to resolve.
 
     Returns:
@@ -797,17 +797,17 @@ def _resolve_metadata_column(
     Raises:
         ValueError: If the column cannot be found.
     """
-    lower_to_actual = {str(c).lower(): c for c in metadata.columns}
+    lower_to_actual = {str(c).lower(): c for c in metadata_df.columns}
     key = column_name.lower()
     if key in lower_to_actual:
-        return metadata[lower_to_actual[key]]
+        return metadata_df[lower_to_actual[key]]
 
     # Try swapping only the first namespace separator '.' -> '__'
     if "." in column_name:
         namespace, rest = column_name.split(".", 1)
         alt = f"{namespace}__{rest}".lower()
         if alt in lower_to_actual:
-            return metadata[lower_to_actual[alt]]
+            return metadata_df[lower_to_actual[alt]]
 
     raise ValueError(
         f"Required metadata column {column_name!r} not found. "
@@ -841,9 +841,9 @@ def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
 
 
 def is_paired_end(
-    x: Any,
-    avg_mapped_read_length: str = "recount_qc.star.average_mapped_length",
-    avg_read_length: str = "recount_seq_qc.avg_len",
+    sample_metadata_source: Any,
+    avg_mapped_read_length_column: str = "recount_qc.star.average_mapped_length",
+    avg_read_length_column: str = "recount_seq_qc.avg_len",
 ) -> pd.Series:
     """Infer paired-end status, matching recount3::is_paired_end().
 
@@ -853,10 +853,10 @@ def is_paired_end(
       result <- ratio == 2, with names(result) = external_id.
 
     Args:
-        x: Sample metadata (DataFrame) or a (Ranged)SummarizedExperiment-like
+        sample_metadata_source: Sample metadata (DataFrame) or a (Ranged)SummarizedExperiment-like
           object with `col_data.to_pandas()`.
-        avg_mapped_read_length: Metadata column containing average mapped length.
-        avg_read_length: Metadata column containing average read length.
+        avg_mapped_read_length_column: Metadata column containing average mapped length.
+        avg_read_length_column: Metadata column containing average read length.
 
     Returns:
         A pandas Series of dtype "boolean" (True/False/pd.NA), indexed by
@@ -865,16 +865,16 @@ def is_paired_end(
     Raises:
         ValueError: If required metadata columns are missing or non-numeric.
     """
-    metadata = _coerce_col_data_to_pandas(x)
+    metadata = _coerce_col_data_to_pandas(sample_metadata_source)
 
     external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
     avg_mapped = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, avg_mapped_read_length),
-        avg_mapped_read_length,
+        _resolve_metadata_column(metadata, avg_mapped_read_length_column),
+        avg_mapped_read_length_column,
     )
     avg_len = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, avg_read_length),
-        avg_read_length,
+        _resolve_metadata_column(metadata, avg_read_length_column),
+        avg_read_length_column,
     )
 
     # R uses round(..., 0). numpy.rint matches "round to nearest, ties to even".
@@ -897,14 +897,14 @@ def is_paired_end(
 
 
 def compute_scale_factors(
-    x: Any,  #RENAME: Column Metadata?
+    sample_metadata_source: Any,  #RENAME: Column Metadata?
     by: str = "auc",
-    target_size: float = 4e7,
-    L: float = 100,
-    auc: str = "recount_qc.bc_auc.all_reads_all_bases",
-    avg_mapped_read_length: str = "recount_qc.star.average_mapped_length",
-    mapped_reads: str = "recount_qc.star.all_mapped_reads",
-    paired_end: Sequence[bool] | pd.Series | None = None,
+    target_read_count: float = 4e7,
+    target_read_length_bp: float = 100,
+    auc_column: str = "recount_qc.bc_auc.all_reads_all_bases",
+    avg_mapped_read_length_column: str = "recount_qc.star.average_mapped_length",
+    mapped_reads_column: str = "recount_qc.star.all_mapped_reads",
+    paired_end_status: Sequence[bool] | pd.Series | None = None,
 ) -> pd.Series:
     """Compute per-sample scaling factors for coverage-sum counts.
 
@@ -924,18 +924,18 @@ def compute_scale_factors(
 
     1) by="auc"
        Uses a per-sample total coverage metric (AUC) to scale each sample to a
-       common target_size:
+       common target_read_count:
 
-         s[j] = target_size / auc[j]
+         s[j] = target_read_count / auc[j]
 
        This method preserves relative feature coverage within each sample while
        adjusting overall sample magnitude to be comparable across samples.
 
     2) by="mapped_reads"
        Uses mapped read counts and read length to normalize samples to a common
-       target_size and a common target read length L:
+       target_read_count and a common target read length target_read_length_bp:
 
-         s[j] = target_size * L * paired_multiplier[j] /
+         s[j] = target_read_count * target_read_length_bp * paired_multiplier[j] /
                 (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))
 
        paired_multiplier is:
@@ -943,7 +943,7 @@ def compute_scale_factors(
          - 1 for single-end samples
          - missing for samples whose paired-end status cannot be inferred
 
-       If `paired_end` is not provided, paired-end status is inferred from
+       If `paired_end_status` is not provided, paired-end status is inferred from
        metadata by comparing average mapped length to average read length:
          ratio = round(avg_mapped_read_length / avg_read_length)
        ratio==2 indicates paired-end, ratio==1 indicates single-end. Other
@@ -953,17 +953,17 @@ def compute_scale_factors(
     Non-numeric metadata values raise an error.
 
     Args:
-      x: Sample metadata as a pandas DataFrame, or an object with
+      sample_metadata_source: Sample metadata as a pandas DataFrame, or an object with
         `col_data.to_pandas()` that yields sample metadata.
       by: Scaling method: "auc" or "mapped_reads".
-      target_size: Target library size used to compute scale factors. Interpreted
+      target_read_count: Target library size used to compute scale factors. Interpreted
         as the number of single-end reads to scale each sample to.
-      L: Target read length used only when by="mapped_reads".
-      auc: Metadata column name for the per-sample AUC metric.
-      avg_mapped_read_length: Metadata column name for average mapped read length
+      target_read_length_bp: Target read length used only when by="mapped_reads".
+      auc_column: Metadata column name for the per-sample AUC metric.
+      avg_mapped_read_length_column: Metadata column name for average mapped read length
         per sample.
-      mapped_reads: Metadata column name for mapped read counts per sample.
-      paired_end: Optional paired-end indicator per sample. If provided, it must
+      mapped_reads_column: Metadata column name for mapped read counts per sample.
+      paired_end_status: Optional paired-end indicator per sample. If provided, it must
         align with the samples in `external_id`. If omitted, paired-end status
         is inferred from metadata.
 
@@ -974,59 +974,59 @@ def compute_scale_factors(
     Raises:
       ValueError: If `by` is invalid, required metadata columns are missing, or
         non-numeric metadata values are present.
-      TypeError: If `target_size` or `L` are not numeric scalars.
+      TypeError: If `target_read_count` or `target_read_length_bp` are not numeric scalars.
     """
     if by not in ("auc", "mapped_reads"):
         raise ValueError(f"{by=!r} must be either 'auc' or 'mapped_reads'.")
 
-    if not isinstance(target_size, numbers.Real) or isinstance(target_size, bool):
-        raise TypeError("target_size must be a numeric scalar.")
-    if not isinstance(L, numbers.Real) or isinstance(L, bool):
-        raise TypeError("L must be a numeric scalar.")
+    if not isinstance(target_read_count, numbers.Real) or isinstance(target_read_count, bool):
+        raise TypeError("target_read_count must be a numeric scalar.")
+    if not isinstance(target_read_length_bp, numbers.Real) or isinstance(target_read_length_bp, bool):
+        raise TypeError("target_read_length_bp must be a numeric scalar.")
 
-    metadata = _coerce_col_data_to_pandas(x)
+    metadata = _coerce_col_data_to_pandas(sample_metadata_source)
 
     # Match recount3's stopifnot(): all of these must exist even if by="auc".
     external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
 
     auc_values = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, auc),
-        auc,
+        _resolve_metadata_column(metadata, auc_column),
+        auc_column,
     )
     avg_mapped_values = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, avg_mapped_read_length),
-        avg_mapped_read_length,
+        _resolve_metadata_column(metadata, avg_mapped_read_length_column),
+        avg_mapped_read_length_column,
     )
     mapped_reads_values = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, mapped_reads),
-        mapped_reads,
+        _resolve_metadata_column(metadata, mapped_reads_column),
+        mapped_reads_column,
     )
 
     auc_values.index = external_id
     avg_mapped_values.index = external_id
     mapped_reads_values.index = external_id
 
-    if paired_end is None:
+    if paired_end_status is None:
         paired_end_series = is_paired_end(
             metadata,
-            avg_mapped_read_length=avg_mapped_read_length,
+            avg_mapped_read_length_column=avg_mapped_read_length_column,
         )
     else:
         paired_end_series = pd.Series(
-            paired_end,
+            paired_end_status,
             index=external_id,
             dtype="boolean",
         )
 
     if by == "auc":
-        scale_factor = float(target_size) / auc_values
+        scale_factor = float(target_read_count) / auc_values
     else:
         pe_multiplier = pd.Series(np.nan, index=external_id, dtype=float)
         pe_multiplier.loc[paired_end_series == True] = 2.0
         pe_multiplier.loc[paired_end_series == False] = 1.0
 
         denom = mapped_reads_values * (avg_mapped_values**2)
-        scale_factor = float(target_size) * float(L) * pe_multiplier / denom
+        scale_factor = float(target_read_count) * float(target_read_length_bp) * pe_multiplier / denom
 
     scale_factor.name = "scale_factor"
     return scale_factor
@@ -1035,9 +1035,9 @@ def compute_scale_factors(
 def transform_counts(
     rse: Any,  #TODO: Fix "Any", how? Find out.
     by: str = "auc",
-    target_size: float = 4e7,
-    L: float = 100,
-    round_counts: bool = True,
+    target_read_count: float = 4e7,
+    target_read_length_bp: float = 100,
+    round_to_integers: bool = True,
     **kwargs: Any,
 ) -> pd.DataFrame:
     """Scale coverage-sum counts to a common library size.
@@ -1056,37 +1056,38 @@ def transform_counts(
     two methods:
 
     - by="auc":
-        scale_factor[j] = target_size / auc[j]
+        scale_factor[j] = target_read_count / auc[j]
 
       where auc is a per-sample total coverage metric. This method scales each
-      sample to have total coverage approximately equal to target_size.
+      sample to have total coverage approximately equal to target_read_count.
 
     - by="mapped_reads":
         scale_factor[j] = (
-            target_size * L * paired_multiplier[j]
+            target_read_count * target_read_length_bp * paired_multiplier[j]
             / (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))
         )
 
       where paired_multiplier is 2 for paired-end samples, 1 for single-end
       samples, and missing when paired-end status cannot be inferred. This
       method incorporates mapped reads and read length so that samples with
-      different read lengths are normalized onto the same target read length L.
+      different read lengths are normalized onto the same target read length 
+      target_read_length_bp.
 
     The returned values remain in the same feature-by-sample shape as the
-    input. If round_counts is True, values are rounded to integer-like counts.
+    input. If round_to_integers is True, values are rounded to integer-like counts.
 
     Args:
       rse: A RangedSummarizedExperiment-like object containing a "raw_counts"
         assay and sample metadata in `col_data`.
       by: Scaling method: "auc" or "mapped_reads".
-      target_size: Target library size used to compute scale factors. Interpreted
+      target_read_count: Target library size used to compute scale factors. Interpreted
         as the number of single-end reads to scale each sample to.
-      L: Target read length used only when by="mapped_reads".
-      round_counts: If True, round scaled values to 0 decimals.
+      target_read_length_bp: Target read length used only when by="mapped_reads".
+      round_to_integers: If True, round scaled values to 0 decimals.
       **kwargs: Additional parameters forwarded to compute_scale_factors(). Use
-        this to override metadata column names (for example, `auc=...`,
-        `mapped_reads=...`, `avg_mapped_read_length=...`) or to provide
-        `paired_end=...` when paired-end status should not be inferred.
+        this to override metadata column names (for example, `auc_column=...`,
+        `mapped_reads_column=...`, `avg_mapped_read_length_column=...`) or to provide
+        `paired_end_status=...` when paired-end status should not be inferred.
 
     Returns:
       A pandas DataFrame of scaled counts with the same dimensions as
@@ -1096,7 +1097,7 @@ def transform_counts(
       ValueError: If `rse` is not a RangedSummarizedExperiment, if the required
         assay or metadata columns are missing, if `by` is invalid, or if the
         assay and metadata dimensions do not align.
-      TypeError: If `round_counts` is not a bool, or if numeric parameters are
+      TypeError: If `round_to_integers` is not a bool, or if numeric parameters are
         not valid scalars.
     """
     _, _, RangedSummarizedExperiment = _require_biocpy()
@@ -1109,7 +1110,7 @@ def transform_counts(
 
     assay_name = _resolve_counts_assay_name(rse)
 
-    if not isinstance(round_counts, bool):
+    if not isinstance(round_to_integers, bool):
         raise TypeError("round_counts must be a bool.")
 
     counts = rse.assay(assay_name)
@@ -1118,8 +1119,8 @@ def transform_counts(
     scale_factor = compute_scale_factors(
         rse,
         by=by,
-        target_size=target_size,
-        L=L,
+        target_read_count=target_read_count,
+        target_read_length_bp=target_read_length_bp,
         **kwargs,
     )
 
@@ -1136,7 +1137,7 @@ def transform_counts(
 
     scaled = counts_array * scale_factor.to_numpy(dtype=float)
 
-    if round_counts:
+    if round_to_integers:
         scaled = np.rint(scaled)
 
     row_names = getattr(rse, "row_names", None)

@@ -801,14 +801,14 @@ def _select_gtf_resource_for_unit(
     bundle: "R3ResourceBundle",
     *,
     genomic_unit: str,
-    annotation_file_extension: Optional[str],
+    annotation_extension: Optional[str],
 ) -> Optional[resource.R3Resource]:
     """Pick the most appropriate annotation resource for gene/exon ranges."""
     feature_kind = "gene" if genomic_unit == "gene" else "exon"
 
     ann = bundle.filter(resource_type="annotations")
-    if annotation_file_extension:
-        ann = ann.filter(annotation_file_extension=annotation_file_extension)
+    if annotation_extension:
+        ann = ann.filter(annotation_extension=annotation_extension)
 
     candidates = list(ann.resources)
     if not candidates:
@@ -1416,7 +1416,7 @@ class R3ResourceBundle:
         sample: Optional[r3_types.FieldSpec] = None,
         table_name: Optional[r3_types.FieldSpec] = None,
         junction_type: Optional[r3_types.FieldSpec] = None,
-        annotation_file_extension: Optional[r3_types.FieldSpec] = None,
+        annotation_extension: Optional[r3_types.FieldSpec] = None,
         junction_file_extension: Optional[r3_types.FieldSpec] = None,
         predicate: Optional[Callable[[resource.R3Resource], bool]] = None,
         invert: bool = False,
@@ -1437,7 +1437,7 @@ class R3ResourceBundle:
           sample: Sample identifier filter.
           table_name: Metadata table name filter.
           junction_type: Junction type filter.
-          annotation_file_extension: Annotation code filter.
+          annotation_extension: Annotation code filter.
           junction_file_extension: Junction extension filter.
           predicate: Optional callback that receives each resource and
             returns :data:`True` if it should be kept.
@@ -1456,7 +1456,7 @@ class R3ResourceBundle:
             "sample": sample,
             "table_name": table_name,
             "junction_type": junction_type,
-            "annotation_file_extension": annotation_file_extension,
+            "annotation_extension": annotation_extension,
             "junction_file_extension": junction_file_extension,
         }
         field_specs = {
@@ -1683,7 +1683,7 @@ class R3ResourceBundle:
     def stack_count_matrices(
         self,
         *,
-        join: str = "inner",
+        join_policy: str = "inner",
         axis: int = 1,
         verify_integrity: bool = False,
         autoload: bool = True,
@@ -1692,7 +1692,7 @@ class R3ResourceBundle:
         """Concatenate count matrices (gene/exon or junction) as DataFrames.
 
         Args:
-          join: Join policy passed to :func:`pandas.concat`.
+          join_policy: Join policy passed to :func:`pandas.concat`.
           axis: Concatenation axis passed to :func:`pandas.concat`.
           verify_integrity: If :data:`True`, raise when labels are not
             unique along the concatenation axis.
@@ -1791,7 +1791,7 @@ class R3ResourceBundle:
         return pd.concat(
             data_frames,
             axis=axis,  # type: ignore[arg-type]
-            join=join,  # type: ignore[arg-type]
+            join_policy=join_policy,  # type: ignore[arg-type]
             verify_integrity=verify_integrity,
         )
 
@@ -1799,7 +1799,7 @@ class R3ResourceBundle:
         self,
         *,
         genomic_unit: str,
-        join: str = "inner",
+        join_policy: str = "inner",
         autoload: bool = True,
     ) -> pd.DataFrame:
         """Return a wide counts DataFrame for the requested feature family.
@@ -1810,7 +1810,7 @@ class R3ResourceBundle:
 
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-          join: Join mode for concatenation (see :func:`pandas.concat`).
+          join_policy: Join mode for concatenation (see :func:`pandas.concat`).
           autoload: If :data:`True`, load resources on demand.
 
         Returns:
@@ -1839,7 +1839,7 @@ class R3ResourceBundle:
 
             try:
                 return sel.stack_count_matrices(
-                    join=join,
+                    join_policy=join_policy,
                     axis=1,
                     autoload=False,
                     compat="feature",
@@ -1865,7 +1865,7 @@ class R3ResourceBundle:
 
         try:
             return sel.stack_count_matrices(
-                join=join,
+                join_policy=join_policy,
                 axis=1,
                 autoload=False,
                 compat="family",
@@ -1960,9 +1960,9 @@ class R3ResourceBundle:
         self,
         *,
         genomic_unit: str,
-        annotation_file_extension: Optional[str] = None,
+        annotation_extension: Optional[str] = None,
         assay_name: str = "raw_counts",
-        join: str = "inner",
+        join_policy: str = "inner",
         autoload: bool = True,
     ) -> SummarizedExperiment:
         """Build a BiocPy :class:`SummarizedExperiment` from this bundle.
@@ -1976,13 +1976,13 @@ class R3ResourceBundle:
         Args:
           genomic_unit: Genomic unit to summarize, such as ``"gene"``,
             ``"exon"``, or ``"junction"``.
-          annotation_file_extension: Optional annotation code for gene or
+          annotation_extension: Optional annotation code for gene or
             exon summarizations (for example, ``"G026"``). When provided
             and ``genomic_unit`` is gene or exon, only count resources
             with matching annotation are used.
           assay_name: Name assigned to the coverage-sum assay within the
             :class:`SummarizedExperiment`. (default: ``"raw_counts"``).
-          join: Join policy used when concatenating counts across
+          join_policy: Join policy used when concatenating counts across
             resources.
           autoload: If :data:`True`, load resources when needed.
 
@@ -1999,18 +1999,18 @@ class R3ResourceBundle:
         _require_biocpy()
 
         working = self
-        if genomic_unit in {"gene", "exon"} and annotation_file_extension:
+        if genomic_unit in {"gene", "exon"} and annotation_extension:
             working = (
                 self.filter(resource_type="count_files_gene_or_exon")
                 .filter(
                     genomic_unit=genomic_unit,
-                    annotation_file_extension=annotation_file_extension,
+                    annotation_extension=annotation_extension,
                 )
             )
 
         counts_df = working._stack_counts_for(
             genomic_unit=genomic_unit,
-            join=join,
+            join_policy=join_policy,
             autoload=autoload,
         )
 
@@ -2057,10 +2057,10 @@ class R3ResourceBundle:
         self,
         *,
         genomic_unit: str,
-        annotation_file_extension: Optional[str] = None,
-        junction_rr_preferred: bool = True,
+        annotation_extension: Optional[str] = None,
+        prefer_rr_junction_coordinates: bool = True,
         assay_name: str = "raw_counts",
-        join: str = "inner",
+        join_policy: str = "inner",
         autoload: bool = True,
         allow_fallback_to_se: bool = False,
     ) -> RangedSummarizedExperiment | SummarizedExperiment:
@@ -2077,13 +2077,13 @@ class R3ResourceBundle:
 
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-          annotation_file_extension: Annotation code for gene/exon
+          annotation_extension: Annotation code for gene/exon
             assays, if desired.
-          junction_rr_preferred: If :data:`True`, prefer RR junction
+          prefer_rr_junction_coordinates: If :data:`True`, prefer RR junction
             files for coordinate definitions when they are available.
           assay_name: Name assigned to the coverage-sum assay within the
             :class:`SummarizedExperiment` (default: ``"raw_counts"``).
-          join: Join policy across projects when stacking.
+          join_policy: Join policy across projects when stacking.
           autoload: If :data:`True`, load resources transparently.
           allow_fallback_to_se: If :data:`True`, construct a plain
             :class:`SummarizedExperiment` when genomic ranges cannot be
@@ -2109,7 +2109,7 @@ class R3ResourceBundle:
         working = self
         counts_df = working._stack_counts_for(
             genomic_unit=genomic_unit,
-            join=join,
+            join_policy=join_policy,
             autoload=autoload,
         )
 
@@ -2153,7 +2153,7 @@ class R3ResourceBundle:
             gtf_res = _select_gtf_resource_for_unit(
                 self,
                 genomic_unit=genomic_unit,
-                annotation_file_extension=annotation_file_extension,
+                annotation_extension=annotation_extension,
             )
             if gtf_res is not None:
                 try:
@@ -2179,7 +2179,7 @@ class R3ResourceBundle:
                             "Annotation does not contain ranges for some feature IDs present in "
                             "the counts matrix. Example missing feature_ids: "
                             f"{missing_ids}. This usually indicates an annotation mismatch; try "
-                            "setting annotation_file_extension to match the counts resource."
+                            "setting annotation_extension to match the counts resource."
                         )
 
                     ranges_df = idxed[["seqnames", "starts", "ends", "strand"]].copy()
@@ -2204,7 +2204,7 @@ class R3ResourceBundle:
                     )
                     last_ranges_error = exc
 
-        elif genomic_unit == "junction" and junction_rr_preferred:
+        elif genomic_unit == "junction" and prefer_rr_junction_coordinates:
             rr_res = next(
                 (
                     res
@@ -2262,9 +2262,9 @@ class R3ResourceBundle:
             if allow_fallback_to_se:
                 return self.to_summarized_experiment(
                     genomic_unit=genomic_unit,
-                    annotation_file_extension=annotation_file_extension,
+                    annotation_extension=annotation_extension,
                     assay_name=assay_name,
-                    join=join,
+                    join_policy=join_policy,
                     autoload=autoload,
                 )
             message = (
