@@ -39,53 +39,11 @@ import pandas as pd
 
 from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
+from recount3 import _biocpy
 
 if TYPE_CHECKING:  # for static type checkers
-    from biocframe import BiocFrame
-    from summarizedexperiment import (
-        RangedSummarizedExperiment,
-        SummarizedExperiment,
-    )
-
-# Runtime caches for the optional BiocPy classes
-_BiocFrame: type[Any] | None = None
-_SummarizedExperiment: type[Any] | None = None
-_RangedSummarizedExperiment: type[Any] | None = None
-
-def _require_biocpy() -> tuple[type[Any], type[Any], type[Any]]:  #TODO: Seperate submodule for handling?
-    """Ensure BiocPy packages are importable for SE/RSE utilities.
-
-    Returns:
-        (BiocFrame, SummarizedExperiment, RangedSummarizedExperiment) classes.
-
-    Raises:
-      ImportError: If any required BiocPy package is missing.
-    """
-    global _BiocFrame, _SummarizedExperiment, _RangedSummarizedExperiment
-
-    if (
-        _BiocFrame is None
-        or _SummarizedExperiment is None
-        or _RangedSummarizedExperiment is None
-    ):
-        try:  # pragma: no cover - optional, exercised only when installed.
-            from biocframe import BiocFrame as BF
-            from summarizedexperiment import (
-                SummarizedExperiment as SE,
-                RangedSummarizedExperiment as RSE,
-            )
-        except Exception as e:  # pragma: no cover
-            raise ImportError(
-                "This feature requires BiocPy packages. Install with:\n"
-                "  pip install summarizedexperiment biocframe genomicranges\n"
-                "or via conda (conda-forge)."
-            ) from e
-
-        _BiocFrame = BF
-        _SummarizedExperiment = SE
-        _RangedSummarizedExperiment = RSE
-
-    return _BiocFrame, _SummarizedExperiment, _RangedSummarizedExperiment
+    import biocframe  # type: ignore[import-not-found]
+    import summarizedexperiment  # type: ignore[import-not-found]
 
 
 def _expand_sra_attributes_df(
@@ -256,7 +214,7 @@ def build_summarized_experiment(
     assay_name: str = "raw_counts",
     join_policy: str = "inner",
     autoload: bool = True,
-) -> SummarizedExperiment:
+) -> summarizedexperiment.SummarizedExperiment:
     """Create a SummarizedExperiment from a resource bundle.
 
     This is a convenience wrapper around
@@ -294,7 +252,7 @@ def build_ranged_summarized_experiment(
     join_policy: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
-) -> RangedSummarizedExperiment | SummarizedExperiment:
+) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
     """Create a RangedSummarizedExperiment when ranges can be resolved.
 
     This is a convenience wrapper around
@@ -349,7 +307,7 @@ def create_ranged_summarized_experiment(
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
-) -> RangedSummarizedExperiment | SummarizedExperiment:
+) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
     """High-level helper that mirrors recount3's ``create_rse()`` in R.
 
     This function hides the intermediate bundle construction step by:
@@ -457,7 +415,7 @@ def create_rse(
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
-) -> RangedSummarizedExperiment | SummarizedExperiment:
+) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
     """Alias for :func:`create_ranged_summarized_experiment`.
 
     The parameters and behavior are identical; see that function for
@@ -484,16 +442,16 @@ def create_rse(
 
 def expand_sra_attributes(
     experiment_or_coldata: (
-        RangedSummarizedExperiment
-        | SummarizedExperiment
+        summarizedexperiment.RangedSummarizedExperiment
+        | summarizedexperiment.SummarizedExperiment
         | pd.DataFrame
     ),
     *,
     sra_attributes_column: str = "sra.sample_attributes",
     attribute_column_prefix: str = "sra_attribute.",
 ) -> (
-    RangedSummarizedExperiment
-    | SummarizedExperiment
+    summarizedexperiment.RangedSummarizedExperiment
+    | summarizedexperiment.SummarizedExperiment
     | pd.DataFrame
 ):
     """Expand encoded SRA sample attributes into separate columns.
@@ -549,7 +507,9 @@ def expand_sra_attributes(
             attribute_column_prefix=attribute_column_prefix,
         )
 
-    BiocFrameCls, SummarizedExperimentCls, RangedSummarizedExperimentCls = _require_biocpy()
+    BiocFrameCls = _biocpy.get_biocframe_class()
+    SummarizedExperimentCls = _biocpy.get_summarizedexperiment_class()
+    RangedSummarizedExperimentCls = _biocpy.get_ranged_summarizedexperiment_class()
 
     if not isinstance(experiment_or_coldata, (SummarizedExperimentCls, RangedSummarizedExperimentCls)):
         raise TypeError(
@@ -627,7 +587,7 @@ def compute_read_counts(
         from `col_data`, or if the assay and metadata dimensions do not align.
       TypeError: If `round_to_integers` is not a bool.
     """
-    _, _, ranged_summarized_experiment_cls = _require_biocpy()
+    ranged_summarized_experiment_cls = _biocpy.get_ranged_summarizedexperiment_class()
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
         raise ValueError(
@@ -638,7 +598,7 @@ def compute_read_counts(
 
     assay_name = _resolve_counts_assay_name(rse)
 
-    col_data = rse.col_data.to_pandas()
+    col_data = rse.col_data.to_pandas()  # pyright: ignore[reportAttributeAccessIssue]
     try:
         avg_len_series = _resolve_metadata_column(col_data, avg_mapped_read_length_column)
     except ValueError as exc:
@@ -694,7 +654,7 @@ def compute_read_counts(
     )
 
 
-def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
+def compute_tpm(rse: summarizedexperiment.RangedSummarizedExperiment) -> pd.DataFrame:
     """Compute Transcripts Per Million (TPM) from raw coverage sums.
 
     TPM is calculated as:
@@ -714,7 +674,7 @@ def compute_tpm(rse: RangedSummarizedExperiment) -> pd.DataFrame:
       TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).
       ValueError: If feature widths or read lengths are missing.
     """
-    _, _, ranged_summarized_experiment_cls = _require_biocpy()
+    ranged_summarized_experiment_cls = _biocpy.get_ranged_summarizedexperiment_class()
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
         raise TypeError(
@@ -1100,9 +1060,9 @@ def transform_counts(
       TypeError: If `round_to_integers` is not a bool, or if numeric parameters are
         not valid scalars.
     """
-    _, _, RangedSummarizedExperiment = _require_biocpy()
+    ranged_summarized_experiment_cls = _biocpy.get_ranged_summarizedexperiment_class()
 
-    if not isinstance(rse, RangedSummarizedExperiment):
+    if not isinstance(rse, ranged_summarized_experiment_cls):
         raise ValueError(
             "rse must be a RangedSummarizedExperiment (BiocPy "
             "summarizedexperiment)."

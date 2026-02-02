@@ -39,79 +39,19 @@ from typing import Any, Optional, TYPE_CHECKING
 import pandas as pd
 
 from recount3 import _bigwig
+from recount3 import _biocpy
 from recount3 import errors
 from recount3 import resource
 from recount3 import search
 from recount3 import types as r3_types
 
 if TYPE_CHECKING:  # for static type checkers
-    from biocframe import BiocFrame  # type: ignore[import-not-found]
-    from genomicranges import GenomicRanges  # type: ignore[import-not-found]
-    from summarizedexperiment import (  # type: ignore[import-not-found]
-        RangedSummarizedExperiment,
-        SummarizedExperiment,
-    )
-
-# Runtime caches for the optional BiocPy classes.
-_BiocFrame: type[Any] | None = None
-_GenomicRanges: type[Any] | None = None
-_SummarizedExperiment: type[Any] | None = None
-_RangedSummarizedExperiment: type[Any] | None = None
+    import genomicranges  # type: ignore[import-not-found]
+    import summarizedexperiment  # type: ignore[import-not-found]
 
 _GENE_ID_ATTR_RE = re.compile(r'\bgene_id\s+"([^"]+)"')
 _EXON_ID_ATTR_RE = re.compile(r'\bexon_id\s+"([^"]+)"')
 _RECOUNT_EXON_ID_ATTR_RE = re.compile(r'\brecount_exon_id\s+"([^"]+)"')
-
-def _require_biocpy() -> tuple[type[Any], type[Any], type[Any], type[Any]]:
-    """Ensure that the BiocPy packages used here are importable.
-
-    Returns:
-      (BiocFrame, GenomicRanges, SummarizedExperiment, RangedSummarizedExperiment)
-      classes.
-
-    Raises:
-      ImportError: If any required BiocPy package is missing.
-    """
-    global _BiocFrame, _GenomicRanges, _SummarizedExperiment, _RangedSummarizedExperiment
-
-    if (
-        _BiocFrame is None
-        or _GenomicRanges is None
-        or _SummarizedExperiment is None
-        or _RangedSummarizedExperiment is None
-    ):
-        try:  # pragma: no cover - exercised only when BiocPy is installed.
-            from biocframe import BiocFrame as BF
-            from genomicranges import GenomicRanges as GR
-            from summarizedexperiment import (
-                SummarizedExperiment as SE,
-                RangedSummarizedExperiment as RSE,
-            )
-        except Exception as e:  # pragma: no cover
-            raise ImportError(
-                "BiocPy integration requires the 'summarizedexperiment', "
-                "'biocframe', and 'genomicranges' packages. Install them with:\n"
-                "  pip install summarizedexperiment biocframe genomicranges\n"
-                "or via conda (conda-forge)."
-            ) from e
-
-        _BiocFrame = BF
-        _GenomicRanges = GR
-        _SummarizedExperiment = SE
-        _RangedSummarizedExperiment = RSE
-
-    # Help type checkers see these as non-optional
-    assert _BiocFrame is not None
-    assert _GenomicRanges is not None
-    assert _SummarizedExperiment is not None
-    assert _RangedSummarizedExperiment is not None
-
-    return (
-        _BiocFrame,
-        _GenomicRanges,
-        _SummarizedExperiment,
-        _RangedSummarizedExperiment,
-    )
 
 
 def _ensure_unique_columns(
@@ -874,7 +814,7 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
       ImportError: If :mod:`genomicranges` cannot be imported.
       TypeError: If no supported constructor is available.
     """
-    _, GenomicRangesCls, _, _ = _require_biocpy()
+    GenomicRangesCls = _biocpy.get_genomicranges_class()
 
     # Preferred recent API: classmethod from_pandas.
     if hasattr(GenomicRangesCls, "from_pandas"):
@@ -882,7 +822,7 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
 
     # Older classmethod name.
     if hasattr(GenomicRangesCls, "fromPandas"):  # pragma: no cover - legacy.
-        return GenomicRangesCls.fromPandas(ranges_df)
+        return GenomicRangesCls.fromPandas(ranges_df)  # pyright: ignore[reportAttributeAccessIssue]
 
     # Module-level constructor used in some releases.
     try:  # pragma: no cover - optional compatibility path.
@@ -908,7 +848,7 @@ def _construct_se_compat(
     row_df: pd.DataFrame,
     col_df: pd.DataFrame,
     assay_name: str,
-) -> SummarizedExperiment:
+) -> summarizedexperiment.SummarizedExperiment:
     """Construct a SummarizedExperiment using compatibility-aware variants.
 
     This function enforces strict shape and name alignment and then tries
@@ -940,7 +880,7 @@ def _construct_se_compat(
       TypeError: If no constructor variant is accepted by the installed
         :mod:`summarizedexperiment` package.
     """
-    _, _, SummarizedExperimentCls, _ = _require_biocpy()
+    SummarizedExperimentCls = _biocpy.get_summarizedexperiment_class()
 
     n_features, n_samples = counts_df.shape
     if n_features == 0 or n_samples == 0:
@@ -1964,7 +1904,7 @@ class R3ResourceBundle:
         assay_name: str = "raw_counts",
         join_policy: str = "inner",
         autoload: bool = True,
-    ) -> SummarizedExperiment:
+    ) -> summarizedexperiment.SummarizedExperiment:
         """Build a BiocPy :class:`SummarizedExperiment` from this bundle.
 
         This method stacks compatible count matrices, merges available
@@ -1996,7 +1936,7 @@ class R3ResourceBundle:
             :class:`SummarizedExperiment` constructor rejects all
             compatibility variants.
         """
-        _require_biocpy()
+        _biocpy.get_summarizedexperiment_class()
 
         working = self
         if genomic_unit in {"gene", "exon"} and annotation_extension:
@@ -2063,7 +2003,7 @@ class R3ResourceBundle:
         join_policy: str = "inner",
         autoload: bool = True,
         allow_fallback_to_se: bool = False,
-    ) -> RangedSummarizedExperiment | SummarizedExperiment:
+    ) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
         """Build a BiocPy :class:`RangedSummarizedExperiment` when possible.
 
         For ``"gene"`` and ``"exon"`` genomic units, row ranges are
@@ -2102,7 +2042,7 @@ class R3ResourceBundle:
             :class:`RangedSummarizedExperiment` constructor rejects all
             compatibility variants.
         """
-        _, _, _, RangedSummarizedExperimentCls = _require_biocpy()
+        RangedSummarizedExperimentCls = _biocpy.get_ranged_summarizedexperiment_class()
 
         last_ranges_error: Exception | None = None
 
@@ -2338,9 +2278,6 @@ class R3ResourceBundle:
             + "; ".join(errors_seen)
         )
 
-    # -------------------------------------------------------------------
-    # One-shot materialization
-    # -------------------------------------------------------------------
 
     def download(
         self,
