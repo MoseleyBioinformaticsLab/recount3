@@ -42,9 +42,9 @@ class _R3CommonFields:
     genomic_unit: Optional[str] = None
     project: Optional[str] = None
     sample: Optional[str] = None
-    annotation_file_extension: Optional[str] = None
+    annotation_extension: Optional[str] = None
     junction_type: Optional[str] = None
-    junction_file_extension: Optional[str] = None
+    junction_extension: Optional[str] = None
     table_name: Optional[str] = None
 
 
@@ -122,14 +122,14 @@ class R3Annotations(_R3CommonFields, R3ResourceDescription):
     """Descriptor for gene/exon annotation tables."""
 
     def __post_init__(self) -> None:
-        self._require("organism", "genomic_unit", "annotation_file_extension")
+        self._require("organism", "genomic_unit", "annotation_extension")
         self._check_organism()
         self._check_genomic_unit()
 
     def url_path(self) -> str:
         return (
             f"{self.organism}/annotations/{self.genomic_unit}_sums/"
-            f"{self.organism}.{self.genomic_unit}_sums.{self.annotation_file_extension}.gtf.gz"
+            f"{self.organism}.{self.genomic_unit}_sums.{self.annotation_extension}.gtf.gz"
         )
 
 
@@ -139,7 +139,7 @@ class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
     """Descriptor for per-project gene/exon count matrices."""
 
     def __post_init__(self) -> None:
-        self._require("organism", "data_source", "genomic_unit", "project", "annotation_file_extension")
+        self._require("organism", "data_source", "genomic_unit", "project", "annotation_extension")
         self._check_organism()
         self._check_data_source()
         self._check_genomic_unit()
@@ -148,7 +148,7 @@ class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
         return (
             f"{self.organism}/data_sources/{self.data_source}/{self.genomic_unit}_sums/"
             f"{_p2(self.project)}/{self.project}/"
-            f"{self.data_source}.{self.genomic_unit}_sums.{self.project}.{self.annotation_file_extension}.gz"
+            f"{self.data_source}.{self.genomic_unit}_sums.{self.project}.{self.annotation_extension}.gz"
         )
 
 
@@ -158,7 +158,7 @@ class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
     """Descriptor for per-project junction count files."""
 
     def __post_init__(self) -> None:
-        self._require("organism", "data_source", "project", "junction_type", "junction_file_extension")
+        self._require("organism", "data_source", "project", "junction_type", "junction_extension")
         self._check_organism()
         self._check_data_source()
 
@@ -166,7 +166,7 @@ class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
         return (
             f"{self.organism}/data_sources/{self.data_source}/junctions/"
             f"{_p2(self.project)}/{self.project}/"
-            f"{self.data_source}.junctions.{self.project}.{self.junction_type}.{self.junction_file_extension}.gz"
+            f"{self.data_source}.junctions.{self.project}.{self.junction_type}.{self.junction_extension}.gz"
         )
 
 

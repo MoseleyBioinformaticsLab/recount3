@@ -32,7 +32,9 @@ from __future__ import annotations
 import contextlib
 import errno
 import hashlib
+import logging
 import os
+import re
 import shutil
 import socket
 import ssl
@@ -43,7 +45,9 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Any
+
+import pandas as pd
 
 from .errors import DownloadError
 
@@ -422,3 +426,171 @@ def write_cached_file_to_zip(
             except KeyError:
                 pass
         zf.write(cached_file, arcname)
+
+
+# =============================================================================
+# Summarized Experiment Utilities 
+# =============================================================================
+
+def _normalize_genomic_unit(genomic_unit: str) -> str:
+    """Return a normalized genomic unit string and validate it.
+
+    Args:
+      genomic_unit: Requested feature level.
+
+    Returns:
+      Lowercase genomic unit string.
+
+    Raises:
+      ValueError: If the genomic unit is not one of ``"gene"``,
+        ``"exon"``, or ``"junction"``.
+    """
+    gu = str(genomic_unit).strip().lower()
+    valid = {"gene", "exon", "junction"}
+    if gu not in valid:
+        raise ValueError(
+            f"Invalid genomic_unit {genomic_unit!r}; expected one of "
+            f"{sorted(valid)!r}."
+        )
+    return gu
+
+
+def _resolve_counts_assay_name(
+    se_like: Any,
+    *,
+    preferred_assay_name: str = "raw_counts",
+    fallback_assay_name: str = "counts",
+) -> str:
+    """Resolve the assay name that carries the recount3 coverage-sum matrix.
+
+    Prefers ``preferred_assay_name`` when present; otherwise falls back to
+    ``fallback_assay_name`` with a warning for backwards compatibility.
+    """
+    assay_names = getattr(se_like, "assay_names", None)
+    if assay_names and preferred_assay_name in assay_names:
+        return preferred_assay_name
+    if assay_names and fallback_assay_name in assay_names:
+        logging.warning(
+            "Assay %r not found; falling back to legacy assay %r. "
+            "Rebuild the object with assay_name=%r to silence this warning.",
+            preferred_assay_name,
+            fallback_assay_name,
+            preferred_assay_name,
+        )
+        return fallback_assay_name
+    raise ValueError(
+        f"Object must contain a {preferred_assay_name!r} assay"
+        + (f" (or legacy {fallback_assay_name!r})" if fallback_assay_name else "")
+        + "."
+    )
+
+
+def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
+    """Coerce sample metadata into a pandas DataFrame.
+
+    Args:
+        sample_metadata_source: Either a BiocPy (Ranged)SummarizedExperiment-like object with a
+          `.col_data.to_pandas()` method, or a pandas DataFrame already.
+
+    Returns:
+        A pandas DataFrame of sample metadata.
+
+    Raises:
+        TypeError: If `sample_metadata_source` cannot be coerced to a pandas DataFrame.
+    """
+    if isinstance(sample_metadata_source, pd.DataFrame):
+        return sample_metadata_source
+
+    if hasattr(sample_metadata_source, "col_data") and hasattr(sample_metadata_source.col_data, "to_pandas"):
+        return sample_metadata_source.col_data.to_pandas()
+
+    raise TypeError(
+        "Expected a pandas.DataFrame or a SummarizedExperiment-like object with "
+        "`col_data.to_pandas()`."
+    )
+
+
+def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
+    """Coerce a Series to numeric, erroring on non-numeric non-missing values.
+
+    Args:
+        series: Input Series.
+        column_name: Name used for error messages.
+
+    Returns:
+        Float Series.
+
+    Raises:
+        ValueError: If non-missing values cannot be coerced to numeric.
+    """
+    numeric = pd.to_numeric(series, errors="coerce")
+    invalid = series.notna() & numeric.isna()
+    if invalid.any():
+        examples = series[invalid].head(3).tolist()
+        raise ValueError(
+            f"Metadata column {column_name!r} contains non-numeric values "
+            f"(examples: {examples!r})."
+        )
+    return numeric.astype(float)
+
+
+def _resolve_metadata_column(
+    metadata_df: pd.DataFrame,
+    column_name: str,
+) -> pd.Series:
+    """Resolve a metadata column name robustly.
+
+    This mirrors the strictness of the recount3 R implementation (which expects
+    exact column names), but also supports the Python-side convention where the
+    namespace separator may be `__` instead of `.` for the first separator
+    (e.g., `recount_qc.star.average_mapped_length` vs
+    `recount_qc__star.average_mapped_length`).
+
+    Args:
+        metadata_df: Sample metadata.
+        column_name: Column name to resolve.
+
+    Returns:
+        The resolved column as a pandas Series.
+
+    Raises:
+        ValueError: If the column cannot be found.
+    """
+    lower_to_actual = {str(c).lower(): c for c in metadata_df.columns}
+    key = column_name.lower()
+    if key in lower_to_actual:
+        return metadata_df[lower_to_actual[key]]
+
+    # Try swapping only the first namespace separator '.' -> '__'
+    if "." in column_name:
+        namespace, rest = column_name.split(".", 1)
+        alt = f"{namespace}__{rest}".lower()
+        if alt in lower_to_actual:
+            return metadata_df[lower_to_actual[alt]]
+
+    raise ValueError(
+        f"Required metadata column {column_name!r} not found. "
+        "If your metadata uses '__' as a namespace separator, pass the "
+        "actual column name explicitly."
+    )
+
+
+# =============================================================================
+# Other Utilities
+# =============================================================================
+
+_JXN_SIDECAR_RE = re.compile(r"\.(MM|ID|RR)\.gz$", re.IGNORECASE)
+
+
+def _derive_junction_sidecar_url(url: str, new_ext: str) -> str:
+    """Return a junction sidecar URL by swapping the .{MM,ID,RR}.gz suffix."""
+    if not url:
+        raise ValueError("url must be non-empty")
+    new_ext_u = new_ext.upper()
+    if new_ext_u not in {"MM", "ID", "RR"}:
+        raise ValueError(f"new_ext must be one of MM/ID/RR, got {new_ext!r}")
+
+    if _JXN_SIDECAR_RE.search(url):
+        return _JXN_SIDECAR_RE.sub(f".{new_ext_u}.gz", url)
+    # If the URL doesn't match the expected pattern, fall back to a strict error:
+    raise ValueError(f"Cannot derive junction sidecar URL from {url!r}")

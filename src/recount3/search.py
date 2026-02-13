@@ -82,7 +82,7 @@ def search_annotations(
     *,
     organism: StringOrIterable,
     genomic_unit: StringOrIterable,
-    annotation_file_extension: StringOrIterable,
+    annotation_extension: StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
@@ -91,7 +91,7 @@ def search_annotations(
         "annotations",
         organism=organism,
         genomic_unit=genomic_unit,
-        annotation_file_extension=annotation_file_extension,
+        annotation_extension=annotation_extension,
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
@@ -102,7 +102,7 @@ def search_count_files_gene_or_exon(
     data_source: StringOrIterable,
     genomic_unit: StringOrIterable,
     project: StringOrIterable,
-    annotation_file_extension: StringOrIterable = ("G026",),
+    annotation_extension: StringOrIterable = ("G026",),
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
@@ -113,7 +113,7 @@ def search_count_files_gene_or_exon(
         data_source=data_source,
         genomic_unit=genomic_unit,
         project=project,
-        annotation_file_extension=annotation_file_extension,
+        annotation_extension=annotation_extension,
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
@@ -124,7 +124,7 @@ def search_count_files_junctions(
     data_source: StringOrIterable,
     project: StringOrIterable,
     junction_type: StringOrIterable = "ALL",
-    junction_file_extension: StringOrIterable = "MM",
+    junction_extension: StringOrIterable = "MM",
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
@@ -135,7 +135,7 @@ def search_count_files_junctions(
         data_source=data_source,
         project=project,
         junction_type=junction_type,
-        junction_file_extension=junction_file_extension,
+        junction_extension=junction_extension,
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
@@ -809,7 +809,7 @@ def _resolve_annotation_exts(
       annotations: Either "default", "all", or an explicit iterable of
         extensions (for example, ("G026", "G029")).
       explicit_exts: Optional explicit extensions (typically from CLI's
-        ``annotation_file_extension=...``). If provided, these win.
+        ``annotation_extension=...``). If provided, these win.
 
     Returns:
       A tuple of annotation extensions.
@@ -912,7 +912,7 @@ def search_project_all(
     genomic_units: Iterable[str] = ("gene", "exon"),
     annotations: str | Iterable[str] = "default",
     junction_type: str = "ALL",
-    junction_file_extension: Iterable[str] = ("MM",),
+    junction_extension: Iterable[str] = ("MM",),
     include_metadata: bool = True,
     include_bigwig: bool = False,
     strict: bool = True,
@@ -933,7 +933,7 @@ def search_project_all(
       annotations: "default", "all", comma-separated string, or an iterable
         of annotation file extensions (for example, ("G026", "G029")).
       junction_type: Junction type; typically "ALL".
-      junction_file_extension: Iterable of junction artifacts to include:
+      junction_extension: Iterable of junction artifacts to include:
         "MM" (counts), "RR" (coordinates), "ID" (sample IDs).
       include_metadata: Whether to include the five metadata tables.
       include_bigwig: Whether to include per-sample BigWig coverage files.
@@ -977,7 +977,7 @@ def search_project_all(
             data_source=data_source,
             genomic_unit=tuple(units),
             project=project,
-            annotation_file_extension=ann_exts,
+            annotation_extension=ann_exts,
             strict=strict,
             deduplicate=deduplicate,
         )
@@ -985,19 +985,19 @@ def search_project_all(
         found += search_annotations(
             organism=organism,
             genomic_unit=tuple(units),
-            annotation_file_extension=ann_exts,
+            annotation_extension=ann_exts,
             strict=strict,
             deduplicate=deduplicate,   
         )
 
     # Junctions: counts (MM) and optional RR/ID artifacts.
-    if junction_file_extension:
+    if junction_extension:
         found += search_count_files_junctions(
             organism=organism,
             data_source=data_source,
             project=project,
             junction_type=junction_type,
-            junction_file_extension=tuple(junction_file_extension),
+            junction_extension=tuple(junction_extension),
             strict=strict,
             deduplicate=deduplicate,
         )
@@ -1044,9 +1044,9 @@ def search_project_all(
         return (
             getattr(d, "resource_type", ""),
             getattr(d, "genomic_unit", ""),
-            getattr(d, "annotation_file_extension", ""),
+            getattr(d, "annotation_extension", ""),
             getattr(d, "junction_type", ""),
-            getattr(d, "junction_file_extension", ""),
+            getattr(d, "junction_extension", ""),
             getattr(d, "table_name", ""),
             getattr(d, "sample", ""),
         )

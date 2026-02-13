@@ -26,7 +26,7 @@ Discover a handful of gene-level count files, save a manifest, and download:
 Or stream directly, without an intermediate file:
 
   $ recount3 search annotations \\
-        organism=human genomic_unit=gene annotation_file_extension=G026 \\
+        organism=human genomic_unit=gene annotation_extension=G026 \\
         --format=jsonl | \\
     recount3 download --from=- --dest=./annots
 
@@ -50,18 +50,18 @@ search
     create a timestamped filename in that directory.  
 
   Modes and required filters:
-    annotations   organism, genomic_unit, annotation_file_extension
+    annotations   organism, genomic_unit, annotation_extension
     gene-exon     organism, data_source, genomic_unit, project
-                  (optional: annotation_file_extension; default G026)
+                  (optional: annotation_extension; default G026)
     junctions     organism, data_source, project
-                  (optional: junction_type=ALL, junction_file_extension=MM)
+                  (optional: junction_type=ALL, junction_extension=MM)
     metadata      organism, data_source, table_name, project
     bigwig        organism, data_source, project, sample
     project       organism, data_source, project
                   (optional: genomic_unit=gene,exon;
                   annotation=default|all|G026,G029;
                   junction_type=ALL;
-                  junction_file_extension=MM,RR,ID;
+                  junction_extension=MM,RR,ID;
                   include_metadata=true|false;
                   include_bigwig=true|false)
     sources       organism
@@ -70,7 +70,7 @@ search
   Example:
     $ recount3 search junctions \\
           organism=human data_source=sra project=SRP000000 \\
-          junction_type=ALL junction_file_extension=MM --format=tsv
+          junction_type=ALL junction_extension=MM --format=tsv
 
 download
   Materialize resources from a manifest file or one inline JSON object.
@@ -362,23 +362,23 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Required filters per mode:\n"
-            "  annotations: organism, genomic_unit, annotation_file_extension\n"
+            "  annotations: organism, genomic_unit, annotation_extension\n"
             "  gene-exon:   organism, data_source, genomic_unit, project\n"
-            "               (optional: annotation_file_extension; default G026)\n"
+            "               (optional: annotation_extension; default G026)\n"
             "  junctions:   organism, data_source, project\n"
-            "               (optional: junction_type=ALL, junction_file_extension=MM)\n"
+            "               (optional: junction_type=ALL, junction_extension=MM)\n"
             "  metadata:    organism, data_source, table_name, project\n"
             "  bigwig:      organism, data_source, project, sample\n"
             "  project:     organism, data_source, project\n"
             "               (optional: genomic_unit=gene,exon; "
             "annotation=default|all|G026,G029; "
-            "junction_file_extension=MM,RR,ID; "
+            "junction_extension=MM,RR,ID; "
             "include_metadata=true|false; include_bigwig=true|false)\n"
             "  sources:     organism\n"
             "  source-meta: organism, data_source\n"
             "\nExamples:\n"
             "  recount3 search annotations organism=human genomic_unit=gene "
-            "annotation_file_extension=G026 --format=jsonl\n"
+            "annotation_extension=G026 --format=jsonl\n"
             "  recount3 search gene-exon organism=human data_source=sra genomic_unit=gene "
             "project=SRP012345 --format=tsv\n"
         ),
@@ -776,8 +776,8 @@ def _write_tsv(
 
     Columns:
       resource_type, organism, data_source, genomic_unit, project, sample,
-      table_name, junction_type, annotation_file_extension,
-      junction_file_extension, url, arcname
+      table_name, junction_type, annotation_extension,
+      junction_extension, url, arcname
 
     Missing fields are left blank.
 
@@ -794,8 +794,8 @@ def _write_tsv(
         "sample",
         "table_name",
         "junction_type",
-        "annotation_file_extension",
-        "junction_file_extension",
+        "annotation_extension",
+        "junction_extension",
         "url",
         "arcname",
     ]
@@ -926,15 +926,15 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
       Optional:
         genomic_unit=gene,exon
         annotation=default|all|G026,G029
-        annotation_file_extension=G026,G029   # overrides 'annotation'
+        annotation_extension=G026,G029   # overrides 'annotation'
         junction_type=ALL
-        junction_file_extension=MM,RR,ID
+        junction_extension=MM,RR,ID
         include_metadata=true|false
         include_bigwig=true|false
 
     Notes:
       * The values for comma-separated filters (for example, genomic_unit
-        and junction_file_extension) are parsed as CSV.
+        and junction_extension) are parsed as CSV.
       * Boolean filters accept 1/0, true/false, t/f, yes/no, y/n, on/off.
       * The emitted manifest can be consumed by 'recount3 download'.
 
@@ -962,26 +962,26 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
     # Build resources via search helpers.
     found: list[R3Resource]
     if mode == "annotations":
-        # search_annotations(*, organism, genomic_unit, annotation_file_extension)
-        _require("organism", "genomic_unit", "annotation_file_extension")
+        # search_annotations(*, organism, genomic_unit, annotation_extension)
+        _require("organism", "genomic_unit", "annotation_extension")
         found = r3_search.search_annotations(
             organism=filters["organism"],
             genomic_unit=filters["genomic_unit"],
-            annotation_file_extension=filters["annotation_file_extension"],
+            annotation_extension=filters["annotation_extension"],
         )
 
     elif mode == "gene-exon":
         # search_count_files_gene_or_exon(
         #   *, organism, data_source, genomic_unit, project,
-        #   annotation_file_extension=("G026",))
+        #   annotation_extension=("G026",))
         _require("organism", "data_source", "genomic_unit", "project")
-        ann_ext = filters.get("annotation_file_extension", ("G026",))
+        ann_ext = filters.get("annotation_extension", ("G026",))
         found = r3_search.search_count_files_gene_or_exon(
             organism=filters["organism"],
             data_source=filters["data_source"],
             genomic_unit=filters["genomic_unit"],
             project=filters["project"],
-            annotation_file_extension=ann_ext,
+            annotation_extension=ann_ext,
         )
 
     elif mode == "junctions":
@@ -992,7 +992,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             data_source=filters["data_source"],
             project=filters["project"],
             junction_type=filters.get("junction_type", "ALL"),
-            junction_file_extension=filters.get("junction_file_extension", "MM"),
+            junction_extension=filters.get("junction_extension", "MM"),
         )
 
     elif mode == "metadata":
@@ -1032,13 +1032,13 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             return tuple(p.strip() for p in s.split(",") if p.strip())
 
         gu = _csv_or_default(filters.get("genomic_unit"), ("gene", "exon"))
-        # Accept either "annotation=..." or "annotation_file_extension=..."
+        # Accept either "annotation=..." or "annotation_extension=..."
         annotations = filters.get("annotation", "default")
         ann_ext = _csv_or_default(
-            filters.get("annotation_file_extension"), tuple()
+            filters.get("annotation_extension"), tuple()
         )
         jext = _csv_or_default(
-            filters.get("junction_file_extension"), ("MM",)
+            filters.get("junction_extension"), ("MM",)
         )
         jtype = filters.get("junction_type", "ALL")
         inc_meta = _as_bool(filters.get("include_metadata"), True)
@@ -1053,7 +1053,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             # Pass either explicit exts (wins) or the higher-level "annotation"
             annotations=ann_ext if ann_ext else annotations,
             junction_type=jtype,
-            junction_file_extension=jext,
+            junction_extension=jext,
             include_metadata=inc_meta,
             include_bigwig=inc_bw,
         )
@@ -1250,7 +1250,7 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
     compat: CompatibilityMode = args.compat  # type: ignore[assignment]
     try:
         df = bundle.stack_count_matrices(
-            join=args.join,
+            join_policy=args.join,
             axis=int(args.axis),
             verify_integrity=bool(args.verify_integrity),
             autoload=True,
@@ -1296,9 +1296,9 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     try:
         se = bundle.to_summarized_experiment(
             genomic_unit=args.genomic_unit,
-            annotation_file_extension=args.annotation,
+            annotation_extension=args.annotation,
             assay_name=args.assay_name,
-            join=args.join,
+            join_policy=args.join,
             autoload=True,
         )
     except ImportError as exc:
@@ -1348,9 +1348,9 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
     try:
         rse = bundle.to_ranged_summarized_experiment(
             genomic_unit=args.genomic_unit,
-            annotation_file_extension=args.annotation,
+            annotation_extension=args.annotation,
             assay_name=args.assay_name,
-            join=args.join,
+            join_policy=args.join,
             autoload=True,
             allow_fallback_to_se=bool(args.allow_fallback_to_se),
         )

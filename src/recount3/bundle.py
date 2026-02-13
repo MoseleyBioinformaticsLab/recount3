@@ -34,9 +34,10 @@ import logging
 import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Optional, Mapping, TYPE_CHECKING
 
 import pandas as pd
+import numpy as np
 
 from recount3 import _bigwig
 from recount3 import _biocpy
@@ -46,7 +47,6 @@ from recount3 import search
 from recount3 import types as r3_types
 
 if TYPE_CHECKING:  # for static type checkers
-    import genomicranges  # type: ignore[import-not-found]
     import summarizedexperiment  # type: ignore[import-not-found]
 
 _GENE_ID_ATTR_RE = re.compile(r'\bgene_id\s+"([^"]+)"')
@@ -842,108 +842,215 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
     )
 
 
-def _construct_se_compat(
+def _construct_summarized_experiment(
     *,
     counts_df: pd.DataFrame,
     row_df: pd.DataFrame,
     col_df: pd.DataFrame,
     assay_name: str,
+    metadata: Optional[Mapping[str, Any]] = None,
 ) -> summarizedexperiment.SummarizedExperiment:
-    """Construct a SummarizedExperiment using compatibility-aware variants.
+    """Construct a SummarizedExperiment using the latest BiocPy API.
 
-    This function enforces strict shape and name alignment and then tries
-    several constructor signatures supported across different versions
-    of the BiocPy :mod:`summarizedexperiment` package.
+    This function targets the modern `summarizedexperiment.SummarizedExperiment`
+    constructor that accepts:
 
-    The following variants are attempted in order:
+      - assays: dict[str, 2D matrix]
+      - row_data: feature metadata (coerced to BiocFrame by BiocPy)
+      - column_data: sample metadata (coerced to BiocFrame by BiocPy)
+      - row_names / column_names: optional but provided explicitly here
+      - metadata: optional experiment-level metadata
 
-      1. ``SummarizedExperiment(assays={name: ndarray}, row_data=df,
-         column_data=df)``
-      2. ``SummarizedExperiment(assays=[ndarray], assay_names=[name],
-         row_data=df, column_data=df)``
-      3. Same as (1) but using ``col_data=`` instead of ``column_data=``.
+    It enforces:
+      - non-empty assay matrix
+      - strict shape agreement between assay and row/column data
+      - numeric assay values (raises on non-numeric, fills missing with 0)
 
     Args:
       counts_df: Feature-by-sample counts matrix.
-      row_df: Row metadata. The index is replaced by
-        ``counts_df.index``.
-      col_df: Column metadata. The index is replaced by
-        ``counts_df.columns``.
-      assay_name: Name of the assay, for example, ``"raw_counts"``.
+      row_df: Feature metadata DataFrame (will be reindexed to counts_df.index).
+      col_df: Sample metadata DataFrame (will be reindexed to counts_df.columns).
+      assay_name: Name of the assay (e.g. "raw_counts").
+      metadata: Optional experiment-level metadata.
 
     Returns:
-      A :class:`summarizedexperiment.SummarizedExperiment` instance.
+      A SummarizedExperiment instance.
 
     Raises:
-      ValueError: If shapes between assay and metadata are inconsistent
-        or the assay matrix is empty.
-      TypeError: If no constructor variant is accepted by the installed
-        :mod:`summarizedexperiment` package.
+      ValueError: If shapes are inconsistent or assay contains invalid values.
     """
     SummarizedExperimentCls = _biocpy.get_summarizedexperiment_class()
+
+    if counts_df.ndim != 2:
+        raise ValueError("counts_df must be a 2D DataFrame.")
 
     n_features, n_samples = counts_df.shape
     if n_features == 0 or n_samples == 0:
         raise ValueError("Empty assay matrix; cannot build SummarizedExperiment.")
 
+    row_names = [str(x) for x in counts_df.index]
+    col_names = [str(x) for x in counts_df.columns]
+
     row_data = row_df.copy()
     col_data = col_df.copy()
-    row_data.index = counts_df.index
-    col_data.index = counts_df.columns
+    row_data.index = row_names
+    col_data.index = col_names
+
     row_data = _ensure_unique_columns(row_data, empty_prefix="row")
     col_data = _ensure_unique_columns(col_data, empty_prefix="col")
 
     if len(row_data) != n_features:
         raise ValueError(
-            f"row_data length {len(row_data)} != assay features {n_features}"
+            f"row_data length {len(row_data)} != assay features {n_features}."
         )
     if len(col_data) != n_samples:
         raise ValueError(
-            f"column_data length {len(col_data)} != assay samples {n_samples}"
+            f"column_data length {len(col_data)} != assay samples {n_samples}."
         )
 
-    counts_numeric = counts_df.apply(pd.to_numeric, errors="coerce").fillna(0)
-    counts_np = counts_numeric.to_numpy(copy=False)
+    raw = counts_df.copy()
+    numeric = raw.apply(pd.to_numeric, errors="coerce")
 
-    errors_seen: list[str] = []
-
-    # Variant 1: dict[str, ndarray] + column_data
-    try:
-        return SummarizedExperimentCls(
-            assays={assay_name: counts_np},
-            row_data=row_data,
-            column_data=col_data,
-        )
-    except Exception as exc:  # pylint: disable=broad-except
-        errors_seen.append(f"dict[str, ndarray] + column_data → {exc!r}")
-
-    # Variant 2: list[ndarray] + assay_names + column_data
-    try:
-        return SummarizedExperimentCls(
-            assays=[counts_np],
-            assay_names=[assay_name],
-            row_data=row_data,
-            column_data=col_data,
-        )
-    except Exception as exc:  # pylint: disable=broad-except
-        errors_seen.append(
-            "list[ndarray] + assay_names + column_data "
-            f"→ {exc!r}"
+    invalid = raw.notna() & numeric.isna()
+    if invalid.any().any():
+        bad_positions = list(zip(*np.where(invalid.to_numpy())))
+        examples = []
+        for r, c in bad_positions[:5]:
+            examples.append(
+                {
+                    "row": row_names[r],
+                    "col": col_names[c],
+                    "value": raw.iat[r, c],
+                }
+            )
+        raise ValueError(
+            "counts_df contains non-numeric values that cannot be coerced. "
+            f"Examples: {examples!r}"
         )
 
-    # Variant 3: swap keyword to col_data
-    try:
-        return SummarizedExperimentCls(
-            assays={assay_name: counts_np},
-            row_data=row_data,
-            col_data=col_data,
-        )
-    except Exception as exc:  # pylint: disable=broad-except
-        errors_seen.append(f"dict[str, ndarray] + col_data → {exc!r}")
+    counts_np = numeric.fillna(0).to_numpy(dtype=float, copy=False)
 
-    raise TypeError(
-        "Failed to construct SummarizedExperiment; tried variants: "
-        + "; ".join(errors_seen)
+    return SummarizedExperimentCls(
+        assays={assay_name: counts_np},
+        row_data=row_data,
+        column_data=col_data,
+        row_names=row_names,
+        column_names=col_names,
+        metadata=dict(metadata) if metadata is not None else None,
+    )
+
+
+def _construct_ranged_summarized_experiment(
+    *,
+    counts_df: pd.DataFrame,
+    row_df: pd.DataFrame,
+    col_df: pd.DataFrame,
+    ranges_df: pd.DataFrame,
+    assay_name: str,
+    metadata: Optional[Mapping[str, Any]] = None,
+) -> Any:
+    """Construct a RangedSummarizedExperiment using the latest BiocPy API.
+
+    This targets the modern `summarizedexperiment.RangedSummarizedExperiment`
+    constructor with kwargs:
+
+      - assays: dict[str, 2D matrix]
+      - row_ranges: GenomicRanges
+      - row_data / column_data: pandas DataFrames (coerced to BiocFrame by BiocPy)
+      - row_names / column_names: provided explicitly for stability
+      - metadata: optional experiment metadata
+
+    Enforces:
+      - non-empty 2D counts matrix
+      - strict shape agreement between assay, metadata, and ranges
+      - numeric assay values (raises on non-numeric non-missing values)
+
+    Args:
+      counts_df: Feature-by-sample counts matrix.
+      row_df: Feature metadata (reindexed to counts_df.index).
+      col_df: Sample metadata (reindexed to counts_df.columns).
+      ranges_df: DataFrame with at least ["seqnames", "starts", "ends", "strand"].
+        Must have the same number/order of rows as counts_df.
+      assay_name: Name of the assay (e.g. "raw_counts").
+      metadata: Optional experiment-level metadata.
+
+    Returns:
+      A RangedSummarizedExperiment instance.
+
+    Raises:
+      ValueError: If shapes/columns are inconsistent or counts are not numeric.
+    """
+    RangedSummarizedExperimentCls = _biocpy.get_ranged_summarizedexperiment_class()
+
+    if counts_df.ndim != 2:
+        raise ValueError("counts_df must be a 2D DataFrame.")
+
+    n_features, n_samples = counts_df.shape
+    if n_features == 0 or n_samples == 0:
+        raise ValueError("Empty assay matrix; cannot build RangedSummarizedExperiment.")
+
+    required_range_cols = {"seqnames", "starts", "ends", "strand"}
+    missing = required_range_cols - set(ranges_df.columns)
+    if missing:
+        raise ValueError(f"ranges_df is missing required columns: {sorted(missing)!r}.")
+
+    if len(ranges_df) != n_features:
+        raise ValueError(
+            f"ranges_df length {len(ranges_df)} != assay features {n_features}."
+        )
+
+    row_names = [str(x) for x in counts_df.index]
+    col_names = [str(x) for x in counts_df.columns]
+
+    row_data = row_df.copy()
+    col_data = col_df.copy()
+    row_data.index = row_names
+    col_data.index = col_names
+
+    row_data = _ensure_unique_columns(row_data, empty_prefix="row")
+    col_data = _ensure_unique_columns(col_data, empty_prefix="col")
+
+    if len(row_data) != n_features:
+        raise ValueError(
+            f"row_data length {len(row_data)} != assay features {n_features}."
+        )
+    if len(col_data) != n_samples:
+        raise ValueError(
+            f"column_data length {len(col_data)} != assay samples {n_samples}."
+        )
+
+    ranges_aligned = ranges_df.copy()
+    ranges_aligned.index = row_names
+    ranges_aligned["starts"] = pd.to_numeric(ranges_aligned["starts"], errors="coerce")
+    ranges_aligned["ends"] = pd.to_numeric(ranges_aligned["ends"], errors="coerce")
+    if ranges_aligned[["seqnames", "starts", "ends", "strand"]].isna().any().any():
+        raise ValueError("ranges_df contains missing values in coordinate columns.")
+
+    raw = counts_df.copy()
+    numeric = raw.apply(pd.to_numeric, errors="coerce")
+    invalid = raw.notna() & numeric.isna()
+    if invalid.any().any():
+        bad_positions = list(zip(*np.where(invalid.to_numpy())))
+        examples = []
+        for r, c in bad_positions[:5]:
+            examples.append({"row": row_names[r], "col": col_names[c], "value": raw.iat[r, c]})
+        raise ValueError(
+            "counts_df contains non-numeric values that cannot be coerced. "
+            f"Examples: {examples!r}"
+        )
+
+    counts_np = numeric.fillna(0).to_numpy(dtype=float, copy=False)
+
+    gr = _to_genomic_ranges(ranges_aligned)
+
+    return RangedSummarizedExperimentCls(
+        assays={assay_name: counts_np},
+        row_ranges=gr,
+        row_data=row_data,
+        column_data=col_data,
+        row_names=row_names,
+        column_names=col_names,
+        metadata=dict(metadata) if metadata is not None else None,
     )
 
 
@@ -977,7 +1084,7 @@ def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
     if rtype == "count_files_junctions":
         junction_type = getattr(res.description, "junction_type", None) or ""
         junction_ext = (
-            getattr(res.description, "junction_file_extension", None) or ""
+            getattr(res.description, "junction_extension", None) or ""
         )
         family = "junctions"
         feature_key = f"{family}:{junction_type}:{junction_ext}"
@@ -1168,7 +1275,7 @@ class R3ResourceBundle:
                         project=proj,
                         genomic_units=genomic_units,
                         annotations=annotations,
-                        junction_file_extension=junction_exts,
+                        junction_extension=junction_exts,
                         junction_type=junction_type,
                         include_metadata=include_metadata,
                         include_bigwig=include_bigwig,
@@ -1357,7 +1464,7 @@ class R3ResourceBundle:
         table_name: Optional[r3_types.FieldSpec] = None,
         junction_type: Optional[r3_types.FieldSpec] = None,
         annotation_extension: Optional[r3_types.FieldSpec] = None,
-        junction_file_extension: Optional[r3_types.FieldSpec] = None,
+        junction_extension: Optional[r3_types.FieldSpec] = None,
         predicate: Optional[Callable[[resource.R3Resource], bool]] = None,
         invert: bool = False,
     ) -> R3ResourceBundle:
@@ -1378,7 +1485,7 @@ class R3ResourceBundle:
           table_name: Metadata table name filter.
           junction_type: Junction type filter.
           annotation_extension: Annotation code filter.
-          junction_file_extension: Junction extension filter.
+          junction_extension: Junction extension filter.
           predicate: Optional callback that receives each resource and
             returns :data:`True` if it should be kept.
           invert: If :data:`True`, invert the final match decision.
@@ -1397,7 +1504,7 @@ class R3ResourceBundle:
             "table_name": table_name,
             "junction_type": junction_type,
             "annotation_extension": annotation_extension,
-            "junction_file_extension": junction_file_extension,
+            "junction_extension": junction_extension,
         }
         field_specs = {
             key: value for key, value in field_specs.items() if value is not None
@@ -1705,7 +1812,7 @@ class R3ResourceBundle:
                     "junction subtype). Distinct feature keys observed: "
                     f"{examples}. Hint: filter by 'genomic_unit' for "
                     "gene/exon or by 'junction_type' / "
-                    "'junction_file_extension' for junctions."
+                    "'junction_extension' for junctions."
                 )
         else:
             raise ValueError(f"Unknown compat mode: {compat!r}")
@@ -1731,7 +1838,7 @@ class R3ResourceBundle:
         return pd.concat(
             data_frames,
             axis=axis,  # type: ignore[arg-type]
-            join_policy=join_policy,  # type: ignore[arg-type]
+            join=join_policy,  # type: ignore[arg-type]
             verify_integrity=verify_integrity,
         )
 
@@ -1794,7 +1901,10 @@ class R3ResourceBundle:
                     ) from exc
                 raise
 
-        sel = self.filter(resource_type="count_files_junctions")
+        sel = (
+            self.filter(resource_type="count_files_junctions")
+            .filter(junction_extension="MM")
+        )
         if autoload:
             for res in sel.resources:
                 try:
@@ -1986,7 +2096,7 @@ class R3ResourceBundle:
             index=row_names,
         )
 
-        return _construct_se_compat(
+        return _construct_summarized_experiment(
             counts_df=counts_df,
             row_df=row_df,
             col_df=col_df,
@@ -2042,8 +2152,6 @@ class R3ResourceBundle:
             :class:`RangedSummarizedExperiment` constructor rejects all
             compatibility variants.
         """
-        RangedSummarizedExperimentCls = _biocpy.get_ranged_summarizedexperiment_class()
-
         last_ranges_error: Exception | None = None
 
         working = self
@@ -2145,58 +2253,84 @@ class R3ResourceBundle:
                     last_ranges_error = exc
 
         elif genomic_unit == "junction" and prefer_rr_junction_coordinates:
-            rr_res = next(
-                (
-                    res
-                    for res in self.filter(
-                        resource_type="count_files_junctions"
-                    ).resources
-                    if getattr(
-                        res.description,
-                        "junction_file_extension",
-                        "",
+            try:
+                n_features, _ = counts_df.shape
+
+                rr_candidates = (
+                    self.filter(resource_type="count_files_junctions")
+                    .filter(junction_extension="RR")
+                    .resources
+                )
+                rr_res = rr_candidates[0] if rr_candidates else None
+                if rr_res is None:
+                    raise ValueError("No RR junction coordinate resource found in bundle.")
+
+                if autoload:
+                    rr_res.download(path=None, cache_mode="enable")
+
+                rr = _read_rr_table(rr_res)
+
+                std = rr.rename(
+                    columns={
+                        "chromosome": "seqnames",
+                        "chrom": "seqnames",
+                        "chr": "seqnames",
+                        "start": "starts",
+                        "end": "ends",
+                    }
+                ).copy()
+
+                required = {"seqnames", "starts", "ends"}
+                missing = required.difference(std.columns)
+                if missing:
+                    raise ValueError(f"RR file missing required columns: {sorted(missing)}")
+
+                if "strand" not in std.columns:
+                    std["strand"] = "*"
+
+                std["seqnames"] = std["seqnames"].astype(str)
+                std["strand"] = std["strand"].astype(str).replace({"?": "*"}).fillna("*")
+                std["starts"] = pd.to_numeric(std["starts"], errors="raise").astype(int)
+                std["ends"] = pd.to_numeric(std["ends"], errors="raise").astype(int)
+
+                if len(std) != n_features:
+                    raise ValueError(
+                        f"RR row count {len(std)} != MM feature count {n_features}; cannot build junction ranges."
                     )
-                    == "RR"
-                ),
-                None,
-            )
-            if rr_res is not None:
-                try:
-                    rr = _read_rr_table(rr_res)
-                    candidates = ("junction_id", "jxn_id", "jid", "id", "name")
-                    id_col = next(
-                        (col for col in candidates if col in rr.columns),
-                        None,
-                    )
-                    if id_col is not None:
-                        rr = rr.set_index(rr[id_col].astype(str))
-                        aligned = rr.reindex(feature_ids)
-                        std = aligned.rename(
-                            columns={
-                                "chrom": "seqnames",
-                                "chr": "seqnames",
-                                "start": "starts",
-                                "end": "ends",
-                            }
-                        )
-                        if not {
-                            "seqnames",
-                            "starts",
-                            "ends",
-                        }.issubset(std.columns):
-                            raise ValueError(
-                                "RR file is missing coordinate columns."
-                            )
-                        if "strand" not in std.columns:
-                            std["strand"] = "*"
-                        ranges_df = std[["seqnames", "starts", "ends", "strand"]].copy()
-                        ranges_df.index = row_names
-                except Exception as exc:  # pylint: disable=broad-except
-                    logging.warning(
-                        "Falling back: failed to use RR for junction ranges "
-                        "(reason: %r).",
-                        exc,
-                    )
+
+                id_candidates = ("junction_id", "jxn_id", "jid", "id", "name")
+                id_col = next((c for c in id_candidates if c in std.columns), None)
+
+                if id_col is not None:
+                    row_names_from_rr = std[id_col].astype(str).tolist()
+                else:
+                    row_names_from_rr = [
+                        f"{seq}:{start}-{end}:{strand}"
+                        for seq, start, end, strand in zip(std["seqnames"], std["starts"], std["ends"], std["strand"])
+                    ]
+
+                if pd.Index(row_names_from_rr).duplicated().any():
+                    row_names_from_rr = _make_unique_names(row_names_from_rr)
+
+                # reindex counts to RR-derived row names (RR and MM are same row order)
+                counts_df = counts_df.copy()
+                counts_df.index = row_names_from_rr
+
+                ranges_df = std[["seqnames", "starts", "ends", "strand"]].copy()
+                ranges_df.index = row_names_from_rr
+
+                row_data_df = pd.DataFrame(
+                    {"feature_id": row_names_from_rr, "mm_row": original_feature_ids},
+                    index=row_names_from_rr,
+                )
+
+            except Exception as exc:  # pylint: disable=broad-except
+                logging.warning(
+                    "Falling back: failed to derive junction ranges from RR (reason: %r).",
+                    exc,
+                )
+                last_ranges_error = exc
+                ranges_df = None
 
         if ranges_df is None:
             if allow_fallback_to_se:
@@ -2216,66 +2350,12 @@ class R3ResourceBundle:
                 raise ValueError(message) from last_ranges_error
             raise ValueError(message)
 
-        row_data = row_data_df.copy()
-
-        col_data = col_df.copy()
-        col_data.index = counts_df.columns
-
-        row_data = _ensure_unique_columns(row_data, empty_prefix="row")
-        col_data = _ensure_unique_columns(col_data, empty_prefix="col")
-
-        counts_numeric = counts_df.apply(pd.to_numeric, errors="coerce").fillna(0)
-
-        gr = _to_genomic_ranges(ranges_df)
-
-        errors_seen: list[str] = []
-
-        # Variant 1: dict[str, ndarray] + column_data
-        try:
-            return RangedSummarizedExperimentCls(
-                assays={assay_name: counts_numeric.to_numpy(copy=False)},
-                row_data=row_data,
-                row_ranges=gr,
-                column_data=col_data,
-            )
-        except Exception as exc:
-            errors_seen.append(
-                "dict[str, ndarray] + column_data → "
-                f"{exc!r}"
-            )
-
-        # Variant 2: list[ndarray] + assay_names + column_data
-        try:
-            return RangedSummarizedExperimentCls(
-                assays=[counts_numeric.to_numpy(copy=False)],
-                assay_names=[assay_name],
-                row_data=row_data,
-                row_ranges=gr,
-                column_data=col_data,
-            )
-        except Exception as exc:
-            errors_seen.append(
-                "list[ndarray] + assay_names + column_data "
-                f"→ {exc!r}"
-            )
-
-        # Variant 3: swap keyword to col_data
-        try:
-            return RangedSummarizedExperimentCls(
-                assays={assay_name: counts_numeric.to_numpy(copy=False)},
-                row_data=row_data,
-                row_ranges=gr,
-                col_data=col_data,
-            )
-        except Exception as exc:
-            errors_seen.append(
-                "dict[str, ndarray] + col_data → "
-                f"{exc!r}"
-            )
-
-        raise TypeError(
-            "Failed to construct RangedSummarizedExperiment; tried variants: "
-            + "; ".join(errors_seen)
+        return _construct_ranged_summarized_experiment(
+            counts_df=counts_df,
+            row_df=row_data_df,
+            col_df=col_df,
+            ranges_df=ranges_df,
+            assay_name=assay_name,
         )
 
 

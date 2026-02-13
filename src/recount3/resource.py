@@ -7,6 +7,7 @@ threaded through (see :mod:`recount3.config`). No logic changes are made.
 from __future__ import annotations
 
 import dataclasses
+import gzip
 import threading
 import urllib.parse
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+import scipy
 
 from .config import Config, default_config
 from ._descriptions import R3ResourceDescription
@@ -27,10 +29,92 @@ from ._utils import (
     download_stream_to_zip,
     download_to_file,
     write_cached_file_to_zip,
+    _derive_junction_sidecar_url,
 )
 
-# Serialize writes to the same cache path (as in the original code).
 _FILE_LOCK = threading.Lock()
+
+
+def _ensure_cached_url(
+    *,
+    url: str,
+    cache_root: Path,
+    cfg: Config,
+    chunk_size: int,
+) -> Path:
+    """Download a URL into the standard cache path (if missing)."""
+    cache_path = _cache_path(url, cache_root)
+    _ensure_dir(cache_path.parent)
+    if cache_path.exists():
+        return cache_path
+
+    with _FILE_LOCK:
+        if cache_path.exists():
+            return cache_path
+        download_to_file(
+            url,
+            cache_path,
+            chunk_size=chunk_size,
+            timeout=cfg.timeout,
+            insecure_ssl=cfg.insecure_ssl,
+            user_agent=cfg.user_agent,
+            attempts=cfg.max_retries,
+        )
+    return cache_path
+
+
+def _read_id_rail_ids(id_path: Path) -> list[str]:
+    """Read junction *.ID(.gz) and return rail_id column as strings, in order."""
+    try:
+        df = pd.read_csv(
+            id_path,
+            compression="infer",
+            sep="\t",
+            header=0,
+            engine="c",
+            low_memory=False,
+        )
+    except Exception:
+        df = pd.read_csv(
+            id_path,
+            compression="infer",
+            sep=None,
+            header=0,
+            engine="python",
+        )
+
+    if df.empty:
+        raise LoadError(f"Junction ID file {id_path.name!r} parsed empty.")
+
+    cols_lower = [str(c).strip().lower() for c in df.columns]
+    rail_col = None
+    if "rail_id" in cols_lower:
+        rail_col = df.columns[cols_lower.index("rail_id")]
+    else:
+        rail_col = df.columns[0]
+
+    rail_ids = df[rail_col].astype(str).tolist()
+    if not rail_ids:
+        raise LoadError(f"Junction ID file {id_path.name!r} has no rail IDs.")
+    return rail_ids
+
+
+def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csc_matrix:
+    """Read a MatrixMarket file (optionally gzipped) as a CSR sparse matrix."""
+    try:
+        if mm_path.suffix.lower() == ".gz":
+            with gzip.open(mm_path, "rb") as fh:
+                mat = scipy.io.mmread(fh)
+        else:
+            mat = scipy.io.mmread(str(mm_path))
+    except Exception as exc:
+        raise LoadError(f"Failed to read MatrixMarket from {mm_path.name!r}.") from exc
+
+    if getattr(mat, "ndim", None) != 2:
+        raise LoadError(f"MatrixMarket {mm_path.name!r} is not 2-dimensional.")
+    if scipy.sparse.issparse(mat):
+        return mat.tocsr()  # pyright: ignore[reportAttributeAccessIssue]
+    return scipy.sparse.csr_matrix(mat)
 
 
 @dataclass(slots=True)
@@ -286,6 +370,57 @@ class R3Resource:
             df.index = df.index.astype(str)
             self._cached_data = df
             return df
+        
+        if rtype == "count_files_junctions":
+            jxn_ext = str(getattr(self.description, "junction_extension", "MM")).upper()
+
+            cfg = self.config or default_config()
+            self.download(path=None, cache_mode="enable")
+            mm_cached = self._cached_path()
+            if not mm_cached.exists():
+                raise FileNotFoundError(str(mm_cached))
+
+            if jxn_ext == "MM":
+                # Derive and cache the paired ID file to name columns by rail_id.
+                try:
+                    id_url = _derive_junction_sidecar_url(self.url or "", "ID")
+                except Exception as exc:
+                    raise LoadError(
+                        f"Cannot derive junction ID URL from {self.url!r}."
+                    ) from exc
+
+                id_cached = _ensure_cached_url(
+                    url=id_url,
+                    cache_root=self._cache_root(),
+                    cfg=cfg,
+                    chunk_size=cfg.chunk_size,
+                )
+
+                rail_ids = _read_id_rail_ids(id_cached)
+                mat = _read_mm_matrix(mm_cached)
+
+                if mat.shape[1] != len(rail_ids):
+                    raise LoadError(
+                        "Junction MM column count does not match ID length: "
+                        f"{mat.shape[1]} != {len(rail_ids)} "
+                        f"({mm_cached.name!r} vs {id_cached.name!r})."
+                    )
+
+                df = pd.DataFrame.sparse.from_spmatrix(mat)
+                df.columns = [str(x) for x in rail_ids]
+                df.index = [str(i) for i in range(df.shape[0])]
+
+                self._cached_data = df
+                return df
+
+            if jxn_ext in {"ID", "RR"}:
+                obj = pd.read_table(mm_cached, compression="infer")
+                self._cached_data = obj
+                return obj
+
+            raise LoadError(
+                f"Unsupported junction_extension {jxn_ext!r} for {mm_cached.name!r}."
+            )
 
         # Ensure bytes are present locally (cache).
         self.download(path=None, cache_mode="enable")

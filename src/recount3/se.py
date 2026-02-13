@@ -39,6 +39,13 @@ import pandas as pd
 
 from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
+from recount3._utils import (
+    _normalize_genomic_unit,
+    _resolve_counts_assay_name,
+    _coerce_col_data_to_pandas,
+    _resolve_metadata_column,
+    _coerce_numeric_column,
+)
 from recount3 import _biocpy
 
 if TYPE_CHECKING:  # for static type checkers
@@ -105,29 +112,6 @@ def _expand_sra_attributes_df(
     return merged
 
 
-def _normalize_genomic_unit(genomic_unit: str) -> str:
-    """Return a normalized genomic unit string and validate it.
-
-    Args:
-      genomic_unit: Requested feature level.
-
-    Returns:
-      Lowercase genomic unit string.
-
-    Raises:
-      ValueError: If the genomic unit is not one of ``"gene"``,
-        ``"exon"``, or ``"junction"``.
-    """
-    gu = str(genomic_unit).strip().lower()
-    valid = {"gene", "exon", "junction"}
-    if gu not in valid:
-        raise ValueError(
-            f"Invalid genomic_unit {genomic_unit!r}; expected one of "
-            f"{sorted(valid)!r}."
-        )
-    return gu
-
-
 def _resolve_annotation_extension(
     *,
     organism: str,
@@ -173,36 +157,6 @@ def _resolve_annotation_extension(
 
     raise ValueError(
         f"Unsupported organism {organism!r}; expected 'human' or 'mouse'."
-    )
-
-
-def _resolve_counts_assay_name(
-    se_like: Any,
-    *,
-    preferred_assay_name: str = "raw_counts",
-    fallback_assay_name: str = "counts",
-) -> str:
-    """Resolve the assay name that carries the recount3 coverage-sum matrix.
-
-    Prefers ``preferred_assay_name`` when present; otherwise falls back to
-    ``fallback_assay_name`` with a warning for backwards compatibility.
-    """
-    assay_names = getattr(se_like, "assay_names", None)
-    if assay_names and preferred_assay_name in assay_names:
-        return preferred_assay_name
-    if assay_names and fallback_assay_name in assay_names:
-        logging.warning(
-            "Assay %r not found; falling back to legacy assay %r. "
-            "Rebuild the object with assay_name=%r to silence this warning.",
-            preferred_assay_name,
-            fallback_assay_name,
-            preferred_assay_name,
-        )
-        return fallback_assay_name
-    raise ValueError(
-        f"Object must contain a {preferred_assay_name!r} assay"
-        + (f" (or legacy {fallback_assay_name!r})" if fallback_assay_name else "")
-        + "."
     )
 
 
@@ -299,7 +253,7 @@ def create_ranged_summarized_experiment(
     annotation_label: str | None = None,
     annotation_extension: str | None = None,
     junction_type: str = "ALL",
-    junction_file_extensions: Sequence[str] | None = None,
+    junction_extensions: Sequence[str] | None = None,
     include_metadata: bool = True,
     include_bigwig: bool = False,
     assay_name: str = "raw_counts",
@@ -331,7 +285,7 @@ def create_ranged_summarized_experiment(
         (for example, ``"G026"``). When provided, this takes precedence
         over ``annotation_label``. Ignored for junction-level assays.
       junction_type: Junction type; typically ``"ALL"``.
-      junction_file_extensions: Iterable of junction artifact extensions
+      junction_extensions: Iterable of junction artifact extensions
         to include (for example, ``("MM",)`` or ``("MM", "RR")``). If
         :data:`None`, the default ``("MM",)`` is used.
       include_metadata: Whether to include the five project metadata
@@ -368,10 +322,10 @@ def create_ranged_summarized_experiment(
         annotation_extension=annotation_extension,
     )
 
-    if junction_file_extensions is None:
+    if junction_extensions is None:
         junction_exts: tuple[str, ...] = ("MM",)
     else:
-        junction_exts = tuple(str(ext).strip() for ext in junction_file_extensions)
+        junction_exts = tuple(str(ext).strip() for ext in junction_extensions)
 
     project_bundle = R3ResourceBundle.discover(
         organism=organism,
@@ -407,7 +361,7 @@ def create_rse(
     annotation_label: str | None = None,
     annotation_extension: str | None = None,
     junction_type: str = "ALL",
-    junction_file_extensions: Sequence[str] | None = None,
+    junction_extensions: Sequence[str] | None = None,
     include_metadata: bool = True,
     include_bigwig: bool = False,
     assay_name: str = "raw_counts",
@@ -429,7 +383,7 @@ def create_rse(
         annotation_label=annotation_label,
         annotation_extension=annotation_extension,
         junction_type=junction_type,
-        junction_file_extensions=junction_file_extensions,
+        junction_extensions=junction_extensions,
         include_metadata=include_metadata,
         include_bigwig=include_bigwig,
         assay_name=assay_name,
@@ -709,97 +663,6 @@ def compute_tpm(rse: summarizedexperiment.RangedSummarizedExperiment) -> pd.Data
     return tpm
 
 
-def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
-    """Coerce sample metadata into a pandas DataFrame.
-
-    Args:
-        sample_metadata_source: Either a BiocPy (Ranged)SummarizedExperiment-like object with a
-          `.col_data.to_pandas()` method, or a pandas DataFrame already.
-
-    Returns:
-        A pandas DataFrame of sample metadata.
-
-    Raises:
-        TypeError: If `sample_metadata_source` cannot be coerced to a pandas DataFrame.
-    """
-    if isinstance(sample_metadata_source, pd.DataFrame):
-        return sample_metadata_source
-
-    # If `sample_metadata_source` is a (Ranged)SummarizedExperiment, use col_data like the R code.
-    if hasattr(sample_metadata_source, "col_data") and hasattr(sample_metadata_source.col_data, "to_pandas"):
-        return sample_metadata_source.col_data.to_pandas()
-
-    raise TypeError(
-        "Expected a pandas.DataFrame or a SummarizedExperiment-like object with "
-        "`col_data.to_pandas()`."
-    )
-
-
-def _resolve_metadata_column(
-    metadata_df: pd.DataFrame,
-    column_name: str,
-) -> pd.Series:
-    """Resolve a metadata column name robustly.
-
-    This mirrors the strictness of the recount3 R implementation (which expects
-    exact column names), but also supports the Python-side convention where the
-    namespace separator may be `__` instead of `.` for the first separator
-    (e.g., `recount_qc.star.average_mapped_length` vs
-    `recount_qc__star.average_mapped_length`).
-
-    Args:
-        metadata_df: Sample metadata.
-        column_name: Column name to resolve.
-
-    Returns:
-        The resolved column as a pandas Series.
-
-    Raises:
-        ValueError: If the column cannot be found.
-    """
-    lower_to_actual = {str(c).lower(): c for c in metadata_df.columns}
-    key = column_name.lower()
-    if key in lower_to_actual:
-        return metadata_df[lower_to_actual[key]]
-
-    # Try swapping only the first namespace separator '.' -> '__'
-    if "." in column_name:
-        namespace, rest = column_name.split(".", 1)
-        alt = f"{namespace}__{rest}".lower()
-        if alt in lower_to_actual:
-            return metadata_df[lower_to_actual[alt]]
-
-    raise ValueError(
-        f"Required metadata column {column_name!r} not found. "
-        "If your metadata uses '__' as a namespace separator, pass the "
-        "actual column name explicitly."
-    )
-
-
-def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
-    """Coerce a Series to numeric, erroring on non-numeric non-missing values.
-
-    Args:
-        series: Input Series.
-        column_name: Name used for error messages.
-
-    Returns:
-        Float Series.
-
-    Raises:
-        ValueError: If non-missing values cannot be coerced to numeric.
-    """
-    numeric = pd.to_numeric(series, errors="coerce")
-    invalid = series.notna() & numeric.isna()
-    if invalid.any():
-        examples = series[invalid].head(3).tolist()
-        raise ValueError(
-            f"Metadata column {column_name!r} contains non-numeric values "
-            f"(examples: {examples!r})."
-        )
-    return numeric.astype(float)
-
-
 def is_paired_end(
     sample_metadata_source: Any,
     avg_mapped_read_length_column: str = "recount_qc.star.average_mapped_length",
@@ -944,7 +807,7 @@ def compute_scale_factors(
     if not isinstance(target_read_length_bp, numbers.Real) or isinstance(target_read_length_bp, bool):
         raise TypeError("target_read_length_bp must be a numeric scalar.")
 
-    metadata = _coerce_col_data_to_pandas(sample_metadata_source)
+    metadata = _coerce_col_data_to_pandas(sample_metadata_source)  #TODO: Can be done w/o coercing? For memory
 
     # Match recount3's stopifnot(): all of these must exist even if by="auc".
     external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
@@ -993,7 +856,7 @@ def compute_scale_factors(
 
 
 def transform_counts(
-    rse: Any,  #TODO: Fix "Any", how? Find out.
+    rse: Any,  #TODO: Remove ducktyping? Unless df possible.
     by: str = "auc",
     target_read_count: float = 4e7,
     target_read_length_bp: float = 100,
