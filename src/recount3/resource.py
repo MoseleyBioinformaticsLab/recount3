@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import pandas as pd  # Required dependency in the original script.
+import pandas as pd
 
 from .config import Config, default_config
 from ._descriptions import R3ResourceDescription
@@ -244,10 +244,6 @@ class R3Resource:
             cached = self._cached_path()
             if not cached.exists():
                 raise FileNotFoundError(str(cached))
-            if pd is None:
-                raise LoadError(
-                    "pandas is required to read gene/exon count matrices."
-                )
             try:
                 df = pd.read_csv(
                     cached,
@@ -299,25 +295,9 @@ class R3Resource:
 
         name = cached.name.lower()
         if name.endswith(".tsv") or name.endswith(".tsv.gz") or name.endswith(".md.gz"):
-            if pd is not None:  #TODO: Make Pandas required.
-                obj = pd.read_table(cached, compression="infer")
-                self._cached_data = obj
-                return obj
-
-            # Fallback without pandas (legacy parity).
-            import csv
-            import gzip
-            import io
-
-            if name.endswith(".gz"):
-                fh = io.TextIOWrapper(gzip.open(cached, "rb"), encoding="utf-8")
-            else:
-                fh = open(cached, "rt", encoding="utf-8")
-            with fh as tsv:
-                reader = csv.DictReader(tsv, delimiter="\t")
-                obj = list(reader)
-                self._cached_data = obj
-                return obj
+            obj = pd.read_table(cached, compression="infer")
+            self._cached_data = obj
+            return obj
 
         raise LoadError(
             "Unsupported load() for resource type "
