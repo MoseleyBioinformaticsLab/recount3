@@ -1,22 +1,19 @@
 """Thin, safe wrapper around a pyBigWig handle.
 
-This wrapper mirrors the original behavior and surfaces a small typed API.
-
 Dependency:
-  * pyBigWig (optional) - load lazily and raise ImportError with guidance.
+  * pyBigWig
 """
 
 from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, cast, TYPE_CHECKING
 
+from recount3 import _utils
 
-try:  # Optional dependency; import lazily in _ensure_open for clarity.
-    import pyBigWig  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover - optional dep
-    pyBigWig = None  # type: ignore[assignment]
+if TYPE_CHECKING:
+    import pyBigWig
 
 
 @dataclasses.dataclass(slots=True)
@@ -35,7 +32,7 @@ class BigWigFile:
 
     # ---- lifecycle -----------------------------------------------------
 
-    def _ensure_open(self):  # -> pyBigWig.pyBigWig (annotated dynamically)
+    def _ensure_open(self):  #TODO: Generalize?
         """Open the file if needed and return the live pyBigWig handle.
 
         Returns:
@@ -49,16 +46,11 @@ class BigWigFile:
         if self._bw is not None:
             return cast("pyBigWig.pyBigWig", self._bw)  # type: ignore
 
-        if pyBigWig is None:
-            raise ImportError(
-                "pyBigWig is required to read BigWig files. "
-                "Install with `pip install pyBigWig` or "
-                "`conda install -c conda-forge -c bioconda pybigwig`."
-            )
         if not self.path.exists():
             raise FileNotFoundError(str(self.path))
 
-        bw = pyBigWig.open(str(self.path), self.mode)  # type: ignore[attr-defined]
+        pybigwig = _utils.get_pybigwig_module()
+        bw = pybigwig.open(str(self.path), self.mode)  # type: ignore[attr-defined]
         if bw is None:  # pyBigWig returns None on failure
             raise RuntimeError(f"Failed to open BigWig file: {self.path}")
         self._bw = bw

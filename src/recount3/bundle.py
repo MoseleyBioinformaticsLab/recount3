@@ -40,7 +40,7 @@ import pandas as pd
 import numpy as np
 
 from recount3 import _bigwig
-from recount3 import _biocpy
+from recount3 import _utils
 from recount3 import errors
 from recount3 import resource
 from recount3 import search
@@ -814,7 +814,7 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
       ImportError: If :mod:`genomicranges` cannot be imported.
       TypeError: If no supported constructor is available.
     """
-    GenomicRangesCls = _biocpy.get_genomicranges_class()
+    GenomicRangesCls = _utils.get_genomicranges_class()
 
     # Preferred recent API: classmethod from_pandas.
     if hasattr(GenomicRangesCls, "from_pandas"):
@@ -879,7 +879,7 @@ def _construct_summarized_experiment(
     Raises:
       ValueError: If shapes are inconsistent or assay contains invalid values.
     """
-    SummarizedExperimentCls = _biocpy.get_summarizedexperiment_class()
+    SummarizedExperimentCls = _utils.get_summarizedexperiment_class()
 
     if counts_df.ndim != 2:
         raise ValueError("counts_df must be a 2D DataFrame.")
@@ -980,7 +980,7 @@ def _construct_ranged_summarized_experiment(
     Raises:
       ValueError: If shapes/columns are inconsistent or counts are not numeric.
     """
-    RangedSummarizedExperimentCls = _biocpy.get_ranged_summarizedexperiment_class()
+    RangedSummarizedExperimentCls = _utils.get_ranged_summarizedexperiment_class()
 
     if counts_df.ndim != 2:
         raise ValueError("counts_df must be a 2D DataFrame.")
@@ -2046,8 +2046,6 @@ class R3ResourceBundle:
             :class:`SummarizedExperiment` constructor rejects all
             compatibility variants.
         """
-        _biocpy.get_summarizedexperiment_class()
-
         working = self
         if genomic_unit in {"gene", "exon"} and annotation_extension:
             working = (

@@ -39,14 +39,7 @@ import pandas as pd
 
 from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
-from recount3._utils import (
-    _normalize_genomic_unit,
-    _resolve_counts_assay_name,
-    _coerce_col_data_to_pandas,
-    _resolve_metadata_column,
-    _coerce_numeric_column,
-)
-from recount3 import _biocpy
+from recount3 import _utils
 
 if TYPE_CHECKING:  # for static type checkers
     import biocframe  # type: ignore[import-not-found]
@@ -186,7 +179,7 @@ def build_summarized_experiment(
     Returns:
       A :class:`summarizedexperiment.SummarizedExperiment` instance.
     """
-    unit = _normalize_genomic_unit(genomic_unit)
+    unit = _utils._normalize_genomic_unit(genomic_unit)
     return bundle.to_summarized_experiment(
         genomic_unit=unit,
         annotation_extension=annotation_extension,
@@ -232,7 +225,7 @@ def build_ranged_summarized_experiment(
       ``allow_fallback_to_se`` is :data:`True` and ranges cannot be
       resolved.
     """
-    unit = _normalize_genomic_unit(genomic_unit)
+    unit = _utils._normalize_genomic_unit(genomic_unit)
     return bundle.to_ranged_summarized_experiment(
         genomic_unit=unit,
         annotation_extension=annotation_extension,
@@ -314,7 +307,7 @@ def create_ranged_summarized_experiment(
         :class:`RangedSummarizedExperiment` constructor rejects all
         compatibility variants.
     """
-    unit = _normalize_genomic_unit(genomic_unit)
+    unit = _utils._normalize_genomic_unit(genomic_unit)
     ann_ext = _resolve_annotation_extension(
         organism=organism,
         genomic_unit=unit,
@@ -461,9 +454,9 @@ def expand_sra_attributes(
             attribute_column_prefix=attribute_column_prefix,
         )
 
-    BiocFrameCls = _biocpy.get_biocframe_class()
-    SummarizedExperimentCls = _biocpy.get_summarizedexperiment_class()
-    RangedSummarizedExperimentCls = _biocpy.get_ranged_summarizedexperiment_class()
+    BiocFrameCls = _utils.get_biocframe_class()
+    SummarizedExperimentCls = _utils.get_summarizedexperiment_class()
+    RangedSummarizedExperimentCls = _utils.get_ranged_summarizedexperiment_class()
 
     if not isinstance(experiment_or_coldata, (SummarizedExperimentCls, RangedSummarizedExperimentCls)):
         raise TypeError(
@@ -541,7 +534,7 @@ def compute_read_counts(
         from `col_data`, or if the assay and metadata dimensions do not align.
       TypeError: If `round_to_integers` is not a bool.
     """
-    ranged_summarized_experiment_cls = _biocpy.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = _utils.get_ranged_summarizedexperiment_class()
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
         raise ValueError(
@@ -550,11 +543,11 @@ def compute_read_counts(
     if not isinstance(round_to_integers, bool):
         raise TypeError("round_to_integers must be a bool.")
 
-    assay_name = _resolve_counts_assay_name(rse)
+    assay_name = _utils._resolve_counts_assay_name(rse)
 
     col_data = rse.col_data.to_pandas()  # pyright: ignore[reportAttributeAccessIssue]
     try:
-        avg_len_series = _resolve_metadata_column(col_data, avg_mapped_read_length_column)
+        avg_len_series = _utils._resolve_metadata_column(col_data, avg_mapped_read_length_column)
     except ValueError as exc:
         raise ValueError(
             "Required metadata column not found in col_data: "
@@ -628,7 +621,7 @@ def compute_tpm(rse: summarizedexperiment.RangedSummarizedExperiment) -> pd.Data
       TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).
       ValueError: If feature widths or read lengths are missing.
     """
-    ranged_summarized_experiment_cls = _biocpy.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = _utils.get_ranged_summarizedexperiment_class()
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
         raise TypeError(
@@ -688,15 +681,15 @@ def is_paired_end(
     Raises:
         ValueError: If required metadata columns are missing or non-numeric.
     """
-    metadata = _coerce_col_data_to_pandas(sample_metadata_source)
+    metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
 
-    external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
-    avg_mapped = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, avg_mapped_read_length_column),
+    external_id = _utils._resolve_metadata_column(metadata, "external_id").astype(str)
+    avg_mapped = _utils._coerce_numeric_column(
+        _utils._resolve_metadata_column(metadata, avg_mapped_read_length_column),
         avg_mapped_read_length_column,
     )
-    avg_len = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, avg_read_length_column),
+    avg_len = _utils._coerce_numeric_column(
+        _utils._resolve_metadata_column(metadata, avg_read_length_column),
         avg_read_length_column,
     )
 
@@ -807,21 +800,21 @@ def compute_scale_factors(
     if not isinstance(target_read_length_bp, numbers.Real) or isinstance(target_read_length_bp, bool):
         raise TypeError("target_read_length_bp must be a numeric scalar.")
 
-    metadata = _coerce_col_data_to_pandas(sample_metadata_source)  #TODO: Can be done w/o coercing? For memory
+    metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)  #TODO: Can be done w/o coercing? For memory
 
     # Match recount3's stopifnot(): all of these must exist even if by="auc".
-    external_id = _resolve_metadata_column(metadata, "external_id").astype(str)
+    external_id = _utils._resolve_metadata_column(metadata, "external_id").astype(str)
 
-    auc_values = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, auc_column),
+    auc_values = _utils._coerce_numeric_column(
+        _utils._resolve_metadata_column(metadata, auc_column),
         auc_column,
     )
-    avg_mapped_values = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, avg_mapped_read_length_column),
+    avg_mapped_values = _utils._coerce_numeric_column(
+        _utils._resolve_metadata_column(metadata, avg_mapped_read_length_column),
         avg_mapped_read_length_column,
     )
-    mapped_reads_values = _coerce_numeric_column(
-        _resolve_metadata_column(metadata, mapped_reads_column),
+    mapped_reads_values = _utils._coerce_numeric_column(
+        _utils._resolve_metadata_column(metadata, mapped_reads_column),
         mapped_reads_column,
     )
 
@@ -923,7 +916,7 @@ def transform_counts(
       TypeError: If `round_to_integers` is not a bool, or if numeric parameters are
         not valid scalars.
     """
-    ranged_summarized_experiment_cls = _biocpy.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = _utils.get_ranged_summarizedexperiment_class()
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
         raise ValueError(
@@ -931,7 +924,7 @@ def transform_counts(
             "summarizedexperiment)."
         )
 
-    assay_name = _resolve_counts_assay_name(rse)
+    assay_name = _utils._resolve_counts_assay_name(rse)
 
     if not isinstance(round_to_integers, bool):
         raise TypeError("round_counts must be a bool.")

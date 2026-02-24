@@ -44,14 +44,21 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+import functools
+import importlib
+import types
 from pathlib import Path
-from typing import BinaryIO, Any
+from typing import BinaryIO, Any, cast, TYPE_CHECKING
 
 import pandas as pd
 
 from .errors import DownloadError
 
-# Serialize writes to the same filesystem paths
+if TYPE_CHECKING:
+    import biocframe  # type: ignore[import-not-found]
+    import genomicranges  # type: ignore[import-not-found]
+    import summarizedexperiment  # type: ignore[import-not-found]
+
 _FILE_LOCK = threading.Lock()
 
 
@@ -573,6 +580,222 @@ def _resolve_metadata_column(
         "If your metadata uses '__' as a namespace separator, pass the "
         "actual column name explicitly."
     )
+
+
+# =============================================================================
+# Optional Dependency Utilities
+# =============================================================================
+
+_OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType({
+    "biocframe": "pip install biocframe genomicranges summarizedexperiment",
+    "genomicranges": "pip install biocframe genomicranges summarizedexperiment",
+    "summarizedexperiment": "pip install biocframe genomicranges summarizedexperiment",
+    "pyBigWig": (
+        "pip install pyBigWig\n"
+        "  conda install -c conda-forge -c bioconda pybigwig"
+    ),
+})
+
+
+def _format_optional_dependency_import_error(
+    module_name: str,
+    exc: BaseException | None = None,
+) -> str:
+    """Format a standardized ImportError message for an optional dependency.
+
+    Args:
+        module_name: Import name used by Python (for example, "pyBigWig").
+        exc: Underlying exception raised during import, if available.
+
+    Returns:
+        A user-facing error message suitable for raising as ImportError.
+    """
+    command = _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS.get(
+        module_name,
+        f"pip install {module_name}",
+    )
+
+    detail = ""
+    if exc is not None:
+        detail = f"\n\nOriginal import error: {exc!r}"
+
+    return (
+        f"Optional dependency {module_name!r} is required for this feature."
+        f"{detail}\n\nInstall it with:\n\n  {command}\n"
+    )
+
+
+def _format_optional_dependency_import_failure(
+    module_name: str,
+    exc: BaseException,
+) -> str:
+    """Return an error message for an optional dependency that failed to import.
+
+    Some optional dependencies are native extensions. In those cases, importing
+    the module can fail even when it is installed (for example, due to missing
+    shared libraries). This helper surfaces the original failure while still
+    including installation guidance.
+
+    Args:
+        module_name: Import name used by Python.
+        exc: The underlying exception raised during import.
+
+    Returns:
+        A detailed message suitable for raising as a CompatibilityError.
+    """
+    return (
+        f"Optional dependency {module_name!r} could not be imported.\n"
+        f"Import error: {exc!r}\n\n"
+        f"{_format_optional_dependency_import_error(module_name)}"
+    )
+
+
+@functools.lru_cache(maxsize=None)
+def import_optional_module(module_name: str) -> types.ModuleType:
+    """Import and cache an optional dependency.
+
+    This is the single entry point for optional runtime imports.
+
+    Args:
+        module_name: Import name used by Python (for example, "biocframe").
+
+    Returns:
+        The imported module.
+
+    Raises:
+        ImportError: If the dependency is missing or fails to import.
+    """
+    try:
+        return importlib.import_module(module_name)
+    except Exception as exc:  # pylint: disable=broad-except
+        raise ImportError(
+            _format_optional_dependency_import_error(module_name, exc),
+        ) from exc
+
+
+def _get_module_attribute(
+    module: types.ModuleType,
+    attribute_name: str,
+    *,
+    module_name: str,
+) -> Any:
+    """Return an attribute from an imported module with a stable error message.
+
+    Args:
+        module: Imported module returned by import_optional_module.
+        attribute_name: Attribute to retrieve from the module.
+        module_name: Import name used to load the module. This is used only for
+          error messaging.
+
+    Returns:
+        The attribute value.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    try:
+        return getattr(module, attribute_name)
+    except AttributeError as exc:
+        raise ImportError(
+            _format_optional_dependency_import_error(module_name, exc),
+        ) from exc
+
+
+def get_biocframe_class() -> type["biocframe.BiocFrame"]:
+    """Return the BiocPy "biocframe.BiocFrame" class.
+
+    Returns:
+        The "biocframe.BiocFrame" class.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    module = import_optional_module("biocframe")
+    return cast(
+        type["biocframe.BiocFrame"],
+        _get_module_attribute(
+            module,
+            "BiocFrame",
+            module_name="biocframe",
+        ),
+    )
+
+
+def get_genomicranges_class() -> type["genomicranges.GenomicRanges"]:
+    """Return the BiocPy "genomicranges.GenomicRanges" class.
+
+    Returns:
+        The "genomicranges.GenomicRanges" class.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    module = import_optional_module("genomicranges")
+    return cast(
+        type["genomicranges.GenomicRanges"],
+        _get_module_attribute(
+            module,
+            "GenomicRanges",
+            module_name="genomicranges",
+        ),
+    )
+
+
+def get_summarizedexperiment_class(
+) -> type["summarizedexperiment.SummarizedExperiment"]:
+    """Return the BiocPy "summarizedexperiment.SummarizedExperiment" class.
+
+    Returns:
+        The "summarizedexperiment.SummarizedExperiment" class.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    module = import_optional_module("summarizedexperiment")
+    return cast(
+        type["summarizedexperiment.SummarizedExperiment"],
+        _get_module_attribute(
+            module,
+            "SummarizedExperiment",
+            module_name="summarizedexperiment",
+        ),
+    )
+
+
+def get_ranged_summarizedexperiment_class(
+) -> type["summarizedexperiment.RangedSummarizedExperiment"]:
+    """Return the BiocPy "summarizedexperiment.RangedSummarizedExperiment" class.
+
+    Returns:
+        The "summarizedexperiment.RangedSummarizedExperiment" class.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    module = import_optional_module("summarizedexperiment")
+    return cast(
+        type["summarizedexperiment.RangedSummarizedExperiment"],
+        _get_module_attribute(
+            module,
+            "RangedSummarizedExperiment",
+            module_name="summarizedexperiment",
+        ),
+    )
+
+
+def get_pybigwig_module() -> types.ModuleType:
+    """Return the optional "pyBigWig" module.
+
+    This is a small convenience wrapper around import_optional_module so that
+    callers do not need to hard-code the import name.
+
+    Returns:
+        The imported "pyBigWig" module.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    return import_optional_module("pyBigWig")
 
 
 # =============================================================================
