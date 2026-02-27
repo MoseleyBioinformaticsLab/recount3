@@ -38,6 +38,7 @@ import re
 import shutil
 import socket
 import ssl
+import tempfile
 import threading
 import time
 import urllib.error
@@ -52,7 +53,7 @@ from typing import BinaryIO, Any, cast, TYPE_CHECKING
 
 import pandas as pd
 
-from .errors import DownloadError
+from recount3 import errors
 
 if TYPE_CHECKING:
     import biocframe  # type: ignore[import-not-found]
@@ -60,7 +61,26 @@ if TYPE_CHECKING:
     import summarizedexperiment  # type: ignore[import-not-found]
 
 _FILE_LOCK = threading.Lock()
+_ZIP_LOCKS_GUARD = threading.Lock()
+_ZIP_LOCKS: dict[str, threading.Lock] = {}
 
+
+def _zip_lock_for_path(zip_path: Path) -> threading.Lock:
+    """Return the shared lock for a specific ZIP path.
+
+    Args:
+        zip_path: Target ZIP file path.
+
+    Returns:
+        A lock object shared by all operations writing to this ZIP path.
+    """
+    key = str(zip_path.expanduser().resolve())
+    with _ZIP_LOCKS_GUARD:
+        lock = _ZIP_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _ZIP_LOCKS[key] = lock
+        return lock
 
 # =============================================================================
 # Caching Utilities
@@ -130,7 +150,8 @@ def _ensure_dir(path: str | Path) -> None:
         
     Raises:
         NotADirectoryError: If path exists as a non-directory.
-        OSError: If directory creation fails due to permissions or other system error.
+        OSError: If directory creation fails due to permissions or other system
+          error.
     """
     p = Path(path)
     if not p.exists():
@@ -196,7 +217,8 @@ def _ssl_insecure_context() -> ssl.SSLContext:
         for testing or with trusted networks.
         
     Returns:
-        SSL context with hostname verification and certificate checking disabled.
+        SSL context with hostname verification and certificate checking
+        disabled.
     """
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
@@ -242,7 +264,9 @@ def http_open(
 
     opener = urllib.request.build_opener()
     if insecure_ssl:
-        opener.add_handler(urllib.request.HTTPSHandler(context=_ssl_insecure_context()))
+        opener.add_handler(
+            urllib.request.HTTPSHandler(context=_ssl_insecure_context())
+        )
 
     req = urllib.request.Request(url, headers=merged)
     return opener.open(req, timeout=timeout)
@@ -346,7 +370,115 @@ def download_to_file(
     try:
         with_retries(_do, attempts=attempts)
     except Exception as exc:
-        raise DownloadError(f"Failed to download {url!r} -> {str(out_path)!r}") from exc
+        raise errors.DownloadError(
+            f"Failed to download {url!r} -> {str(out_path)!r}"
+        ) from exc
+
+
+def _write_or_replace_in_zip(
+    zip_path: Path,
+    source_path: Path,
+    arcname: str,
+    overwrite: bool,
+) -> None:
+    """Write ``source_path`` into ``zip_path`` as ``arcname``.
+
+    If ``zip_path`` already contains a member named ``arcname``:
+
+    * When ``overwrite`` is ``False``, this function returns without changes.
+    * When ``overwrite`` is ``True``, the ZIP is rewritten without the old
+      member and then the new file is added.
+
+    Rewriting is necessary because ZIP archives can contain multiple members
+    with the same name; appending another member does not remove the existing
+    one.
+
+    Args:
+        zip_path: Path to the destination ZIP archive.
+        source_path: Local path to the file to add.
+        arcname: Member name to use inside the ZIP.
+        overwrite: If ``True``, replace an existing member named ``arcname``.
+            If ``False``, this function is a no-op when that member already
+            exists.
+
+    Raises:
+        FileNotFoundError: If ``source_path`` does not exist.
+        DownloadError: If ``zip_path`` exists but is not a valid ZIP archive.
+        zipfile.BadZipFile: If the ZIP file is malformed.
+        OSError: For filesystem errors while writing the ZIP.
+    """
+    _ensure_dir(zip_path.parent)
+
+    zip_key = str(zip_path.resolve())
+    with _FILE_LOCK:
+        zip_locks = globals().setdefault("_ZIP_LOCKS", {})
+        zip_lock = zip_locks.setdefault(zip_key, threading.Lock())
+
+    with zip_lock:
+        if not zip_path.exists():
+            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.write(source_path, arcname)
+            return
+
+        if not zipfile.is_zipfile(zip_path):
+            raise errors.DownloadError(
+                f"Destination {zip_path} exists but is not a valid ZIP."
+            )
+
+        member_exists = False
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            try:
+                zf.getinfo(arcname)
+                member_exists = True
+            except KeyError:
+                member_exists = False
+
+        if member_exists and not overwrite:
+            return
+
+        if member_exists and overwrite:
+            tmp_zip = zip_path.parent / (
+                f".{zip_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmpzip"
+            )
+            try:
+                with zipfile.ZipFile(zip_path, "r") as zf_in:
+                    with zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf_out:
+                        # Preserve the ZIP-level comment (if any).
+                        zf_out.comment = zf_in.comment
+
+                        for info in zf_in.infolist():
+                            if info.filename == arcname:
+                                continue
+
+                            # Preserve member metadata as much as is practical.
+                            out_info = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+                            out_info.compress_type = info.compress_type
+                            out_info.comment = info.comment
+                            out_info.extra = info.extra
+                            out_info.create_system = info.create_system
+                            out_info.create_version = info.create_version
+                            out_info.extract_version = info.extract_version
+                            out_info.flag_bits = info.flag_bits
+                            out_info.internal_attr = info.internal_attr
+                            out_info.external_attr = info.external_attr
+
+                            with zf_in.open(info, "r") as f_in:
+                                with zf_out.open(out_info, "w") as f_out:
+                                    shutil.copyfileobj(f_in, f_out)
+
+                        zf_out.write(source_path, arcname)
+
+                _atomic_replace(tmp_zip, zip_path)
+
+            finally:
+                if tmp_zip.exists():
+                    try:
+                        tmp_zip.unlink()
+                    except OSError:
+                        pass
+        else:
+            with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.write(source_path, arcname)
 
 
 def download_stream_to_zip(
@@ -361,34 +493,60 @@ def download_stream_to_zip(
     user_agent: str,
     attempts: int,
 ) -> None:
-    """Stream URL content directly into ZIP file without caching.
-    
+    """Download a URL to a temporary file, then write it into a ZIP archive.
+
+    This uses a two-phase approach:
+
+    1) Download the URL to a temporary file (with retries).
+    2) Add that file to ``zip_path`` under ``arcname``.
+
+    The temporary file avoids leaving a partially-written ZIP member if the
+    network request fails mid-stream.
+
+    If ``overwrite`` is ``True`` and the ZIP already contains ``arcname``, the
+    ZIP is rewritten to avoid duplicate entries.
+
     Args:
-        url: Resource URL to download.
-        zip_path: Destination ZIP file path.
-        arcname: Name for the file within the ZIP archive.
-        chunk_size: Bytes to read/write per chunk during streaming.
-        overwrite: If True, replace existing file in ZIP.
+        url: URL to download.
+        zip_path: Path to the destination ZIP archive.
+        arcname: Member name to use inside the ZIP.
+        chunk_size: Number of bytes to read/write per chunk while downloading.
+        overwrite: If ``True``, replace an existing member named ``arcname``.
+            If ``False``, this function is a no-op when that member already
+            exists.
         timeout: Network timeout in seconds.
-        insecure_ssl: If True, disable TLS verification.
-        user_agent: HTTP User-Agent header.
-        attempts: Maximum retry attempts for transient errors.
-        
+        insecure_ssl: If ``True``, TLS certificate verification is disabled.
+        user_agent: HTTP ``User-Agent`` header to send.
+        attempts: Maximum retry attempts for transient network errors.
+
     Raises:
-        DownloadError: If download fails after all retry attempts.
-        zipfile.BadZipFile: If ZIP file operations fail.
+        DownloadError: If the download fails after all retry attempts, or if the
+            destination exists but is not a valid ZIP file.
+        zipfile.BadZipFile: If the ZIP file is malformed.
+        OSError: For filesystem errors while writing the temporary file or ZIP.
     """
     _ensure_dir(zip_path.parent)
-    mode = "a" if zip_path.exists() else "w"
-    with zipfile.ZipFile(zip_path, mode=mode, compression=zipfile.ZIP_DEFLATED) as zf:
-        if not overwrite:
-            try:
-                zf.getinfo(arcname)
-                return
-            except KeyError:
-                pass
 
-        def _do():
+    if not overwrite and zip_path.exists():
+        zip_key = str(zip_path.resolve())
+        with _FILE_LOCK:
+            zip_locks = globals().setdefault("_ZIP_LOCKS", {})
+            zip_lock = zip_locks.setdefault(zip_key, threading.Lock())
+        with zip_lock:
+            if zip_path.exists() and zipfile.is_zipfile(zip_path):
+                try:
+                    with zipfile.ZipFile(zip_path, "r") as zf:
+                        zf.getinfo(arcname)
+                        return
+                except KeyError:
+                    pass
+
+    tmp_path = zip_path.parent / (
+        f".r3_dl_{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmp"
+    )
+    try:
+
+        def _do() -> None:
             with contextlib.closing(
                 http_open(
                     url,
@@ -398,10 +556,19 @@ def download_stream_to_zip(
                     user_agent=user_agent,
                 )
             ) as resp:
-                with zf.open(arcname, "w") as zfh:
-                    _stream_copy(resp, zfh, chunk_size=chunk_size)
+                with open(tmp_path, "wb") as f:
+                    _stream_copy(resp, f, chunk_size=chunk_size)
 
         with_retries(_do, attempts=attempts)
+
+        _write_or_replace_in_zip(zip_path, tmp_path, arcname, overwrite)
+
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
 
 
 def write_cached_file_to_zip(
@@ -411,28 +578,31 @@ def write_cached_file_to_zip(
     *,
     overwrite: bool,
 ) -> None:
-    """Write existing cached file into ZIP archive.
-    
+    """Write an existing on-disk file into a ZIP archive.
+
+    If the ZIP does not exist, it is created. If the ZIP already contains a
+    member named ``arcname``:
+
+    * When ``overwrite`` is ``False``, this function returns without changes.
+    * When ``overwrite`` is ``True``, the ZIP is rewritten without the old
+      member and then the new file is added to avoid duplicate entries.
+
     Args:
-        cached_file: Path to existing cached file.
-        zip_path: Destination ZIP file path.
-        arcname: Name for the file within the ZIP archive.
-        overwrite: If True, replace existing file in ZIP.
-        
+        cached_file: Path to a local file that already exists on disk.
+        zip_path: Path to the destination ZIP archive.
+        arcname: Member name to use inside the ZIP.
+        overwrite: If ``True``, replace an existing member named ``arcname``.
+            If ``False``, this function is a no-op when that member already
+            exists.
+
     Raises:
-        FileNotFoundError: If cached_file doesn't exist.
-        zipfile.BadZipFile: If ZIP file operations fail.
+        FileNotFoundError: If ``cached_file`` does not exist.
+        DownloadError: If ``zip_path`` exists but is not a valid ZIP archive.
+        zipfile.BadZipFile: If the ZIP file is malformed.
+        OSError: For filesystem errors while reading ``cached_file`` or writing
+            the ZIP.
     """
-    _ensure_dir(zip_path.parent)
-    mode = "a" if zip_path.exists() else "w"
-    with zipfile.ZipFile(zip_path, mode=mode, compression=zipfile.ZIP_DEFLATED) as zf:
-        if not overwrite:
-            try:
-                zf.getinfo(arcname)
-                return
-            except KeyError:
-                pass
-        zf.write(cached_file, arcname)
+    _write_or_replace_in_zip(zip_path, cached_file, arcname, overwrite)
 
 
 # =============================================================================
@@ -487,7 +657,11 @@ def _resolve_counts_assay_name(
         return fallback_assay_name
     raise ValueError(
         f"Object must contain a {preferred_assay_name!r} assay"
-        + (f" (or legacy {fallback_assay_name!r})" if fallback_assay_name else "")
+        + (
+            f" (or legacy {fallback_assay_name!r})"
+            if fallback_assay_name
+            else ""
+        )
         + "."
     )
 
