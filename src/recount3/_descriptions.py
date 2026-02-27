@@ -1,39 +1,101 @@
-"""Resource descriptions and URL construction.
+"""Resource descriptions and duffel URL-path construction.
 
-This module implements the multi-factory :class:`R3ResourceDescription`
-and dataclasses that validate parameters and construct stable duffel
-URL paths.
+This module defines a small set of *resource description* dataclasses for the
+recount3 duffel layout. A description is a validated, immutable-ish bundle of
+parameters (organism, project, etc.) that can deterministically construct the
+relative path to a resource in the duffel repository.
+
+The main entry point is :class:`R3ResourceDescription`, which acts as a
+multi-factory: instantiating ``R3ResourceDescription(resource_type=...)`` returns
+an instance of the registered concrete subclass for that ``resource_type``.
+
+Typical usage:
+
+  desc = R3ResourceDescription(
+      resource_type="count_files_gene_or_exon",
+      organism="human",
+      data_source="sra",
+      genomic_unit="gene",
+      project="SRP107565",
+      annotation_extension="G026",
+  )
+  path = desc.url_path()
+
+You can also pass the resource type positionally as the first argument:
+
+  desc = R3ResourceDescription("data_sources", organism="human")
+
+Design notes:
+- The duffel layout often uses 2-character "shard" directories derived from an
+  identifier (e.g., project ID) to reduce directory fanout. The helper `_p2()`
+  implements that convention.
+- Concrete description classes are dataclasses with ``slots=True`` to minimize
+  per-instance overhead and reduce accidental attribute creation.
+- ``_TYPE_REGISTRY`` is mutable by design: it is the factory registry used to
+  bind resource-type strings to concrete classes. See `register_type()`.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+import dataclasses
+from typing import Any, Callable, Optional, cast
 
-_VALID_ORGANISMS = {"human", "mouse"}
-_VALID_DATA_SOURCES = {"sra", "gtex", "tcga"}
-_VALID_GENOMIC_UNITS = {"gene", "exon"}
+_VALID_ORGANISMS: frozenset[str] = frozenset({"human", "mouse"})
+_VALID_DATA_SOURCES: frozenset[str] = frozenset({"sra", "gtex", "tcga"})
+_VALID_GENOMIC_UNITS: frozenset[str] = frozenset({"gene", "exon"})
 
 
-def _p2(s: str | None) -> str:
-    """Return the last two characters of ``s`` for duffel shard directories.
+def _p2(value: str | None) -> str:
+    """Returns the last two characters of an identifier for duffel shard paths.
+
+    Many duffel directories are sharded by a 2-character suffix to reduce the
+    number of entries in a single directory. This helper returns that suffix.
+
+    Args:
+        value: Identifier string to shard (e.g., a project ID) or None.
+
+    Returns:
+        The final two characters of `value`. If `value` is None or empty,
+        returns the empty string.
 
     Examples:
-      * None / "" -> ""
-      * "A" -> "A"
-      * "SRP107565" -> "65"
+        >>> _p2(None)
+        ''
+        >>> _p2('')
+        ''
+        >>> _p2('A')
+        'A'
+        >>> _p2('SRP107565')
+        '65'
     """
-    if not s:
+    if not value:
         return ""
-    return s[-2:]
+    return value[-2:]
 
 
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class _R3CommonFields:
-    """Uniform field schema shared by all description subclasses.
+    """Shared field schema for all resource description subclasses.
 
-    The multi-factory returns concrete subclasses that still expose all of these
-    attributes so existing code paths remain source-compatible.
+    Concrete resource description classes inherit from this dataclass to provide
+    a uniform attribute surface area across all resource types. This enables
+    generic code (e.g., serialization or filtering) to access common attributes
+    without special-casing individual description subclasses.
+
+    Only a subset of fields are required for a given resource type; each
+    concrete subclass enforces its own required fields in `__post_init__`.
+
+    Attributes:
+        resource_type: The resource-type discriminator used by the factory.
+        organism: Organism identifier (e.g., "human", "mouse").
+        data_source: Source identifier (e.g., "sra", "gtex", "tcga").
+        genomic_unit: Unit for feature-count matrices (e.g., "gene", "exon").
+        project: Project identifier (e.g., SRP/TCGA project).
+        sample: Sample/run identifier used by some resources (e.g., BigWig).
+        annotation_extension: Annotation build tag (e.g., "G026").
+        junction_type: Junction category selector (e.g., "ALL").
+        junction_extension: Junction file format tag (e.g., "MM", "ID", "RR").
+        table_name: Metadata table name (e.g., "recount_qc").
     """
 
     resource_type: str
@@ -51,75 +113,195 @@ class _R3CommonFields:
 class R3ResourceDescription:
     """Abstract base class and multi-factory for recount3 resource descriptors.
 
-    Usage:
-      >>> desc = R3ResourceDescription(resource_type="annotations", organism="human", ...)
+    Instantiate this class with a `resource_type` to obtain an instance of the
+    registered concrete subclass.
 
-    The base class overrides :py:meth:`__new__` to return an instance of the
-    registered subclass for the given ``resource_type``. Subclasses should
-    inherit from :class:`_R3CommonFields` and :class:`R3ResourceDescription`,
-    and implement :py:meth:`url_path()` plus any needed validation.
+    Example:
+        >>> desc = R3ResourceDescription(
+        ...     resource_type="annotations",
+        ...     organism="human",
+        ...     genomic_unit="gene",
+        ...     annotation_extension="G026",
+        ... )
+        >>> isinstance(desc, R3Annotations)
+        True
+
+    Concrete subclasses should:
+    - Inherit from both `_R3CommonFields` and `R3ResourceDescription`.
+    - Validate required parameters in `__post_init__`.
+    - Implement `url_path()` to return the duffel-relative path.
+
+    Attributes:
+        _TYPE_REGISTRY: Mapping from resource-type string to concrete class.
+            This is mutable by design to support dynamic registration.
     """
 
     _TYPE_REGISTRY: dict[str, type["R3ResourceDescription"]] = {}
 
-    def __new__(cls, *args, **kwargs):
-        """Return an instance of the appropriate concrete subclass."""
+    def __new__(
+        cls,
+        *args: Any,
+        **kwargs: Any,
+    ) -> "R3ResourceDescription":
+        """Constructs and returns an instance of the appropriate subclass.
+
+        The factory accepts the resource type either as:
+        - keyword argument `resource_type=...`, or
+        - the first positional argument.
+
+        Args:
+            *args: Optional positional arguments; if present, `args[0]` may
+                supply the resource type.
+            **kwargs: Keyword arguments used to initialize the selected
+                dataclass subclass.
+
+        Returns:
+            An instance of the concrete subclass registered for the selected
+            resource type.
+
+        Raises:
+            KeyError: If `resource_type` is missing or empty.
+            ValueError: If `resource_type` is not registered.
+        """
         if cls is not R3ResourceDescription:
             return super().__new__(cls)
 
-        rtype = kwargs.get("resource_type")
-        if rtype is None and args:
-            rtype = args[0]
+        resource_type = kwargs.get("resource_type")
+        if resource_type is None and args:
+            resource_type = args[0]
 
-        if not rtype:
-            raise KeyError("resource_type is required to construct R3ResourceDescription.")
+        if not resource_type:
+            raise KeyError(
+                "resource_type is required to construct R3ResourceDescription."
+            )
 
-        subcls = cls._TYPE_REGISTRY.get(str(rtype))
+        subcls = cls._TYPE_REGISTRY.get(str(resource_type))
         if subcls is None:
-            raise ValueError(f"Unsupported resource_type: {rtype!r}")
+            raise ValueError(f"Unsupported resource_type: {resource_type!r}")
 
-        return super().__new__(subcls)  # type: ignore
+        return cast(
+            "R3ResourceDescription",
+            object.__new__(subcls),
+        )
 
     @classmethod
-    def register_type(cls, resource_type: str):
-        """Decorator to register a concrete subclass in the factory."""
-        def _decorator(subcls: type["R3ResourceDescription"]):
+    def register_type(
+        cls,
+        resource_type: str,
+    ) -> Callable[[type["R3ResourceDescription"]], type["R3ResourceDescription"]]:
+        """Registers a concrete subclass for a given `resource_type`.
+
+        This decorator binds `resource_type` to the provided subclass and also
+        sets an internal `_RESOURCE_TYPE` attribute on that subclass.
+
+        Args:
+            resource_type: Resource-type string used as the factory key.
+
+        Returns:
+            A decorator that registers the decorated subclass.
+
+        Example:
+            >>> @R3ResourceDescription.register_type("annotations")
+            ... @dataclasses.dataclass(slots=True)
+            ... class R3Annotations(_R3CommonFields, R3ResourceDescription):
+            ...     ...
+        """
+
+        def _decorator(
+            subcls: type["R3ResourceDescription"],
+        ) -> type["R3ResourceDescription"]:
             cls._TYPE_REGISTRY[resource_type] = subcls
             setattr(subcls, "_RESOURCE_TYPE", resource_type)
             return subcls
 
         return _decorator
 
-    # ---- shared validation helpers ------------------------------------
 
     def _require(self, *names: str) -> None:
-        for n in names:
-            if getattr(self, n, None) in (None, ""):
-                raise KeyError(f"Missing required field: {n}")
+        """Ensures that the given attributes are present and non-empty.
+
+        Args:
+            *names: Attribute names to validate.
+
+        Raises:
+            KeyError: If any named attribute is None or the empty string.
+        """
+        for name in names:
+            if getattr(self, name, None) in (None, ""):
+                raise KeyError(f"Missing required field: {name}")
 
     def _check_organism(self) -> None:
-        if getattr(self, "organism", None) not in _VALID_ORGANISMS:
-            raise ValueError(f"Invalid organism: {getattr(self, 'organism', None)!r}")
+        """Validates that `organism` is one of the supported values.
+
+        Raises:
+            ValueError: If `organism` is not in `_VALID_ORGANISMS`.
+        """
+        organism = getattr(self, "organism", None)
+        if organism not in _VALID_ORGANISMS:
+            raise ValueError(f"Invalid organism: {organism!r}")
 
     def _check_data_source(self) -> None:
-        if getattr(self, "data_source", None) not in _VALID_DATA_SOURCES:
-            raise ValueError(f"Invalid data_source: {getattr(self, 'data_source', None)!r}")
+        """Validates that `data_source` is one of the supported values.
+
+        Raises:
+            ValueError: If `data_source` is not in `_VALID_DATA_SOURCES`.
+        """
+        data_source = getattr(self, "data_source", None)
+        if data_source not in _VALID_DATA_SOURCES:
+            raise ValueError(f"Invalid data_source: {data_source!r}")
 
     def _check_genomic_unit(self) -> None:
-        if getattr(self, "genomic_unit", None) not in _VALID_GENOMIC_UNITS:
-            raise ValueError(f"Invalid genomic_unit: {getattr(self, 'genomic_unit', None)!r}")
+        """Validates that `genomic_unit` is one of the supported values.
 
-    # ---- abstract API --------------------------------------------------
+        Raises:
+            ValueError: If `genomic_unit` is not in `_VALID_GENOMIC_UNITS`.
+        """
+        genomic_unit = getattr(self, "genomic_unit", None)
+        if genomic_unit not in _VALID_GENOMIC_UNITS:
+            raise ValueError(f"Invalid genomic_unit: {genomic_unit!r}")
 
-    def url_path(self) -> str:  # pragma: no cover
-        """Return the URL path (including leading slash)."""
+
+    def url_path(self) -> str:
+        """Return the duffel-relative URL path for this resource.
+
+        `R3ResourceDescription` is a multi-factory and abstract interface: calling
+        `R3ResourceDescription(resource_type=...)` returns an instance of a concrete
+        registered subclass (e.g., `R3Annotations`, `R3GeneOrExonCounts`). Those
+        subclasses implement `url_path()` to construct a deterministic path within
+        the duffel repository layout.
+
+        This base-class method is therefore not expected to be called directly; it
+        exists to document the interface and to provide a consistent method name
+        across all description types.
+
+        Implementations must return a path without a leading slash. Callers should
+        join this value onto the configured base URL (and add any separators as
+        needed).
+
+        Returns:
+            A duffel-relative path string, no leading slash.
+
+        Raises:
+            NotImplementedError: Always, in the base class. Concrete subclasses
+                override this method.
+        """
         raise NotImplementedError
 
 
 @R3ResourceDescription.register_type("annotations")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3Annotations(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for gene/exon annotation tables."""
+    """Descriptor for annotation GTF files.
+
+    Required fields:
+      - organism
+      - genomic_unit
+      - annotation_extension
+
+    Duffel layout:
+      {organism}/annotations/{genomic_unit}_sums/
+        {organism}.{genomic_unit}_sums.{annotation_extension}.gtf.gz
+    """
 
     def __post_init__(self) -> None:
         self._require("organism", "genomic_unit", "annotation_extension")
@@ -129,36 +311,76 @@ class R3Annotations(_R3CommonFields, R3ResourceDescription):
     def url_path(self) -> str:
         return (
             f"{self.organism}/annotations/{self.genomic_unit}_sums/"
-            f"{self.organism}.{self.genomic_unit}_sums.{self.annotation_extension}.gtf.gz"
+            f"{self.organism}.{self.genomic_unit}_sums."
+            f"{self.annotation_extension}.gtf.gz"
         )
 
 
 @R3ResourceDescription.register_type("count_files_gene_or_exon")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for per-project gene/exon count matrices."""
+    """Descriptor for per-project gene/exon count matrices.
+
+    Required fields:
+      - organism
+      - data_source
+      - genomic_unit
+      - project
+      - annotation_extension
+
+    Duffel layout:
+      {organism}/data_sources/{data_source}/{genomic_unit}_sums/
+        {p2(project)}/{project}/
+        {data_source}.{genomic_unit}_sums.{project}.{annotation_extension}.gz
+    """
 
     def __post_init__(self) -> None:
-        self._require("organism", "data_source", "genomic_unit", "project", "annotation_extension")
+        self._require(
+            "organism",
+            "data_source",
+            "genomic_unit",
+            "project",
+            "annotation_extension",
+        )
         self._check_organism()
         self._check_data_source()
         self._check_genomic_unit()
 
     def url_path(self) -> str:
         return (
-            f"{self.organism}/data_sources/{self.data_source}/{self.genomic_unit}_sums/"
-            f"{_p2(self.project)}/{self.project}/"
-            f"{self.data_source}.{self.genomic_unit}_sums.{self.project}.{self.annotation_extension}.gz"
+            f"{self.organism}/data_sources/{self.data_source}/"
+            f"{self.genomic_unit}_sums/{_p2(self.project)}/{self.project}/"
+            f"{self.data_source}.{self.genomic_unit}_sums.{self.project}."
+            f"{self.annotation_extension}.gz"
         )
 
 
 @R3ResourceDescription.register_type("count_files_junctions")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for per-project junction count files."""
+    """Descriptor for per-project junction count files.
+
+    Required fields:
+      - organism
+      - data_source
+      - project
+      - junction_type
+      - junction_extension
+
+    Duffel layout:
+      {organism}/data_sources/{data_source}/junctions/
+        {p2(project)}/{project}/
+        {data_source}.junctions.{project}.{junction_type}.{junction_extension}.gz
+    """
 
     def __post_init__(self) -> None:
-        self._require("organism", "data_source", "project", "junction_type", "junction_extension")
+        self._require(
+            "organism",
+            "data_source",
+            "project",
+            "junction_type",
+            "junction_extension",
+        )
         self._check_organism()
         self._check_data_source()
 
@@ -166,14 +388,27 @@ class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
         return (
             f"{self.organism}/data_sources/{self.data_source}/junctions/"
             f"{_p2(self.project)}/{self.project}/"
-            f"{self.data_source}.junctions.{self.project}.{self.junction_type}.{self.junction_extension}.gz"
+            f"{self.data_source}.junctions.{self.project}."
+            f"{self.junction_type}.{self.junction_extension}.gz"
         )
 
 
 @R3ResourceDescription.register_type("metadata_files")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3ProjectMetadata(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for per-project metadata tables."""
+    """Descriptor for per-project metadata tables.
+
+    Required fields:
+      - organism
+      - data_source
+      - project
+      - table_name
+
+    Duffel layout:
+      {organism}/data_sources/{data_source}/metadata/
+        {p2(project)}/{project}/
+        {data_source}.{table_name}.{project}.MD.gz
+    """
 
     def __post_init__(self) -> None:
         self._require("organism", "data_source", "project", "table_name")
@@ -189,9 +424,25 @@ class R3ProjectMetadata(_R3CommonFields, R3ResourceDescription):
 
 
 @R3ResourceDescription.register_type("bigwig_files")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3BigWig(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for per-sample BigWig coverage files (download-only)."""
+    """Descriptor for per-sample BigWig coverage files.
+
+    Required fields:
+      - organism
+      - data_source
+      - project
+      - sample
+
+    Duffel layout:
+      {organism}/data_sources/{data_source}/base_sums/
+        {p2(project)}/{project}/{p2(sample)}/
+        {data_source}.base_sums.{project}_{sample}.ALL.bw
+
+    Note:
+        BigWig resources are typically "download-only" in this library; loading
+        may be implemented elsewhere via optional dependencies.
+    """
 
     def __post_init__(self) -> None:
         self._require("organism", "data_source", "project", "sample")
@@ -207,9 +458,16 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
 
 
 @R3ResourceDescription.register_type("data_sources")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3DataSources(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for the organism-level data-source index (homes_index)."""
+    """Descriptor for the organism-level data-source index (homes_index).
+
+    Required fields:
+      - organism
+
+    Duffel layout:
+      {organism}/homes_index
+    """
 
     def __post_init__(self) -> None:
         self._require("organism")
@@ -220,9 +478,18 @@ class R3DataSources(_R3CommonFields, R3ResourceDescription):
 
 
 @R3ResourceDescription.register_type("data_source_metadata")
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3DataSourceMetadata(_R3CommonFields, R3ResourceDescription):
-    """Descriptor for source-level metadata listing tables."""
+    """Descriptor for source-level metadata listings.
+
+    Required fields:
+      - organism
+      - data_source
+
+    Duffel layout:
+      {organism}/data_sources/{data_source}/metadata/
+        {data_source}.recount_project.MD.gz
+    """
 
     def __post_init__(self) -> None:
         self._require("organism", "data_source")
