@@ -23,8 +23,10 @@ Examples:
     >>> download_to_file("http://example.com/data.tsv", cache_path, ...)
 
 Attributes:
-    _FILE_LOCK: Threading lock for synchronizing file operations to prevent
-        race conditions during concurrent cache access.
+    _ZIP_LOCKS_GUARD: Threading lock to safely interact with the weakref dictionary.
+    _ZIP_LOCKS: A weak reference dictionary mapping ZIP file paths to specific 
+        threading locks. This synchronizes ZIP mutations per-file, preventing 
+        race conditions without leaking memory for inactive cache paths.
 """
 
 from __future__ import annotations
@@ -32,13 +34,13 @@ from __future__ import annotations
 import contextlib
 import errno
 import hashlib
+import http.client
 import logging
 import os
 import re
 import shutil
 import socket
 import ssl
-import tempfile
 import threading
 import time
 import urllib.error
@@ -48,6 +50,7 @@ import zipfile
 import functools
 import importlib
 import types
+import weakref
 from pathlib import Path
 from typing import BinaryIO, Any, cast, TYPE_CHECKING
 
@@ -60,12 +63,20 @@ if TYPE_CHECKING:
     import genomicranges  # type: ignore[import-not-found]
     import summarizedexperiment  # type: ignore[import-not-found]
 
-_FILE_LOCK = threading.Lock()
 _ZIP_LOCKS_GUARD = threading.Lock()
-_ZIP_LOCKS: dict[str, threading.Lock] = {}
+_ZIP_LOCKS: weakref.WeakValueDictionary[str, _WeakRefLock] = weakref.WeakValueDictionary()
 
 
-def _zip_lock_for_path(zip_path: Path) -> threading.Lock:
+class _WeakRefLock:
+    """A wrapper around threading.Lock to allow weak references."""
+    def __init__(self):
+        self._lock = threading.Lock()
+    def __enter__(self):
+        return self._lock.__enter__()
+    def __exit__(self, *args):
+        return self._lock.__exit__(*args)
+
+def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
     """Return the shared lock for a specific ZIP path.
 
     Args:
@@ -78,7 +89,7 @@ def _zip_lock_for_path(zip_path: Path) -> threading.Lock:
     with _ZIP_LOCKS_GUARD:
         lock = _ZIP_LOCKS.get(key)
         if lock is None:
-            lock = threading.Lock()
+            lock = _WeakRefLock()
             _ZIP_LOCKS[key] = lock
         return lock
 
@@ -154,10 +165,10 @@ def _ensure_dir(path: str | Path) -> None:
           error.
     """
     p = Path(path)
-    if not p.exists():
+    try:
         p.mkdir(parents=True, exist_ok=True)
-    elif not p.is_dir():
-        raise NotADirectoryError(str(p))
+    except FileExistsError:
+        raise NotADirectoryError(f"Exists but is not a directory: {p}")
 
 
 def _hardlink_or_copy(src: Path, dst: Path) -> None:
@@ -174,17 +185,23 @@ def _hardlink_or_copy(src: Path, dst: Path) -> None:
         OSError: On unexpected filesystem errors beyond the handled cases.
         FileNotFoundError: If source file doesn't exist.
     """
-    _ensure_dir(dst.parent)
+    tmp_dst = dst.parent / f".{dst.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmp"
+    
     try:
-        if dst.exists():
-            dst.unlink()
-        os.link(src, dst)
-    except OSError as e:
-        if e.errno in (errno.EXDEV, errno.EPERM, errno.EACCES, errno.EMLINK):
-            _ensure_dir(dst.parent)
-            shutil.copy2(src, dst)
-        else:
-            raise
+        try:
+            os.link(src, tmp_dst)
+        except OSError as e:
+            if e.errno in (errno.EXDEV, errno.EPERM, errno.EACCES, errno.EMLINK):
+                shutil.copy2(src, tmp_dst)
+            else:
+                raise
+        _atomic_replace(tmp_dst, dst)
+    finally:
+        if tmp_dst.exists():
+            try:
+                tmp_dst.unlink()
+            except OSError:
+                pass
 
 
 def _atomic_replace(src_tmp: Path, final_path: Path) -> None:
@@ -293,7 +310,14 @@ def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
     for i in range(max(1, attempts)):
         try:
             return func()
-        except (urllib.error.URLError, socket.timeout) as exc:
+        except (
+            urllib.error.URLError,
+            socket.timeout,
+            TimeoutError,
+            ConnectionError,
+            http.client.HTTPException,
+            ssl.SSLError,
+        ) as exc:
             last_exc = exc
             if i < attempts - 1:
                 time.sleep(base_sleep * (2**i))
@@ -354,18 +378,24 @@ def download_to_file(
     def _do():
         with contextlib.closing(
             http_open(
-                url,
-                timeout=timeout,
-                headers=None,
-                insecure_ssl=insecure_ssl,
-                user_agent=user_agent,
+                url, timeout=timeout, headers=None,
+                insecure_ssl=insecure_ssl, user_agent=user_agent,
             )
         ) as resp:
             _ensure_dir(out_path.parent)
-            tmp = out_path.with_suffix(out_path.suffix + ".downloading")
-            with open(tmp, "wb") as fh:
-                _stream_copy(resp, fh, chunk_size=chunk_size)
-            _atomic_replace(tmp, out_path)
+            
+            tmp = out_path.parent / f".{out_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.downloading"
+            
+            try:
+                with open(tmp, "wb") as fh:
+                    _stream_copy(resp, fh, chunk_size=chunk_size)
+                _atomic_replace(tmp, out_path)
+            finally:
+                if tmp.exists():
+                    try:
+                        tmp.unlink()
+                    except OSError:
+                        pass
 
     try:
         with_retries(_do, attempts=attempts)
@@ -409,12 +439,7 @@ def _write_or_replace_in_zip(
     """
     _ensure_dir(zip_path.parent)
 
-    zip_key = str(zip_path.resolve())
-    with _FILE_LOCK:
-        zip_locks = globals().setdefault("_ZIP_LOCKS", {})
-        zip_lock = zip_locks.setdefault(zip_key, threading.Lock())
-
-    with zip_lock:
+    with _zip_lock_for_path(zip_path):
         if not zip_path.exists():
             with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.write(source_path, arcname)
@@ -431,26 +456,24 @@ def _write_or_replace_in_zip(
                 zf.getinfo(arcname)
                 member_exists = True
             except KeyError:
-                member_exists = False
+                pass
 
         if member_exists and not overwrite:
             return
 
-        if member_exists and overwrite:
+        if member_exists:
             tmp_zip = zip_path.parent / (
                 f".{zip_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmpzip"
             )
             try:
                 with zipfile.ZipFile(zip_path, "r") as zf_in:
                     with zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf_out:
-                        # Preserve the ZIP-level comment (if any).
                         zf_out.comment = zf_in.comment
 
                         for info in zf_in.infolist():
                             if info.filename == arcname:
                                 continue
 
-                            # Preserve member metadata as much as is practical.
                             out_info = zipfile.ZipInfo(info.filename, date_time=info.date_time)
                             out_info.compress_type = info.compress_type
                             out_info.comment = info.comment
@@ -528,11 +551,7 @@ def download_stream_to_zip(
     _ensure_dir(zip_path.parent)
 
     if not overwrite and zip_path.exists():
-        zip_key = str(zip_path.resolve())
-        with _FILE_LOCK:
-            zip_locks = globals().setdefault("_ZIP_LOCKS", {})
-            zip_lock = zip_locks.setdefault(zip_key, threading.Lock())
-        with zip_lock:
+        with _zip_lock_for_path(zip_path):
             if zip_path.exists() and zipfile.is_zipfile(zip_path):
                 try:
                     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -704,10 +723,13 @@ def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
     Raises:
         ValueError: If non-missing values cannot be coerced to numeric.
     """
-    numeric = pd.to_numeric(series, errors="coerce")
-    invalid = series.notna() & numeric.isna()
+    cleaned = series.replace(r'^\s*$', pd.NA, regex=True)
+    
+    numeric = pd.to_numeric(cleaned, errors="coerce")
+    
+    invalid = cleaned.notna() & numeric.isna()
     if invalid.any():
-        examples = series[invalid].head(3).tolist()
+        examples = cleaned[invalid].head(3).tolist()
         raise ValueError(
             f"Metadata column {column_name!r} contains non-numeric values "
             f"(examples: {examples!r})."
@@ -841,9 +863,13 @@ def import_optional_module(module_name: str) -> types.ModuleType:
     """
     try:
         return importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        raise ImportError(
+            _format_optional_dependency_import_error(module_name),
+        ) from exc
     except Exception as exc:  # pylint: disable=broad-except
         raise ImportError(
-            _format_optional_dependency_import_error(module_name, exc),
+            _format_optional_dependency_import_failure(module_name, exc),
         ) from exc
 
 
