@@ -12,7 +12,7 @@ Typical usage example:
   )
 
   desc = R3Annotations(
-      organism="human", genomic_unit="gene", annotation_file_extension="G026")
+      organism="human", genomic_unit="gene", annotation_extension="G026")
   res = R3Resource(desc)
   res.download(path=None, cache_mode="enable")
   df = res.load()
@@ -20,19 +20,8 @@ Typical usage example:
 
 from __future__ import annotations
 
-from .version import __version__
-
-from .config import Config, default_config
-from .errors import (
-    CompatibilityError,
-    ConfigurationError,
-    DownloadError,
-    LoadError,
-    Recount3Error,
-)
-from .types import CacheMode, CompatibilityMode, FieldSpec, StringOrIterable
-
-from ._descriptions import (
+from recount3._bigwig import BigWigFile
+from recount3._descriptions import (
     R3Annotations,
     R3BigWig,
     R3DataSourceMetadata,
@@ -42,18 +31,25 @@ from ._descriptions import (
     R3ProjectMetadata,
     R3ResourceDescription,
 )
-
-from .resource import R3Resource
-from ._bigwig import BigWigFile
-from .bundle import R3ResourceBundle
-from .se import (  # noqa: F401
-    build_summarized_experiment,
-    build_ranged_summarized_experiment,
+from recount3.bundle import R3ResourceBundle
+from recount3.config import Config, default_config
+from recount3.errors import (
+    CompatibilityError,
+    ConfigurationError,
+    DownloadError,
+    LoadError,
+    Recount3Error,
 )
-from .search import (
-    samples_for_project,
-    search_project_all,
+from recount3.resource import R3Resource
+from recount3.se import (  # noqa: F401
+    build_ranged_summarized_experiment,
+    build_summarized_experiment,
+)
+from recount3.search import (
+    annotation_ext,
+    annotation_options,
     create_sample_project_lists,
+    samples_for_project,
     search_annotations,
     search_bigwig_files,
     search_count_files_gene_or_exon,
@@ -61,10 +57,10 @@ from .search import (
     search_data_source_metadata,
     search_data_sources,
     search_metadata_files,
-    annotation_ext,
-    annotation_options,
-
+    search_project_all,
 )
+from recount3.types import CacheMode, CompatibilityMode, FieldSpec, StringOrIterable
+from recount3.version import __version__
 
 __all__ = [
     "__version__",

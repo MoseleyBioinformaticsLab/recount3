@@ -20,4 +20,4 @@ class LoadError(Recount3Error):
 
 
 class CompatibilityError(Recount3Error):
-    """Raised when incompatible resources are selected for a combined operation."""
+    """Raised when resources are incompatible for combined operations."""

@@ -18,12 +18,12 @@ Environment variables:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
-import os
 from pathlib import Path
 
-from ._utils import _ensure_dir
+from recount3._utils import _ensure_dir
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,11 +61,16 @@ def default_config() -> Config:
       Values are parsed to sensible types and the base URL is normalized to
       include a trailing slash (matching the original behavior).
     """
-    base = os.environ.get("RECOUNT3_URL", "http://duffel.rail.bio/recount3/").rstrip("/") + "/"
+    base = (
+        os.environ.get("RECOUNT3_URL", "http://duffel.rail.bio/recount3/")
+        .rstrip("/") + "/"
+    )
     cache_dir = Path(
-        os.environ.get(  #TODO: Option to set via API & CLI.
+        os.environ.get(  # TODO: Option to set via API & CLI.
             "RECOUNT3_CACHE_DIR",
-            os.path.join(os.path.expanduser("~"), ".cache", "recount3", "files"),
+            os.path.join(
+                os.path.expanduser("~"), ".cache", "recount3", "files"
+            ),
         )
     )
     return Config(
@@ -75,12 +80,16 @@ def default_config() -> Config:
         max_retries=int(os.environ.get("RECOUNT3_MAX_RETRIES", "3")),
         user_agent=(
             os.environ.get("RECOUNT3_USER_AGENT")
-            or "recount3-python/0.2 (+https://github.com/MoseleyBioinformaticsLab/recount3)"
+            or (
+                "recount3-python/0.2 "
+                "(+https://github.com/MoseleyBioinformaticsLab/recount3)"
+            )
         ),
         cache_dir=cache_dir,
         cache_disabled=os.environ.get("RECOUNT3_CACHE_DISABLE", "0") == "1",
         chunk_size=1024 * 1024,
     )
+
 
 def recount3_cache(config: Config | None = None) -> Path:
     """Return the cache directory used for recount3 downloads.
@@ -134,7 +143,7 @@ def recount3_cache_files(
             files.append(path)
 
     # Stable order for reproducible behavior.
-    return sorted(files, key=lambda p: str(p))
+    return sorted(files, key=str)
 
 
 def recount3_cache_rm(
@@ -182,7 +191,7 @@ def recount3_cache_rm(
         if path.is_file() and _select(path):
             candidates.append(path)
 
-    candidates = sorted(candidates, key=lambda p: str(p))
+    candidates = sorted(candidates, key=str)
 
     if dry_run:
         return candidates

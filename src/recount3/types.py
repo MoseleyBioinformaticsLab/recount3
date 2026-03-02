@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from typing import Any, TypeAlias, Literal
+from typing import Any, Literal, TypeAlias
 
 CacheMode: TypeAlias = Literal["enable", "disable", "update"]
 CompatibilityMode: TypeAlias = Literal["family", "feature"]
