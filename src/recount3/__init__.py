@@ -32,7 +32,13 @@ from recount3._descriptions import (
     R3ResourceDescription,
 )
 from recount3.bundle import R3ResourceBundle
-from recount3.config import Config, default_config
+from recount3.config import (
+    Config,
+    default_config,
+    recount3_cache,
+    recount3_cache_files,
+    recount3_cache_rm,
+)
 from recount3.errors import (
     CompatibilityError,
     ConfigurationError,
@@ -59,7 +65,12 @@ from recount3.search import (
     search_metadata_files,
     search_project_all,
 )
-from recount3.types import CacheMode, CompatibilityMode, FieldSpec, StringOrIterable
+from recount3.types import (
+    CacheMode,
+    CompatibilityMode,
+    FieldSpec,
+    StringOrIterable,
+)
 from recount3.version import __version__
 
 __all__ = [
@@ -67,6 +78,9 @@ __all__ = [
     # Config
     "Config",
     "default_config",
+    "recount3_cache",
+    "recount3_cache_files",
+    "recount3_cache_rm",
     # Errors
     "Recount3Error",
     "ConfigurationError",

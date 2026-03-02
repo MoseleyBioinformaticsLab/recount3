@@ -14,6 +14,7 @@ Environment variables:
   * RECOUNT3_MAX_RETRIES
   * RECOUNT3_INSECURE_SSL
   * RECOUNT3_USER_AGENT
+  * RECOUNT3_CHUNK_SIZE
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from recount3._utils import _ensure_dir
+
+_DEFAULT_CHUNK_SIZE: int = 1024 * 1024  # 1 MiB
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +51,7 @@ class Config:
     user_agent: str
     cache_dir: Path
     cache_disabled: bool
-    chunk_size: int = 1024 * 1024  # 1 MiB
+    chunk_size: int = _DEFAULT_CHUNK_SIZE
 
 
 def default_config() -> Config:
@@ -66,7 +69,7 @@ def default_config() -> Config:
         .rstrip("/") + "/"
     )
     cache_dir = Path(
-        os.environ.get(  # TODO: Option to set via API & CLI.
+        os.environ.get(
             "RECOUNT3_CACHE_DIR",
             os.path.join(
                 os.path.expanduser("~"), ".cache", "recount3", "files"
@@ -87,7 +90,9 @@ def default_config() -> Config:
         ),
         cache_dir=cache_dir,
         cache_disabled=os.environ.get("RECOUNT3_CACHE_DISABLE", "0") == "1",
-        chunk_size=1024 * 1024,
+        chunk_size=int(
+            os.environ.get("RECOUNT3_CHUNK_SIZE", str(_DEFAULT_CHUNK_SIZE))
+        ),
     )
 
 

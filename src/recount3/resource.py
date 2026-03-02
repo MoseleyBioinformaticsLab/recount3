@@ -12,26 +12,25 @@ import threading
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 import scipy.io
 import scipy.sparse
 
-from recount3.config import Config, default_config
-from recount3._descriptions import R3ResourceDescription
-from recount3.errors import LoadError
-from recount3.types import CacheMode
 from recount3._bigwig import BigWigFile
+from recount3._descriptions import R3ResourceDescription
 from recount3._utils import (
     _cache_path,
+    _derive_junction_sidecar_url,
     _ensure_dir,
     _hardlink_or_copy,
     download_stream_to_zip,
     download_to_file,
     write_cached_file_to_zip,
-    _derive_junction_sidecar_url,
 )
+from recount3.config import Config, default_config
+from recount3.errors import LoadError
+from recount3.types import CacheMode
 
 _FILE_LOCK = threading.Lock()
 
@@ -168,7 +167,7 @@ class R3Resource:
 
     description: R3ResourceDescription
     url: str | None = None
-    filepath: Optional[str] = None
+    filepath: str | None = None
     config: Config | None = None
 
     _cached_data: object | None = dataclasses.field(default=None, init=False, repr=False)
@@ -260,12 +259,12 @@ class R3Resource:
 
     def download(
         self,
-        path: Optional[str] = None,
+        path: str | None = None,
         *,
         cache_mode: CacheMode = "enable",
         overwrite: bool = False,
         chunk_size: int | None = None,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Ensure resource availability and optionally materialize it.
 
         Transitions the remote resource to the local system. Caches the file,
@@ -292,6 +291,8 @@ class R3Resource:
                 cache_mode='disable') or path has an unsupported format.
         """
         cfg = self.config or default_config()
+        if cfg.cache_disabled:
+            cache_mode = "disable"
         cs = chunk_size or cfg.chunk_size
 
         if cache_mode not in ("enable", "disable", "update"):
@@ -438,7 +439,7 @@ class R3Resource:
             df.index = df.index.astype(str)
             self._cached_data = df
             return df
-        
+
         if rtype == "count_files_junctions":
             jxn_ext = str(getattr(self.description, "junction_extension", "MM")).upper()
 
