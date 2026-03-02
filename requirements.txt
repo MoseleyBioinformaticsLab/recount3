@@ -1,3 +1,3 @@
-pandas>=2.2,<3.0
-# pybigwig is optional, but recommended if supported (may fail on Windows)
-# pybigwig
+pandas
+numpy
+scipy

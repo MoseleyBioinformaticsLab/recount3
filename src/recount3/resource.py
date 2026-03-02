@@ -1,7 +1,7 @@
-"""Resource orchestration: URL, caching, downloading, and loading.
+"""Resource orchestration: URL resolution, caching, downloading, and loading.
 
-This module mirrors the original `R3Resource` behavior, with configuration
-threaded through (see :mod:`recount3.config`). No logic changes are made.
+This module serves as the core I/O and materialization engine for the recount3
+package.
 """
 
 from __future__ import annotations
@@ -15,14 +15,15 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-import scipy
+import scipy.io
+import scipy.sparse
 
-from .config import Config, default_config
-from ._descriptions import R3ResourceDescription
-from .errors import LoadError
-from .types import CacheMode
-from ._bigwig import BigWigFile
-from ._utils import (
+from recount3.config import Config, default_config
+from recount3._descriptions import R3ResourceDescription
+from recount3.errors import LoadError
+from recount3.types import CacheMode
+from recount3._bigwig import BigWigFile
+from recount3._utils import (
     _cache_path,
     _ensure_dir,
     _hardlink_or_copy,
@@ -42,7 +43,25 @@ def _ensure_cached_url(
     cfg: Config,
     chunk_size: int,
 ) -> Path:
-    """Download a URL into the standard cache path (if missing)."""
+    """Ensure a given URL is downloaded and cached locally.
+
+    Checks the specified cache root directory for the presence of the file
+    corresponding to the provided URL. If the file is missing, it acquires a
+    thread lock and downloads the file in chunks.
+
+    Args:
+        url: The full, absolute remote URL of the file to download.
+        cache_root: The file system directory path where cached data should
+            be persistently stored.
+        cfg: The global configuration object, which provides network parameters
+            such as connection timeouts, maximum retries, SSL verification
+            preferences, and the user agent string.
+        chunk_size: The specific number of bytes to read and write per chunk
+            during the download process.
+
+    Returns:
+        The absolute path pointing to the locally cached file.
+    """
     cache_path = _cache_path(url, cache_root)
     _ensure_dir(cache_path.parent)
     if cache_path.exists():
@@ -99,8 +118,22 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
     return rail_ids
 
 
-def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csc_matrix:
-    """Read a MatrixMarket file (optionally gzipped) as a CSR sparse matrix."""
+def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_matrix:
+    """Read a MatrixMarket file into a SciPy CSR sparse matrix.
+
+    Args:
+        mm_path: The local file system path pointing to the MatrixMarket
+            file (typically ending in .MM or .MM.gz).
+
+    Returns:
+        A 2-dimensional sparse matrix accurately representing the data parsed
+        from the file, formatted as a SciPy CSR matrix.
+
+    Raises:
+        LoadError: If the file cannot be opened, fails to parse as a valid
+            MatrixMarket format, or if the resulting parsed matrix does not
+            contain exactly two dimensions.
+    """
     try:
         if mm_path.suffix.lower() == ".gz":
             with gzip.open(mm_path, "rb") as fh:
@@ -112,20 +145,25 @@ def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csc_matrix:
 
     if getattr(mat, "ndim", None) != 2:
         raise LoadError(f"MatrixMarket {mm_path.name!r} is not 2-dimensional.")
-    if scipy.sparse.issparse(mat):
-        return mat.tocsr()  # pyright: ignore[reportAttributeAccessIssue]
     return scipy.sparse.csr_matrix(mat)
 
 
 @dataclass(slots=True)
 class R3Resource:
-    """Resource that manages URL, caching, materialization, and loading.
+    """Resource that manages URL resolution, caching, materialization, and loading.
 
     Attributes:
-      description: A :class:`R3ResourceDescription` used to build the path.
-      url: Full URL derived from config.base_url + ``description.url_path()``.
-      filepath: Optional local path when materialized to a directory.
-      config: Optional :class:`Config`; defaults to :func:`default_config`.
+        description: An instance of `R3ResourceDescription` that specifies the
+            metadata and the hierarchical path used to correctly locate and
+            define the resource.
+        url: The full, absolute network URL pointing to the remote resource. If
+            not explicitly provided during initialization, it is derived by
+            joining the configured base URL with the description's relative URL.
+        filepath: An optional string representing the absolute local path where
+            the resource was successfully materialized (either copied or linked).
+        config: An optional `Config` instance dictating strict network and cache
+            behaviors. If omitted, the global default configuration is dynamically
+            applied.
     """
 
     description: R3ResourceDescription
@@ -138,6 +176,7 @@ class R3Resource:
     # ---- Derived properties --------------------------------------------
 
     def __post_init__(self) -> None:
+        """Initialize derived fields after dataclass instantiation."""
         cfg = self.config or default_config()
         if self.url is None:
             self.url = urllib.parse.urljoin(cfg.base_url, self.description.url_path())
@@ -150,37 +189,57 @@ class R3Resource:
     # ---- Cache helpers --------------------------------------------------
 
     def _cache_root(self) -> Path:
+        """Resolve the root directory path used for local file caching.
+
+        Returns:
+            The absolute directory path where safely downloaded files are
+            globally cached, determined entirely by the active configuration.
+        """
         cfg = self.config or default_config()
         return Path(cfg.cache_dir)
 
     def _cached_path(self) -> Path:
+        """Compute the local cache file path for this specific resource.
+
+        Returns:
+            The fully resolved absolute path indicating exactly where this
+            resource's data persistently resides within the local cache hierarchy.
+        """
         return _cache_path(self.url or "", self._cache_root())
 
     def _ensure_cached(self, *, mode: CacheMode, chunk_size: int) -> Path:
-        """Ensure bytes are present in cache per mode; return cache path."""
+        """Ensure the resource data is available in the local cache.
+
+        Args:
+            mode: The primary caching strategy to employ. Must be 'enable' to
+                use pre-existing cached files (downloading only if absent),
+                or 'update' to force a fresh network download, overriding 
+                any previously existing files.
+            chunk_size: The fixed size in bytes utilized for reading and
+            writing active network streams.
+
+        Returns:
+            The absolute path object directing to the successfully locally
+            cached file.
+
+        Raises:
+            ValueError: If the caching mode is strictly set to 'disable' (as
+                local caching operations are fundamentally invalid in this
+                mode), or if the universally provided mode string is completely
+                unrecognized.
+        """
         cfg = self.config or default_config()
         cache_path = self._cached_path()
         if mode == "disable":
             raise ValueError("Cache is not used in 'disable' mode")
 
-        _ensure_dir(cache_path.parent)
-
         if mode == "enable":
-            if cache_path.exists():
-                return cache_path
-            with _FILE_LOCK:
-                if cache_path.exists():
-                    return cache_path
-                download_to_file(
-                    self.url or "",
-                    cache_path,
-                    chunk_size=chunk_size,
-                    timeout=cfg.timeout,
-                    insecure_ssl=cfg.insecure_ssl,
-                    user_agent=cfg.user_agent,
-                    attempts=cfg.max_retries,
-                )
-            return cache_path
+            return _ensure_cached_url(
+                url=self.url or "",
+                cache_root=self._cache_root(),
+                cfg=cfg,
+                chunk_size=chunk_size,
+            )
 
         if mode == "update":
             with _FILE_LOCK:
@@ -207,24 +266,30 @@ class R3Resource:
         overwrite: bool = False,
         chunk_size: int | None = None,
     ) -> Optional[str]:
-        """Ensure bytes are available and optionally materialize.
+        """Ensure resource availability and optionally materialize it.
+
+        Transitions the remote resource to the local system. Caches the file,
+        writes it to a specific directory, or appends it to a ZIP archive
+        depending on the arguments provided.
 
         Args:
-          path: ``None`` for cache-only; a directory to link/copy into; or a
-            ``.zip`` archive to add the resource under its URL path.
-          cache_mode: ``"enable"`` uses cache; ``"disable"`` streams to ``path``;
-            ``"update"`` refreshes cache first then behaves like ``"enable"``.
-          overwrite: Overwrite existing directory materialization when True.
-          chunk_size: Chunk size in bytes for streaming/copying. Defaults to the
-            configured value.
+            path: Target destination. If None, performs a cache-only download.
+                If a directory path, links or copies the file there. If a
+                '.zip' path, injects the file into the archive using `arcname`.
+            cache_mode: Caching behavior. 'enable' uses existing cache, 'disable'
+                streams directly to `path` without caching, 'update' forces a
+                cache refresh before materialization.
+            overwrite: If True, replaces existing files at the destination.
+            chunk_size: Byte size for streaming operations. Defaults to the
+                configured chunk size.
 
         Returns:
-          Destination file path if a directory materialization occurred; ``None``
-          for cache-only or zip additions.
+            The final file path if materialized to a directory. None if performing
+            a cache-only download or appending to a ZIP archive.
 
         Raises:
-          ValueError: For invalid combinations (e.g., ``path=None`` with
-            ``cache_mode='disable'``) or invalid ``path`` semantics.
+            ValueError: Combinations are invalid (e.g., path=None with
+                cache_mode='disable') or path has an unsupported format.
         """
         cfg = self.config or default_config()
         cs = chunk_size or cfg.chunk_size
@@ -242,7 +307,6 @@ class R3Resource:
             self._ensure_cached(mode=cache_mode, chunk_size=cs)
             return None
 
-        # Determine directory vs zip path.
         path_p = Path(path)
         is_zip = path_p.suffix.lower() == ".zip"
         is_dir = path_p.suffix == "" or path_p.is_dir()
@@ -297,20 +361,29 @@ class R3Resource:
     # ------------------------------------------------------------------
 
     def load(self, *, force: bool = False) -> object:
-        """Load the resource and cache the result on the instance.
+        """Parse the resource into an appropriate in-memory Python object.
+
+        Downloads and caches the resource if missing. Uses the resource description
+        to determine the parsing strategy (e.g., BigWig, tabular counts, junctions).
+        Caches the resulting object internally to prevent redundant disk I/O.
+
+        Args:
+            force: If True, bypasses the in-memory object cache and re-parses
+                data directly from disk.
 
         Returns:
-          The loaded object (typically a pandas.DataFrame for tabular resources,
-          or a :class:`BigWigFile` for BigWig resources).
+            The parsed object. Tabular and junction counts return a
+            `pandas.DataFrame`. BigWig files return a
+            `recount3._bigwig.BigWigFile` instance.
 
         Raises:
-          FileNotFoundError: If bytes are unexpectedly missing after download.
-          LoadError: If the resource type is unsupported for loading.
+            FileNotFoundError: The file is missing from the cache post-download.
+            LoadError: Parsing fails, matrix shapes mismatch, or the resource
+                type is currently unsupported.
         """
         if not force and self._cached_data is not None:
             return self._cached_data
 
-        # BigWig: open with pyBigWig and return a managed reader.
         if getattr(self.description, "resource_type", None) == "bigwig_files":
             self.download(path=None, cache_mode="enable")
             cached = self._cached_path()
@@ -323,7 +396,6 @@ class R3Resource:
 
         rtype = getattr(self.description, "resource_type", None)
         if rtype == "count_files_gene_or_exon":
-            # Ensure bytes are present locally (cache).
             self.download(path=None, cache_mode="enable")
             cached = self._cached_path()
             if not cached.exists():
@@ -340,11 +412,10 @@ class R3Resource:
                     low_memory=False,
                 )
             except Exception:
-                # Fallback: auto-detect delimiter (tabs/spaces), slower but robust.
                 df = pd.read_csv(
                     cached,
                     compression="infer",
-                    sep=None,            # auto-sniff
+                    sep=None,
                     header=0,
                     comment="#",
                     index_col=None,
@@ -354,8 +425,6 @@ class R3Resource:
                 raise LoadError(
                     f"Parsed an empty or 1-column matrix from {cached.name!r}."
                 )
-            # First column should be the feature id (gene/exon). Detect by name
-            # or position and move it to the index.
             cols_lower = [str(c).strip().lower() for c in df.columns]
             try_index = None
             for candidate in ("gene_id", "exon_id", "feature_id"):
@@ -365,7 +434,6 @@ class R3Resource:
             if try_index is None:
                 try_index = df.columns[0]
             df = df.set_index(try_index)
-            # Normalize labels to str for stable merges/joins later.
             df.columns = [str(c) for c in df.columns]
             df.index = df.index.astype(str)
             self._cached_data = df
@@ -381,7 +449,6 @@ class R3Resource:
                 raise FileNotFoundError(str(mm_cached))
 
             if jxn_ext == "MM":
-                # Derive and cache the paired ID file to name columns by rail_id.
                 try:
                     id_url = _derive_junction_sidecar_url(self.url or "", "ID")
                 except Exception as exc:
@@ -399,10 +466,13 @@ class R3Resource:
                 rail_ids = _read_id_rail_ids(id_cached)
                 mat = _read_mm_matrix(mm_cached)
 
-                if mat.shape[1] != len(rail_ids):
+                mat_shape = mat.shape
+                if mat_shape is None:
+                    raise LoadError(f"MatrixMarket {mm_cached.name!r} has undefined shape.")
+                if mat_shape[1] != len(rail_ids):
                     raise LoadError(
                         "Junction MM column count does not match ID length: "
-                        f"{mat.shape[1]} != {len(rail_ids)} "
+                        f"{mat_shape[1]} != {len(rail_ids)} "
                         f"({mm_cached.name!r} vs {id_cached.name!r})."
                     )
 
@@ -422,7 +492,6 @@ class R3Resource:
                 f"Unsupported junction_extension {jxn_ext!r} for {mm_cached.name!r}."
             )
 
-        # Ensure bytes are present locally (cache).
         self.download(path=None, cache_mode="enable")
         cached = self._cached_path()
         if not cached.exists():
@@ -443,15 +512,26 @@ class R3Resource:
     # ------------------------------------------------------------------
 
     def is_loaded(self) -> bool:
-        """Return whether this resource has an in-memory loaded object."""
+        """Check if the resource currently holds a parsed in-memory object.
+
+        Returns:
+            True if an object is cached in memory, False otherwise.
+        """
         return self._cached_data is not None
 
     def get_loaded(self) -> object | None:
-        """Return the in-memory loaded object without triggering I/O."""
+        """Retrieve the parsed in-memory object without triggering disk I/O.
+
+        Returns:
+            The loaded object if present, otherwise None.
+        """
         return self._cached_data
 
     def clear_loaded(self) -> None:
-        """Clear only the in-memory loaded object (does not touch on-disk cache)."""
+        """Evict the in-memory object cache and close file handles if applicable.
+
+        Does not delete or modify the on-disk file cache.
+        """
         obj = self._cached_data
         try:
             if isinstance(obj, BigWigFile):
@@ -459,6 +539,7 @@ class R3Resource:
         finally:
             self._cached_data = None
 
-    def __repr__(self) -> str:  # pragma: no cover
+    def __repr__(self) -> str:
+        """Return a string representation of the instance."""
         cls = self.__class__.__name__
         return f"{cls}(url={self.url!r}, arcname={self.arcname!r}, filepath={self.filepath!r})"

@@ -58,7 +58,7 @@ import pandas as pd
 
 from recount3 import errors
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     import biocframe  # type: ignore[import-not-found]
     import genomicranges  # type: ignore[import-not-found]
     import summarizedexperiment  # type: ignore[import-not-found]
@@ -321,7 +321,7 @@ def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
             last_exc = exc
             if i < attempts - 1:
                 time.sleep(base_sleep * (2**i))
-    if last_exc:
+    if last_exc:  # pragma: no branch
         raise last_exc
 
 
