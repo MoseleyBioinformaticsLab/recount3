@@ -9,4 +9,4 @@ CacheMode: TypeAlias = Literal["enable", "disable", "update"]
 CompatibilityMode: TypeAlias = Literal["family", "feature"]
 
 StringOrIterable: TypeAlias = str | Iterable[str]
-FieldSpec: TypeAlias = StringOrIterable | Callable[[Any | None], bool] | None
+FieldSpec: TypeAlias = StringOrIterable | Callable[[Any], bool] | None
