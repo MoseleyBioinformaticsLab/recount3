@@ -379,7 +379,7 @@ def _coerce_gtf_phase(frame: pd.Series) -> pd.Series:
     frame_str = frame.astype("string").str.strip()
 
     # GTF uses "." to indicate missing.
-    frame_str = frame_str.replace({".": pd.NA, "": pd.NA})
+    frame_str = frame_str.replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
 
     phase = pd.to_numeric(frame_str, errors="coerce").astype("Int64")
 
@@ -418,7 +418,7 @@ def _coerce_gtf_bp_length(
     width = (ends_num - starts_num + 1).astype("Int64")
 
     # If score is "." everywhere (typical GTF), done.
-    score_str = score.astype("string").str.strip().replace({".": pd.NA, "": pd.NA})
+    score_str = score.astype("string").str.strip().replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
     score_num = pd.to_numeric(score_str, errors="coerce")
 
     # Decide whether score looks like "length" by match rate vs width.
@@ -932,8 +932,8 @@ def _construct_summarized_experiment(
 
     return SummarizedExperimentCls(
         assays={assay_name: counts_np},
-        row_data=row_data,
-        column_data=col_data,
+        row_data=row_data,  # pyright: ignore[reportArgumentType] (coerced)
+        column_data=col_data,  # pyright: ignore[reportArgumentType] (coerced)
         row_names=row_names,
         column_names=col_names,
         metadata=dict(metadata) if metadata is not None else None,
@@ -1046,8 +1046,8 @@ def _construct_ranged_summarized_experiment(
     return RangedSummarizedExperimentCls(
         assays={assay_name: counts_np},
         row_ranges=gr,
-        row_data=row_data,
-        column_data=col_data,
+        row_data=row_data,  # pyright: ignore[reportArgumentType] (coerced)
+        column_data=col_data,  # pyright: ignore[reportArgumentType] (coerced)
         row_names=row_names,
         column_names=col_names,
         metadata=dict(metadata) if metadata is not None else None,
@@ -1253,9 +1253,9 @@ class R3ResourceBundle:
           recount3.errors.ConfigurationError: If the underlying search
             logic reports configuration problems.
         """
-        organism_values = search._as_tuple(organism)
-        data_source_values = search._as_tuple(data_source)
-        project_values = search._as_tuple(project)
+        organism_values = search.as_tuple(organism)
+        data_source_values = search.as_tuple(data_source)
+        project_values = search.as_tuple(project)
 
         if not organism_values or not data_source_values or not project_values:
             raise ValueError(
@@ -1472,7 +1472,7 @@ class R3ResourceBundle:
 
         Each keyword argument corresponds to an attribute on
         :class:`recount3._descriptions.R3ResourceDescription`. Values are
-        interpreted using :func:`recount3.search._match_spec`, allowing
+        interpreted using :func:`recount3.search.match_spec`, allowing
         simple values, iterables of values, or callables.
 
         Args:
@@ -1514,7 +1514,7 @@ class R3ResourceBundle:
         for res in self.resources:
             desc = res.description
             fields_ok = all(
-                search._match_spec(
+                search.match_spec(
                     getattr(desc, name, None),
                     spec,
                 )  # type: ignore[arg-type]

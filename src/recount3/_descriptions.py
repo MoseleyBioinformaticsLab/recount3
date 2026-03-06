@@ -40,8 +40,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Callable, Optional, cast
 
-_VALID_ORGANISMS: frozenset[str] = frozenset({"human", "mouse"})
-_VALID_DATA_SOURCES: frozenset[str] = frozenset({"sra", "gtex", "tcga"})
+VALID_ORGANISMS: frozenset[str] = frozenset({"human", "mouse"})
+VALID_DATA_SOURCES: frozenset[str] = frozenset({"sra", "gtex", "tcga"})
 _VALID_GENOMIC_UNITS: frozenset[str] = frozenset({"gene", "exon"})
 
 
@@ -234,20 +234,20 @@ class R3ResourceDescription:
         """Validates that `organism` is one of the supported values.
 
         Raises:
-            ValueError: If `organism` is not in `_VALID_ORGANISMS`.
+            ValueError: If `organism` is not in `VALID_ORGANISMS`.
         """
         organism = getattr(self, "organism", None)
-        if organism not in _VALID_ORGANISMS:
+        if organism not in VALID_ORGANISMS:
             raise ValueError(f"Invalid organism: {organism!r}")
 
     def _check_data_source(self) -> None:
         """Validates that `data_source` is one of the supported values.
 
         Raises:
-            ValueError: If `data_source` is not in `_VALID_DATA_SOURCES`.
+            ValueError: If `data_source` is not in `VALID_DATA_SOURCES`.
         """
         data_source = getattr(self, "data_source", None)
-        if data_source not in _VALID_DATA_SOURCES:
+        if data_source not in VALID_DATA_SOURCES:
             raise ValueError(f"Invalid data_source: {data_source!r}")
 
     def _check_genomic_unit(self) -> None:
@@ -438,10 +438,6 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
       {organism}/data_sources/{data_source}/base_sums/
         {p2(project)}/{project}/{p2(sample)}/
         {data_source}.base_sums.{project}_{sample}.ALL.bw
-
-    Note:
-        BigWig resources are typically "download-only" in this library; loading
-        may be implemented elsewhere via optional dependencies.
     """
 
     def __post_init__(self) -> None:
