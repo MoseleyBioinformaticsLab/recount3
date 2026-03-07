@@ -1,13 +1,14 @@
 """Resource descriptions and duffel URL-path construction.
 
-This module defines a small set of *resource description* dataclasses for the
+This module defines a small set of resource description dataclasses for the
 recount3 duffel layout. A description is a validated, immutable-ish bundle of
 parameters (organism, project, etc.) that can deterministically construct the
 relative path to a resource in the duffel repository.
 
 The main entry point is :class:`R3ResourceDescription`, which acts as a
-multi-factory: instantiating ``R3ResourceDescription(resource_type=...)`` returns
-an instance of the registered concrete subclass for that ``resource_type``.
+multi-factory: instantiating ``R3ResourceDescription(resource_type=...)``
+returns an instance of the registered concrete subclass for that
+``resource_type``.
 
 Typical usage:
 
@@ -38,7 +39,8 @@ Design notes:
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable, Optional, cast
+from collections.abc import Callable
+from typing import Any, cast
 
 VALID_ORGANISMS: frozenset[str] = frozenset({"human", "mouse"})
 VALID_DATA_SOURCES: frozenset[str] = frozenset({"sra", "gtex", "tcga"})
@@ -99,15 +101,15 @@ class _R3CommonFields:
     """
 
     resource_type: str
-    organism: Optional[str] = None
-    data_source: Optional[str] = None
-    genomic_unit: Optional[str] = None
-    project: Optional[str] = None
-    sample: Optional[str] = None
-    annotation_extension: Optional[str] = None
-    junction_type: Optional[str] = None
-    junction_extension: Optional[str] = None
-    table_name: Optional[str] = None
+    organism: str | None = None
+    data_source: str | None = None
+    genomic_unit: str | None = None
+    project: str | None = None
+    sample: str | None = None
+    annotation_extension: str | None = None
+    junction_type: str | None = None
+    junction_extension: str | None = None
+    table_name: str | None = None
 
 
 class R3ResourceDescription:
@@ -132,17 +134,23 @@ class R3ResourceDescription:
     - Implement `url_path()` to return the duffel-relative path.
 
     Attributes:
-        _TYPE_REGISTRY: Mapping from resource-type string to concrete class.
-            This is mutable by design to support dynamic registration.
+        _TYPE_REGISTRY: Mapping from resource-type strings to concrete
+            classes. Mutable to allow dynamic registration.
+        _RESOURCE_TYPE: Registration string key. Injected into concrete
+            subclasses by the ``register_type()`` decorator.
+        resource_type: Resource-type discriminator. Declared here for
+            static typing; implemented by ``_R3CommonFields``.
     """
 
-    _TYPE_REGISTRY: dict[str, type["R3ResourceDescription"]] = {}
+    _TYPE_REGISTRY: dict[str, type[R3ResourceDescription]] = {}
+    _RESOURCE_TYPE: str
+    resource_type: str
 
     def __new__(
         cls,
         *args: Any,
         **kwargs: Any,
-    ) -> "R3ResourceDescription":
+    ) -> R3ResourceDescription:
         """Constructs and returns an instance of the appropriate subclass.
 
         The factory accepts the resource type either as:
@@ -188,7 +196,7 @@ class R3ResourceDescription:
     def register_type(
         cls,
         resource_type: str,
-    ) -> Callable[[type["R3ResourceDescription"]], type["R3ResourceDescription"]]:
+    ) -> Callable[[type[R3ResourceDescription]], type[R3ResourceDescription]]:
         """Registers a concrete subclass for a given `resource_type`.
 
         This decorator binds `resource_type` to the provided subclass and also
@@ -208,10 +216,10 @@ class R3ResourceDescription:
         """
 
         def _decorator(
-            subcls: type["R3ResourceDescription"],
-        ) -> type["R3ResourceDescription"]:
+            subcls: type[R3ResourceDescription],
+        ) -> type[R3ResourceDescription]:
             cls._TYPE_REGISTRY[resource_type] = subcls
-            setattr(subcls, "_RESOURCE_TYPE", resource_type)
+            subcls._RESOURCE_TYPE = resource_type
             return subcls
 
         return _decorator
@@ -264,19 +272,19 @@ class R3ResourceDescription:
     def url_path(self) -> str:
         """Return the duffel-relative URL path for this resource.
 
-        `R3ResourceDescription` is a multi-factory and abstract interface: calling
-        `R3ResourceDescription(resource_type=...)` returns an instance of a concrete
-        registered subclass (e.g., `R3Annotations`, `R3GeneOrExonCounts`). Those
-        subclasses implement `url_path()` to construct a deterministic path within
-        the duffel repository layout.
+        `R3ResourceDescription` is a multi-factory and abstract interface:
+        calling ``R3ResourceDescription(resource_type=...)`` returns an
+        instance of a concrete registered subclass (e.g. `R3Annotations`).
+        Those subclasses implement `url_path()` to construct a deterministic
+        path within the duffel repository layout.
 
-        This base-class method is therefore not expected to be called directly; it
-        exists to document the interface and to provide a consistent method name
+        This base-class method is not expected to be called directly; it
+        exists to document the interface and provide a consistent method name
         across all description types.
 
-        Implementations must return a path without a leading slash. Callers should
-        join this value onto the configured base URL (and add any separators as
-        needed).
+        Implementations must return a path without a leading slash. Callers
+        should join this value onto the configured base URL (and add any
+        separators as needed).
 
         Returns:
             A duffel-relative path string, no leading slash.
