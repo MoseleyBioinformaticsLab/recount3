@@ -1,0 +1,112 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recount3"
+dynamic = ["version", "dependencies"]
+description = "CLI and API for searching, manifesting, and downloading recount3 resources."
+readme = { file = "README.rst", content-type = "text/x-rst" }
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Alexander A. Alsalihi" },
+  { name = "Robert M. Flight" },
+  { name = "Hunter N.B. Moseley" }
+]
+maintainers = [
+  { name = "Moseley Bioinformatics Lab" }
+]
+keywords = [
+  "bioinformatics",
+  "genomics",
+  "recount3",
+  "RNA-seq",
+  "CLI",
+  "data-pipelines",
+  "manifests",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+
+# Console entry point: `recount3`
+[project.scripts]
+recount3 = "recount3.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/MoseleyBioinformaticsLab/recount3"
+Repository = "https://github.com/MoseleyBioinformaticsLab/recount3"
+Issues = "https://github.com/MoseleyBioinformaticsLab/recount3/issues"
+Documentation = "https://moseleybioinformaticslab.github.io/recount3/"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["recount3*"]
+
+[tool.setuptools.package-data]
+recount3 = ["py.typed"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+version = { attr = "recount3.version.__version__" }
+
+[project.optional-dependencies]
+bigwig = [
+  "pybigwig>=0.3.18",
+]
+biocpy = [
+  "biocframe>=0.7",
+  "genomicranges>=0.8",
+  "summarizedexperiment>=0.6",
+]
+docs = [
+  "sphinx>=7",
+]
+dev = [
+  "pytest>=8,<9",
+  "pytest-cov>=5,<6",
+  "pytest-mock>=3.12,<4",
+  "pytest-xdist>=3,<4",
+  "pylint>=3.2,<4",
+  "build>=1.2",
+  "twine>=5",
+]
+
+all = [
+  "recount3[bigwig,biocpy,docs,dev]"
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = [
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+]
