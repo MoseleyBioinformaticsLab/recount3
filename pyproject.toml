@@ -4,8 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "recount3"
-dynamic = ["version", "dependencies"]
+dynamic = ["version"]
 description = "CLI and API for searching, manifesting, and downloading recount3 resources."
+dependencies = [
+  "numpy>=2.0,<3.0",
+  "pandas>=2.2,<3.0",
+  "scipy>=1.13,<2.0",
+]
 readme = { file = "README.rst", content-type = "text/x-rst" }
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -64,7 +69,6 @@ include = ["recount3*"]
 recount3 = ["py.typed"]
 
 [tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
 version = { attr = "recount3.version.__version__" }
 
 [project.optional-dependencies]
