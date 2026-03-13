@@ -841,7 +841,6 @@ def _iter_manifest(
     """
     if path_or_dash == "-":
         stream = sys.stdin
-        closer = False
     else:
         p = Path(path_or_dash)
         with p.open("r", encoding="utf-8") as infile:
@@ -854,16 +853,12 @@ def _iter_manifest(
         return
 
     # stdin mode
-    try:
-        for line in stream:
-            line = line.strip()
-            if not line:
-                continue
-            obj = json.loads(line)
-            yield _resource_from_dict(obj, cfg)
-    finally:
-        if closer:  # pragma: no cover
-            stream.close()
+    for line in stream:
+        line = line.strip()
+        if not line:
+            continue
+        obj = json.loads(line)
+        yield _resource_from_dict(obj, cfg)
 
 
 # --------------------------------------------------------------------------- #

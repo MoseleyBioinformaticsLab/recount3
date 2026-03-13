@@ -46,10 +46,10 @@ from recount3 import resource
 from recount3 import search
 from recount3 import types as r3_types
 
-if TYPE_CHECKING:  # for static type checkers
+if TYPE_CHECKING:  # pragma: no cover
     import summarizedexperiment  # type: ignore[import-not-found]
+    import genomicranges  # type: ignore[import-not-found]
 
-_GENE_ID_ATTR_RE = re.compile(r'\bgene_id\s+"([^"]+)"')
 _EXON_ID_ATTR_RE = re.compile(r'\bexon_id\s+"([^"]+)"')
 _RECOUNT_EXON_ID_ATTR_RE = re.compile(r'\brecount_exon_id\s+"([^"]+)"')
 
@@ -303,12 +303,12 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
         df = res.load()
         if isinstance(df, pd.DataFrame):
             return df
-    except Exception:  # pragma: no cover - fall back to manual parsing.
+    except Exception:  # fall back to manual parsing.
         pass
 
     try:
         path = res._cached_path()  # pylint: disable=protected-access
-    except Exception as exc:  # pragma: no cover - defensive.
+    except Exception as exc:
         raise ValueError(f"Cannot resolve cached RR path for: {res.url}") from exc
 
     import gzip
@@ -637,7 +637,7 @@ def _ranges_from_gtf(
             expand=False,
         )
         missing = feature_ids.isna()
-        if missing.any():
+        if missing.any():  # pragma: no branch
             exon_ids = attrs[missing].str.extract(
                 _EXON_ID_ATTR_RE,
                 expand=False,
@@ -738,7 +738,7 @@ def _peek_gtf_feature_counts(res: resource.R3Resource, *, max_lines: int = 50000
 
 
 def _select_gtf_resource_for_unit(
-    bundle: "R3ResourceBundle",
+    bundle: R3ResourceBundle,
     *,
     genomic_unit: str,
     annotation_extension: Optional[str],
@@ -791,17 +791,14 @@ def _select_gtf_resource_for_unit(
                     dict(feats.most_common(5)),
                 )
                 return res
-        except Exception as exc:  # pragma: no cover
+        except Exception as exc:
             logging.warning("Failed to peek GTF features for %s: %r", res.url, exc)
 
     # If none contain the feature kind, return the best-scoring one (will error later with a clearer message).
     return candidates[0]
 
-def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
+def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
     """Construct a GenomicRanges object from a pandas DataFrame.
-
-    This helper tries multiple constructor variants to support different
-    versions of the :mod:`genomicranges` package.
 
     Args:
       ranges_df: DataFrame with at least ``seqnames``, ``starts``,
@@ -812,34 +809,9 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> Any:
 
     Raises:
       ImportError: If :mod:`genomicranges` cannot be imported.
-      TypeError: If no supported constructor is available.
     """
     GenomicRangesCls = _utils.get_genomicranges_class()
-
-    # Preferred recent API: classmethod from_pandas.
-    if hasattr(GenomicRangesCls, "from_pandas"):
-        return GenomicRangesCls.from_pandas(ranges_df)
-
-    # Older classmethod name.
-    if hasattr(GenomicRangesCls, "fromPandas"):  # pragma: no cover - legacy.
-        return GenomicRangesCls.fromPandas(ranges_df)  # pyright: ignore[reportAttributeAccessIssue]
-
-    # Module-level constructor used in some releases.
-    try:  # pragma: no cover - optional compatibility path.
-        import genomicranges as genomicranges_module  # type: ignore[import-not-found]
-    except Exception as exc:
-        raise ImportError(
-            "GenomicRanges is installed but no 'from_pandas' style "
-            "constructor could be found."
-        ) from exc
-
-    if hasattr(genomicranges_module, "from_pandas"):
-        return genomicranges_module.from_pandas(ranges_df)  # type: ignore
-
-    raise TypeError(
-        "Could not construct a GenomicRanges object from a pandas DataFrame. "
-        "No 'from_pandas' or 'fromPandas' constructor was found."
-    )
+    return GenomicRangesCls.from_pandas(ranges_df)
 
 
 def _construct_summarized_experiment(
@@ -2239,7 +2211,7 @@ class R3ResourceBundle:
                     ranges_df = idxed[base_cols + enrich_cols].copy()
                     ranges_df.index = row_names
 
-                    if enrich_cols:
+                    if enrich_cols:  # pragma: no branch
                         row_data_df = row_data_df.join(ranges_df[enrich_cols])
                 except Exception as exc:  # pylint: disable=broad-except
                     logging.warning(

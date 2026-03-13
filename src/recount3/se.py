@@ -41,8 +41,7 @@ from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
 from recount3 import _utils
 
-if TYPE_CHECKING:  # for static type checkers
-    import biocframe  # type: ignore[import-not-found]
+if TYPE_CHECKING:  # pragma: no cover
     import summarizedexperiment  # type: ignore[import-not-found]
 
 

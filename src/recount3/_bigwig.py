@@ -31,7 +31,7 @@ from types import TracebackType
 
 from recount3 import _utils
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     import pyBigWig  # type: ignore[import-not-found]
 
 
