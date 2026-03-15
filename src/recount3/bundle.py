@@ -96,6 +96,26 @@ def _ensure_unique_columns(
     return out
 
 
+def _default_assay_name(genomic_unit: str, assay_name: str) -> str:
+    """Return the appropriate assay name for the given genomic unit.
+
+    The R reference package uses ``"raw_counts"`` for gene and exon assays
+    (which represent base-pair coverage sums) and ``"counts"`` for junction
+    assays (which are actual read counts). This helper applies the same
+    convention when the caller uses the default assay name.
+
+    Args:
+      genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
+      assay_name: The caller-provided assay name.
+
+    Returns:
+      The resolved assay name.
+    """
+    if assay_name == "raw_counts" and genomic_unit == "junction":
+        return "counts"
+    return assay_name
+
+
 _METADATA_MERGE_KEYS = ("rail_id", "external_id", "study")
 _METADATA_KEY_SYNONYMS = {
     # Backwards-compatibility with older recount3 metadata.
@@ -1929,6 +1949,89 @@ class R3ResourceBundle:
                 ) from exc
             raise
 
+    def _add_bigwig_urls(
+        self,
+        col_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Add a ``BigWigURL`` column to sample metadata.
+
+        For each sample (identified by ``external_id`` in ``col_df``), this
+        method constructs the duffel URL for its BigWig coverage file by
+        inspecting the bundle's count resources to infer ``organism``,
+        ``data_source``, and ``project``.
+
+        This matches the R reference behavior in ``create_rse_manual()``
+        where ``metadata$BigWigURL`` is populated via ``locate_url()``.
+
+        Args:
+          col_df: Sample metadata DataFrame with an ``external_id`` column.
+
+        Returns:
+          A copy of ``col_df`` with a ``BigWigURL`` column appended. If
+          the necessary resource attributes cannot be inferred, the column
+          contains ``pd.NA``.
+        """
+        from recount3._descriptions import R3BigWig
+        from recount3.config import default_config
+
+        out = col_df.copy()
+
+        if "external_id" not in out.columns:
+            out["BigWigURL"] = pd.NA
+            return out
+
+        count_types = {"count_files_gene_or_exon", "count_files_junctions"}
+        organism = data_source = project = None
+        for res in self.resources:
+            desc = res.description
+            rt = getattr(desc, "resource_type", None)
+            if rt in count_types:
+                organism = getattr(desc, "organism", None)
+                data_source = getattr(desc, "data_source", None)
+                project = getattr(desc, "project", None)
+                if organism and data_source and project:
+                    break
+
+        if not (organism and data_source and project):
+            out["BigWigURL"] = pd.NA
+            return out
+
+        file_source_col = None
+        for col in out.columns:
+            if col.lower().endswith("file_source"):
+                file_source_col = col
+                break
+        if file_source_col is not None:
+            first_source = out[file_source_col].dropna().iloc[0] if not out[file_source_col].dropna().empty else None
+            if first_source and isinstance(first_source, str):
+                resolved = first_source.strip().rstrip("/").rsplit("/", 1)[-1]
+                if resolved:
+                    data_source = resolved
+
+        cfg = default_config()
+        base_url = cfg.base_url.rstrip("/")
+
+        urls: list[str | None] = []
+        for ext_id in out["external_id"]:
+            ext_id_str = str(ext_id).strip()
+            if not ext_id_str or ext_id_str == "<NA>":
+                urls.append(None)
+                continue
+            try:
+                bw_desc = R3BigWig(
+                    resource_type="bigwig_files",
+                    organism=organism,
+                    data_source=data_source,
+                    project=project,
+                    sample=ext_id_str,
+                )
+                urls.append(f"{base_url}/{bw_desc.url_path()}")
+            except Exception:  # pylint: disable=broad-except
+                urls.append(None)
+
+        out["BigWigURL"] = urls
+        return out
+
     def _normalize_sample_metadata(
         self,
         *,
@@ -2072,6 +2175,8 @@ class R3ResourceBundle:
             col_df,
         )
 
+        col_df = self._add_bigwig_urls(col_df)
+
         original_feature_ids = list(counts_df.index)
         dup_count = int(pd.Index(original_feature_ids).duplicated().sum())
 
@@ -2096,7 +2201,7 @@ class R3ResourceBundle:
             counts_df=counts_df,
             row_df=row_df,
             col_df=col_df,
-            assay_name=assay_name,
+            assay_name=_default_assay_name(genomic_unit, assay_name),
         )
 
     def to_ranged_summarized_experiment(
@@ -2171,6 +2276,8 @@ class R3ResourceBundle:
             counts_df,
             col_df,
         )
+
+        col_df = self._add_bigwig_urls(col_df)
 
         original_feature_ids = list(counts_df.index)
         dup_count = int(pd.Index(original_feature_ids).duplicated().sum())
@@ -2389,7 +2496,7 @@ class R3ResourceBundle:
             row_df=row_data_df,
             col_df=col_df,
             ranges_df=ranges_df,
-            assay_name=assay_name,
+            assay_name=_default_assay_name(genomic_unit, assay_name),
         )
 
     def download(

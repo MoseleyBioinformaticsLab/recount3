@@ -2856,3 +2856,124 @@ class TestNormalizeSampleMetadataExternalIdAbsent:
 
         assert "external_id" in result.columns
         assert list(result["external_id"]) == ["SRR001", "SRR002"]
+
+
+class TestAddBigwigUrls:
+    def test_no_external_id_column_returns_na(self) -> None:
+        b = R3ResourceBundle()
+        col_df = pd.DataFrame({"other": ["SRR001"]})
+        result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+        assert pd.isna(result["BigWigURL"].iloc[0])
+
+    def test_no_count_resources_sets_bigwig_na(self) -> None:
+        b = R3ResourceBundle()
+        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+        assert pd.isna(result["BigWigURL"].iloc[0])
+
+    def test_non_count_resource_skipped_then_returns_na(self) -> None:
+        meta_res = _mock_resource("metadata_files")
+        b = R3ResourceBundle(resources=[meta_res])
+        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        result = b._add_bigwig_urls(col_df)
+        assert pd.isna(result["BigWigURL"].iloc[0])
+
+    def test_count_resource_missing_organism_continues_then_na(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            organism=None,
+            data_source="sra",
+            project="SRP001",
+        )
+        b = R3ResourceBundle(resources=[res])
+        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        result = b._add_bigwig_urls(col_df)
+        assert pd.isna(result["BigWigURL"].iloc[0])
+
+    def test_na_external_id_appends_none_url(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            organism="human",
+            data_source="sra",
+            project="SRP001",
+        )
+        b = R3ResourceBundle(resources=[res])
+        col_df = pd.DataFrame({"external_id": pd.array([pd.NA], dtype="string")})
+        result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+        assert result["BigWigURL"].iloc[0] is None
+
+    def test_file_source_col_is_found_and_applied(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            organism="human",
+            data_source="sra",
+            project="SRP001",
+        )
+        b = R3ResourceBundle(resources=[res])
+        col_df = pd.DataFrame({
+            "external_id": pd.array(["SRR001"], dtype="string"),
+            "recount_seq_qc__file_source": ["some/path/sra"],
+        })
+        mock_bw = MagicMock()
+        mock_bw.url_path.return_value = "human/data_sources/sra/base_sums/SRP001/SRR001.bw"
+        mock_cfg = MagicMock()
+        mock_cfg.base_url = "https://duffel.example.com/recount3"
+        with patch("recount3._descriptions.R3BigWig", return_value=mock_bw), \
+             patch("recount3.config.default_config", return_value=mock_cfg):
+            result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+        assert result["BigWigURL"].iloc[0] is not None
+
+    def test_file_source_col_non_string_value_skips_override(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            organism="human",
+            data_source="sra",
+            project="SRP001",
+        )
+        b = R3ResourceBundle(resources=[res])
+        col_df = pd.DataFrame({
+            "external_id": pd.array([pd.NA], dtype="string"),
+            "recount_seq_qc__file_source": [42],
+        })
+        result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+
+    def test_file_source_col_slash_only_skips_override(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            organism="human",
+            data_source="sra",
+            project="SRP001",
+        )
+        b = R3ResourceBundle(resources=[res])
+        col_df = pd.DataFrame({
+            "external_id": pd.array([pd.NA], dtype="string"),
+            "recount_seq_qc__file_source": ["/"],
+        })
+        result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+
+    def test_successful_bigwig_url_constructed(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            organism="human",
+            data_source="sra",
+            project="SRP001",
+        )
+        b = R3ResourceBundle(resources=[res])
+        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        mock_bw = MagicMock()
+        mock_bw.url_path.return_value = "human/data_sources/sra/base_sums/SRP001/SRR001.bw"
+        mock_cfg = MagicMock()
+        mock_cfg.base_url = "https://duffel.example.com/recount3"
+        with patch("recount3._descriptions.R3BigWig", return_value=mock_bw), \
+             patch("recount3.config.default_config", return_value=mock_cfg):
+            result = b._add_bigwig_urls(col_df)
+        assert "BigWigURL" in result.columns
+        url = result["BigWigURL"].iloc[0]
+        assert url is not None
+        assert url.startswith("https://duffel.example.com/recount3/")

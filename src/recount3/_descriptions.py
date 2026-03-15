@@ -75,6 +75,32 @@ def _p2(value: str | None) -> str:
     return value[-2:]
 
 
+def _bigwig_sample_shard(sample: str | None, data_source: str | None) -> str:
+    """Return the shard subdirectory for a BigWig sample file.
+
+    The recount3 duffel layout uses a 2-character subdirectory derived from
+    the sample identifier to reduce directory fanout. For GTEx samples the
+    shard is drawn from two characters *before* the final two (positions
+    ``[-4:-2]``), whereas for all other sources it is the final two
+    characters (``[-2:]``). The result is always uppercased, matching the
+    R reference implementation.
+
+    Args:
+        sample: Sample identifier string.
+        data_source: Data source identifier (e.g., ``"sra"``, ``"gtex"``).
+
+    Returns:
+        A 2-character uppercase shard string, or the empty string if
+        ``sample`` is None or too short.
+    """
+    if not sample:
+        return ""
+    is_gtex = isinstance(data_source, str) and "gtex" in data_source.lower()
+    if is_gtex and len(sample) >= 4:
+        return sample[-4:-2].upper()
+    return sample[-2:].upper()
+
+
 @dataclasses.dataclass(slots=True)
 class _R3CommonFields:
     """Shared field schema for all resource description subclasses.
@@ -219,11 +245,10 @@ class R3ResourceDescription:
             subcls: type[R3ResourceDescription],
         ) -> type[R3ResourceDescription]:
             cls._TYPE_REGISTRY[resource_type] = subcls
-            subcls._RESOURCE_TYPE = resource_type
+            subcls._RESOURCE_TYPE = resource_type  # pylint: disable=protected-access
             return subcls
 
         return _decorator
-
 
     def _require(self, *names: str) -> None:
         """Ensures that the given attributes are present and non-empty.
@@ -267,7 +292,6 @@ class R3ResourceDescription:
         genomic_unit = getattr(self, "genomic_unit", None)
         if genomic_unit not in _VALID_GENOMIC_UNITS:
             raise ValueError(f"Invalid genomic_unit: {genomic_unit!r}")
-
 
     def url_path(self) -> str:
         """Return the duffel-relative URL path for this resource.
@@ -444,8 +468,11 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
 
     Duffel layout:
       {organism}/data_sources/{data_source}/base_sums/
-        {p2(project)}/{project}/{p2(sample)}/
+        {p2(project)}/{project}/{shard(sample, data_source)}/
         {data_source}.base_sums.{project}_{sample}.ALL.bw
+
+    The sample shard subdirectory uses a different offset for GTEx samples
+    compared to SRA/TCGA samples; see :func:`_bigwig_sample_shard`.
     """
 
     def __post_init__(self) -> None:
@@ -454,9 +481,10 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
         self._check_data_source()
 
     def url_path(self) -> str:
+        shard = _bigwig_sample_shard(self.sample, self.data_source)
         return (
             f"{self.organism}/data_sources/{self.data_source}/base_sums/"
-            f"{_p2(self.project)}/{self.project}/{_p2(self.sample)}/"
+            f"{_p2(self.project)}/{self.project}/{shard}/"
             f"{self.data_source}.base_sums.{self.project}_{self.sample}.ALL.bw"
         )
 

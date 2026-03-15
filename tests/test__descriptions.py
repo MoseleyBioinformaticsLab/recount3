@@ -371,6 +371,17 @@ def test_validation_rejects_invalid_enum_values(
             "sra.base_sums.SRP000001_SAMP0001.ALL.bw",
         ),
         (
+            "bigwig_files",
+            {
+                "organism": "human",
+                "data_source": "gtex",
+                "project": "BLADDER",
+                "sample": "GTEX-11DXZ-0526-SM-5EQRP",
+            },
+            "human/data_sources/gtex/base_sums/ER/BLADDER/EQ/"
+            "gtex.base_sums.BLADDER_GTEX-11DXZ-0526-SM-5EQRP.ALL.bw",
+        ),
+        (
             "data_sources",
             {
                 "organism": "human",
@@ -405,3 +416,31 @@ def test_common_fields_is_dataclass_with_slots() -> None:
 
     field_names = [f.name for f in dataclasses.fields(COMMON_FIELDS)]
     assert field_names[0] == "resource_type"
+
+
+@pytest.mark.parametrize(
+    "sample,data_source,expected",
+    [
+        (None, "sra", ""),
+        ("", "sra", ""),
+        (None, None, ""),
+        ("SRR001", "sra", "01"),
+        ("SAMP0001", "sra", "01"),
+        ("AB", "sra", "AB"),
+        ("A", "sra", "A"),
+        ("GTEX-11DXZ-0526-SM-5EQRP", "gtex", "EQ"),
+        ("AB", "gtex", "AB"),
+        ("A", "gtex", "A"),
+        ("SRR001", None, "01"),
+        ("GTEX-SAMPLE-XYZ1", "GTEX", "XY"),
+    ],
+)
+def test_bigwig_sample_shard(
+    sample: str | None,
+    data_source: str | None,
+    expected: str,
+) -> None:
+    result = recount3._descriptions._bigwig_sample_shard(  # pylint: disable=protected-access
+        sample, data_source
+    )
+    assert result == expected
