@@ -61,6 +61,9 @@ class _MockSE:
     def assay(self, name: str) -> np.ndarray:
         return self._assays[name]
 
+    def get_assay(self, name: str) -> np.ndarray:
+        return self._assays[name]
+
     @property
     def col_data(self) -> _MockBiocFrame:
         return self._bioc_col_data
@@ -68,6 +71,15 @@ class _MockSE:
     @property
     def column_data(self) -> _MockBiocFrame:
         return self._bioc_col_data
+
+    def get_column_data(self) -> _MockBiocFrame:
+        return self._bioc_col_data
+
+    def get_row_names(self) -> list[str] | None:
+        return self.row_names
+
+    def get_column_names(self) -> list[str] | None:
+        return self.col_names
 
     def set_column_data(self, new_bioc_col_data: _MockBiocFrame) -> "_MockSE":
         obj = _MockSE.__new__(_MockSE)
@@ -92,6 +104,13 @@ class _MockRSE(_MockSE):
             rr = mock.MagicMock()
             rr.width = row_ranges_widths
             self.row_ranges = rr
+
+    @property
+    def width(self) -> list[int]:
+        rr = getattr(self, "row_ranges", None)
+        if rr is None:
+            raise AttributeError("width requires row_ranges to be set")
+        return rr.width
 
     def set_column_data(self, new_bioc_col_data: _MockBiocFrame) -> "_MockRSE":
         obj = _MockRSE.__new__(_MockRSE)
@@ -641,9 +660,9 @@ class TestComputeReadCounts:
             return_value=_MockRSE,
         )
 
-    def test_non_rse_raises_value_error(self) -> None:
+    def test_non_rse_raises_type_error(self) -> None:
         with self._patch_rse_class():
-            with pytest.raises(ValueError, match="RangedSummarizedExperiment"):
+            with pytest.raises(TypeError, match="RangedSummarizedExperiment"):
                 compute_read_counts("not_an_rse")
 
     def test_round_to_integers_not_bool_raises_type_error(self) -> None:
@@ -1024,9 +1043,9 @@ class TestTransformCounts:
             return_value=_MockRSE,
         )
 
-    def test_non_rse_raises_value_error(self) -> None:
+    def test_non_rse_raises_type_error(self) -> None:
         with self._patch_rse_class():
-            with pytest.raises(ValueError, match="RangedSummarizedExperiment"):
+            with pytest.raises(TypeError, match="RangedSummarizedExperiment"):
                 transform_counts("not_rse")
 
     def test_round_not_bool_raises_type_error(self) -> None:
