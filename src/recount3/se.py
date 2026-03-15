@@ -92,7 +92,8 @@ def _expand_sra_attributes_df(
                 key_clean = key.strip()
                 if not key_clean:
                     continue
-                col_name = f"{attribute_column_prefix}{key_clean.replace(' ', '_')}"
+                key_slug = key_clean.replace(" ", "_")
+                col_name = f"{attribute_column_prefix}{key_slug}"
                 row_map[col_name] = val.strip()
         rows.append(row_map)
 
@@ -178,7 +179,7 @@ def build_summarized_experiment(
     Returns:
       A :class:`summarizedexperiment.SummarizedExperiment` instance.
     """
-    unit = _utils._normalize_genomic_unit(genomic_unit)
+    unit = _utils._normalize_genomic_unit(genomic_unit)  # pylint: disable=protected-access
     return bundle.to_summarized_experiment(
         genomic_unit=unit,
         annotation_extension=annotation_extension,
@@ -198,7 +199,10 @@ def build_ranged_summarized_experiment(
     join_policy: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
-) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
+) -> (
+    summarizedexperiment.RangedSummarizedExperiment
+    | summarizedexperiment.SummarizedExperiment
+):
     """Create a RangedSummarizedExperiment when ranges can be resolved.
 
     This is a convenience wrapper around
@@ -224,7 +228,7 @@ def build_ranged_summarized_experiment(
       ``allow_fallback_to_se`` is :data:`True` and ranges cannot be
       resolved.
     """
-    unit = _utils._normalize_genomic_unit(genomic_unit)
+    unit = _utils._normalize_genomic_unit(genomic_unit)  # pylint: disable=protected-access
     return bundle.to_ranged_summarized_experiment(
         genomic_unit=unit,
         annotation_extension=annotation_extension,
@@ -253,7 +257,10 @@ def create_ranged_summarized_experiment(
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
-) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
+) -> (
+    summarizedexperiment.RangedSummarizedExperiment
+    | summarizedexperiment.SummarizedExperiment
+):
     """High-level helper that mirrors recount3's ``create_rse()`` in R.
 
     This function hides the intermediate bundle construction step by:
@@ -306,7 +313,7 @@ def create_ranged_summarized_experiment(
         :class:`RangedSummarizedExperiment` constructor rejects all
         compatibility variants.
     """
-    unit = _utils._normalize_genomic_unit(genomic_unit)
+    unit = _utils._normalize_genomic_unit(genomic_unit)  # pylint: disable=protected-access
     ann_ext = _resolve_annotation_extension(
         organism=organism,
         genomic_unit=unit,
@@ -361,7 +368,10 @@ def create_rse(
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
-) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
+) -> (
+    summarizedexperiment.RangedSummarizedExperiment
+    | summarizedexperiment.SummarizedExperiment
+):
     """Alias for :func:`create_ranged_summarized_experiment`.
 
     The parameters and behavior are identical; see that function for
@@ -453,11 +463,13 @@ def expand_sra_attributes(
             attribute_column_prefix=attribute_column_prefix,
         )
 
-    BiocFrameCls = _utils.get_biocframe_class()
-    SummarizedExperimentCls = _utils.get_summarizedexperiment_class()
-    RangedSummarizedExperimentCls = _utils.get_ranged_summarizedexperiment_class()
+    bioc_frame_cls = _utils.get_biocframe_class()
+    summarized_experiment_cls = _utils.get_summarizedexperiment_class()
 
-    if not isinstance(experiment_or_coldata, (SummarizedExperimentCls, RangedSummarizedExperimentCls)):
+    if not isinstance(
+        experiment_or_coldata,
+        summarized_experiment_cls,
+    ):
         raise TypeError(
             "expand_sra_attributes() expects a pandas DataFrame or a BiocPy "
             "SummarizedExperiment/RangedSummarizedExperiment; got "
@@ -486,7 +498,7 @@ def expand_sra_attributes(
         sra_attributes_column=sra_attributes_column,
         attribute_column_prefix=attribute_column_prefix,
     )
-    expanded_bf = BiocFrameCls.from_pandas(expanded_df)
+    expanded_bf = bioc_frame_cls.from_pandas(expanded_df)
     return experiment_or_coldata.set_column_data(expanded_bf)  # type: ignore
 
 
@@ -533,27 +545,32 @@ def compute_read_counts(
         from `col_data`, or if the assay and metadata dimensions do not align.
       TypeError: If `round_to_integers` is not a bool.
     """
-    ranged_summarized_experiment_cls = _utils.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = (
+        _utils.get_ranged_summarizedexperiment_class()
+    )
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
-        raise ValueError(
+        raise TypeError(
             "rse must be a RangedSummarizedExperiment to compute read counts."
         )
     if not isinstance(round_to_integers, bool):
         raise TypeError("round_to_integers must be a bool.")
 
+    # pylint: disable=protected-access  # _utils helpers are package-internal
     assay_name = _utils._resolve_counts_assay_name(rse)
 
-    col_data = rse.col_data.to_pandas()  # pyright: ignore[reportAttributeAccessIssue]
+    col_data = rse.get_column_data().to_pandas()
     try:
-        avg_len_series = _utils._resolve_metadata_column(col_data, avg_mapped_read_length_column)
+        avg_len_series = _utils._resolve_metadata_column(
+            col_data, avg_mapped_read_length_column
+        )
     except ValueError as exc:
         raise ValueError(
             "Required metadata column not found in col_data: "
             f"{avg_mapped_read_length_column!r}."
         ) from exc
 
-    raw_counts = np.asarray(rse.assay(assay_name), dtype=float)
+    raw_counts = np.asarray(rse.get_assay(assay_name), dtype=float)
     if raw_counts.ndim != 2:
         raise ValueError(
             f"{assay_name!r} assay must be a 2D matrix "
@@ -590,9 +607,10 @@ def compute_read_counts(
     if round_to_integers:
         read_counts = np.rint(read_counts)
 
-    row_names = getattr(rse, "row_names", None)
-    col_names = getattr(rse, "col_names", None)
+    row_names = rse.get_row_names()
+    col_names = rse.get_column_names()
 
+    # pylint: enable=protected-access
     return pd.DataFrame(
         read_counts,
         index=list(row_names) if row_names is not None else None,
@@ -600,7 +618,9 @@ def compute_read_counts(
     )
 
 
-def compute_tpm(rse: summarizedexperiment.RangedSummarizedExperiment) -> pd.DataFrame:
+def compute_tpm(
+    rse: summarizedexperiment.RangedSummarizedExperiment,
+) -> pd.DataFrame:
     """Compute Transcripts Per Million (TPM) from raw coverage sums.
 
     TPM is calculated as:
@@ -620,7 +640,9 @@ def compute_tpm(rse: summarizedexperiment.RangedSummarizedExperiment) -> pd.Data
       TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).
       ValueError: If feature widths or read lengths are missing.
     """
-    ranged_summarized_experiment_cls = _utils.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = (
+        _utils.get_ranged_summarizedexperiment_class()
+    )
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
         raise TypeError(
@@ -628,28 +650,20 @@ def compute_tpm(rse: summarizedexperiment.RangedSummarizedExperiment) -> pd.Data
             "defined rowRanges to determine feature lengths."
         )
 
-    # 1. Get Read Counts
     reads = compute_read_counts(rse, round_to_integers=False)
 
-    # 2. Get Feature Lengths (bp)
-    # biocutils/genomicranges exposes .width
     try:
-        widths = np.array(rse.row_ranges.width)
+        widths = np.array(rse.width)
     except AttributeError as exc:
         raise ValueError(
             "Could not determine feature widths from rowRanges."
         ) from exc
 
-    # 3. Calculate Reads Per Kilobase
-    # Numpy broadcasting: (n_features, n_samples) / (n_features, 1)
     kb_widths = widths / 1000.0
     rpk = reads.div(kb_widths, axis=0)
 
-    # 4. Calculate Scaling Factors (per sample)
-    # Sum of RPKs per sample / 1,000,000
     scale_factors = rpk.sum(axis=0) / 1_000_000.0
 
-    # 5. Calculate TPM
     tpm = rpk.div(scale_factors, axis=1)
 
     return tpm
@@ -680,17 +694,23 @@ def is_paired_end(
     Raises:
         ValueError: If required metadata columns are missing or non-numeric.
     """
+    # pylint: disable=protected-access  # _utils helpers are package-internal
     metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
 
-    external_id = _utils._resolve_metadata_column(metadata, "external_id").astype(str)
+    external_id = _utils._resolve_metadata_column(
+        metadata, "external_id"
+    ).astype(str)
     avg_mapped = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(metadata, avg_mapped_read_length_column),
+        _utils._resolve_metadata_column(
+            metadata, avg_mapped_read_length_column
+        ),
         avg_mapped_read_length_column,
     )
     avg_len = _utils._coerce_numeric_column(
         _utils._resolve_metadata_column(metadata, avg_read_length_column),
         avg_read_length_column,
     )
+    # pylint: enable=protected-access
 
     # R uses round(..., 0). numpy.rint matches "round to nearest, ties to even".
     ratio = np.rint(avg_mapped.to_numpy() / avg_len.to_numpy())
@@ -712,7 +732,7 @@ def is_paired_end(
 
 
 def compute_scale_factors(
-    sample_metadata_source: Any,  #RENAME: Column Metadata?
+    sample_metadata_source: Any,
     by: str = "auc",
     target_read_count: float = 4e7,
     target_read_length_bp: float = 100,
@@ -792,30 +812,44 @@ def compute_scale_factors(
       TypeError: If `target_read_count` or `target_read_length_bp` are not numeric scalars.
     """
     if by not in ("auc", "mapped_reads"):
-        raise ValueError(f"{by=!r} must be either 'auc' or 'mapped_reads'.")
+        raise ValueError(
+            f"'by' must be either 'auc' or 'mapped_reads'; got {by!r}."
+        )
 
-    if not isinstance(target_read_count, numbers.Real) or isinstance(target_read_count, bool):
+    if not isinstance(target_read_count, numbers.Real) or isinstance(
+        target_read_count, bool
+    ):
         raise TypeError("target_read_count must be a numeric scalar.")
-    if not isinstance(target_read_length_bp, numbers.Real) or isinstance(target_read_length_bp, bool):
+    if not isinstance(target_read_length_bp, numbers.Real) or isinstance(
+        target_read_length_bp, bool
+    ):
         raise TypeError("target_read_length_bp must be a numeric scalar.")
 
-    metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)  #TODO: Can be done w/o coercing? For memory
+    # pylint: disable=protected-access  # _utils helpers are package-internal
+    metadata = _utils._coerce_col_data_to_pandas(
+        sample_metadata_source
+    )
 
     # Match recount3's stopifnot(): all of these must exist even if by="auc".
-    external_id = _utils._resolve_metadata_column(metadata, "external_id").astype(str)
+    external_id = _utils._resolve_metadata_column(
+        metadata, "external_id"
+    ).astype(str)
 
     auc_values = _utils._coerce_numeric_column(
         _utils._resolve_metadata_column(metadata, auc_column),
         auc_column,
     )
     avg_mapped_values = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(metadata, avg_mapped_read_length_column),
+        _utils._resolve_metadata_column(
+            metadata, avg_mapped_read_length_column
+        ),
         avg_mapped_read_length_column,
     )
     mapped_reads_values = _utils._coerce_numeric_column(
         _utils._resolve_metadata_column(metadata, mapped_reads_column),
         mapped_reads_column,
     )
+    # pylint: enable=protected-access
 
     auc_values.index = external_id
     avg_mapped_values.index = external_id
@@ -837,18 +871,23 @@ def compute_scale_factors(
         scale_factor = float(target_read_count) / auc_values
     else:
         pe_multiplier = pd.Series(np.nan, index=external_id, dtype=float)
-        pe_multiplier.loc[paired_end_series == True] = 2.0
-        pe_multiplier.loc[paired_end_series == False] = 1.0
+        pe_multiplier.loc[paired_end_series == True] = 2.0  # pylint: disable=singleton-comparison
+        pe_multiplier.loc[paired_end_series == False] = 1.0  # pylint: disable=singleton-comparison
 
         denom = mapped_reads_values * (avg_mapped_values**2)
-        scale_factor = float(target_read_count) * float(target_read_length_bp) * pe_multiplier / denom
+        scale_factor = (
+            float(target_read_count)
+            * float(target_read_length_bp)
+            * pe_multiplier
+            / denom
+        )
 
     scale_factor.name = "scale_factor"
     return scale_factor
 
 
 def transform_counts(
-    rse: Any,  #TODO: Remove ducktyping? Unless df possible.
+    rse: Any,
     by: str = "auc",
     target_read_count: float = 4e7,
     target_read_length_bp: float = 100,
@@ -885,7 +924,7 @@ def transform_counts(
       where paired_multiplier is 2 for paired-end samples, 1 for single-end
       samples, and missing when paired-end status cannot be inferred. This
       method incorporates mapped reads and read length so that samples with
-      different read lengths are normalized onto the same target read length 
+      different read lengths are normalized onto the same target read length
       target_read_length_bp.
 
     The returned values remain in the same feature-by-sample shape as the
@@ -915,20 +954,22 @@ def transform_counts(
       TypeError: If `round_to_integers` is not a bool, or if numeric parameters are
         not valid scalars.
     """
-    ranged_summarized_experiment_cls = _utils.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = (
+        _utils.get_ranged_summarizedexperiment_class()
+    )
 
     if not isinstance(rse, ranged_summarized_experiment_cls):
-        raise ValueError(
+        raise TypeError(
             "rse must be a RangedSummarizedExperiment (BiocPy "
             "summarizedexperiment)."
         )
 
-    assay_name = _utils._resolve_counts_assay_name(rse)
+    assay_name = _utils._resolve_counts_assay_name(rse)  # pylint: disable=protected-access
 
     if not isinstance(round_to_integers, bool):
-        raise TypeError("round_counts must be a bool.")
+        raise TypeError("round_to_integers must be a bool.")
 
-    counts = rse.assay(assay_name)
+    counts = rse.get_assay(assay_name)
     counts_array = np.asarray(counts, dtype=float)
 
     scale_factor = compute_scale_factors(
@@ -955,10 +996,10 @@ def transform_counts(
     if round_to_integers:
         scaled = np.rint(scaled)
 
-    row_names = getattr(rse, "row_names", None)
-    col_names = getattr(rse, "col_names", None)
+    row_names = rse.get_row_names()
+    col_names = rse.get_column_names()
 
-    return pd.DataFrame(  #TODO: NP instead? Assay is NP array?
+    return pd.DataFrame(
         scaled,
         index=list(row_names) if row_names is not None else None,
         columns=list(col_names) if col_names is not None else None,

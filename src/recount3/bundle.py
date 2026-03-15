@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import dataclasses
 import functools
+import gzip
+import io
 import logging
 import re
 from collections import Counter
@@ -148,9 +150,8 @@ def _metadata_origin(res: resource.R3Resource) -> str:
       A short string used to namespace the resource's non-key columns.
     """
     desc = res.description
-    origin = (
-        getattr(desc, "table_name", None)
-        or getattr(desc, "resource_type", None)
+    origin = getattr(desc, "table_name", None) or getattr(
+        desc, "resource_type", None
     )
     if not origin:
         origin = "metadata"
@@ -303,16 +304,15 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
         df = res.load()
         if isinstance(df, pd.DataFrame):
             return df
-    except Exception:  # fall back to manual parsing.
+    except Exception:  # pylint: disable=broad-exception-caught
         pass
 
     try:
         path = res._cached_path()  # pylint: disable=protected-access
     except Exception as exc:
-        raise ValueError(f"Cannot resolve cached RR path for: {res.url}") from exc
-
-    import gzip
-    import io
+        raise ValueError(
+            f"Cannot resolve cached RR path for: {res.url}"
+        ) from exc
 
     opener = gzip.open if str(path).endswith(".gz") else open
     with opener(path, "rb") as fh:  # type: ignore[arg-type]
@@ -325,6 +325,7 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
 _GTF_ATTR_PAIR_RE = re.compile(
     r'\s*(?P<key>[^\s;]+)\s+"?(?P<value>[^";]+)"?\s*(?:;|$)'
 )
+
 
 def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     """Parse a GTF attributes column into a wide (column-per-key) DataFrame.
@@ -339,9 +340,7 @@ def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
         return pd.DataFrame(index=attrs.index)
 
     extracted = (
-        attrs.fillna("")
-        .astype("string")
-        .str.extractall(_GTF_ATTR_PAIR_RE)
+        attrs.fillna("").astype("string").str.extractall(_GTF_ATTR_PAIR_RE)
     )
     if extracted.empty:
         return pd.DataFrame(index=attrs.index)
@@ -362,6 +361,7 @@ def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     wide.columns = [str(c) for c in wide.columns]
     return wide
 
+
 def _coerce_gtf_phase(frame: pd.Series) -> pd.Series:
     """Coerce a GTF frame/phase column to a nullable integer Series.
 
@@ -379,14 +379,18 @@ def _coerce_gtf_phase(frame: pd.Series) -> pd.Series:
     frame_str = frame.astype("string").str.strip()
 
     # GTF uses "." to indicate missing.
-    frame_str = frame_str.replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
+    frame_str = frame_str.replace(
+        {".": pd.NA, "": pd.NA}  # pyright: ignore[reportArgumentType]
+    )  # pyright: ignore[reportArgumentType]
 
     phase = pd.to_numeric(frame_str, errors="coerce").astype("Int64")
 
     # Validate: phase should be 0/1/2 when present.
     invalid = phase.notna() & ~phase.isin([0, 1, 2])
     if invalid.any():
-        bad_values = sorted({str(v) for v in frame_str[invalid].dropna().unique()})
+        bad_values = sorted(
+            {str(v) for v in frame_str[invalid].dropna().unique()}
+        )
         logging.warning(
             "GTF phase/frame column contains unexpected values; "
             "coercing them to <NA>. Values=%s",
@@ -417,16 +421,15 @@ def _coerce_gtf_bp_length(
     ends_num = pd.to_numeric(ends, errors="coerce").astype("Int64")
     width = (ends_num - starts_num + 1).astype("Int64")
 
-    # If score is "." everywhere (typical GTF), done.
-    score_str = score.astype("string").str.strip().replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
+    score_str = (
+        score.astype("string").str.strip().replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
+    )  # pyright: ignore[reportArgumentType]
     score_num = pd.to_numeric(score_str, errors="coerce")
 
-    # Decide whether score looks like "length" by match rate vs width.
     comparable = score_num.notna() & width.notna()
     if not comparable.any():
         return width
 
-    # Could be float; treat as integer-like only if near an integer.
     score_rounded = score_num.round()
     is_integer_like = (score_num - score_rounded).abs() <= 1e-6
 
@@ -437,10 +440,10 @@ def _coerce_gtf_bp_length(
 
     # Tolerate small noise.
     if match_rate >= 0.95:
-        # Use score-derived integer when present; fallback to width otherwise.
         return score_int.where(score_int.notna(), width)
 
     return width
+
 
 _ENSEMBL_VERSION_SUFFIX_RE = r"\.\d+$"
 
@@ -488,8 +491,7 @@ def _align_ranges_to_features(
     missing_cols = required - set(ranges.columns)
     if missing_cols:
         raise ValueError(
-            "ranges is missing required columns: "
-            f"{sorted(missing_cols)}"
+            "ranges is missing required columns: " f"{sorted(missing_cols)}"
         )
 
     feature_index = pd.Index([str(x) for x in feature_ids])
@@ -510,9 +512,9 @@ def _align_ranges_to_features(
     dup_mask = ranges_uv["_feature_id_unversioned"].duplicated(keep=False)
     if dup_mask.any():
         dup = ranges_uv.loc[dup_mask, ["_feature_id_unversioned"] + coord_cols]
-        nunique = dup.groupby("_feature_id_unversioned", sort=False)[coord_cols].nunique(
-            dropna=False
-        )
+        nunique = dup.groupby("_feature_id_unversioned", sort=False)[
+            coord_cols
+        ].nunique(dropna=False)
         conflicting = nunique.max(axis=1) > 1
         if conflicting.any():
             bad = list(nunique[conflicting].index[:10])
@@ -521,7 +523,9 @@ def _align_ranges_to_features(
                 "the same ID but with conflicting coordinates. Example IDs: "
                 f"{bad!r}"
             )
-        ranges_uv = ranges_uv.drop_duplicates("_feature_id_unversioned", keep="first")
+        ranges_uv = ranges_uv.drop_duplicates(
+            "_feature_id_unversioned", keep="first"
+        )
 
     ranges_uv = ranges_uv.set_index("_feature_id_unversioned")
 
@@ -565,10 +569,9 @@ def _read_gtf_dataframe(res: resource.R3Resource) -> pd.DataFrame:
     try:
         path = res._cached_path()  # pylint: disable=protected-access
     except Exception as exc:
-        raise ValueError(f"Cannot resolve cached GTF path for: {res.url}") from exc
-
-    import gzip
-    import io
+        raise ValueError(
+            f"Cannot resolve cached GTF path for: {res.url}"
+        ) from exc
 
     cols = [
         "seqname",
@@ -631,7 +634,6 @@ def _ranges_from_gtf(
     elif feature_kind != "gene" and "exon_id" in attrs_wide.columns:
         feature_ids = attrs_wide["exon_id"].astype("string")
     else:
-        # recount3 exon count matrices are keyed by `recount_exon_id` in R.
         feature_ids = attrs.str.extract(
             _RECOUNT_EXON_ID_ATTR_RE,
             expand=False,
@@ -680,7 +682,9 @@ def _ranges_from_gtf(
         out = out.join(attrs_extra)
 
     if "level" in out.columns:
-        out["level"] = pd.to_numeric(out["level"], errors="coerce").astype("Int64")
+        out["level"] = pd.to_numeric(out["level"], errors="coerce").astype(
+            "Int64"
+        )
 
     if out["feature_id"].duplicated().any():
         dup_mask = out["feature_id"].duplicated(keep=False)
@@ -710,14 +714,13 @@ def _ranges_from_gtf(
     return out
 
 
-def _peek_gtf_feature_counts(res: resource.R3Resource, *, max_lines: int = 50000) -> Counter[str]:
+def _peek_gtf_feature_counts(
+    res: resource.R3Resource, *, max_lines: int = 50000
+) -> Counter[str]:
     """Quickly scan the GTF and count feature types without loading the whole file."""
-    import gzip
-    import io
-
     try:
         path = res._cached_path()  # pylint: disable=protected-access
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         res.download(path=None, cache_mode="enable")
         path = res._cached_path()  # pylint: disable=protected-access
 
@@ -761,23 +764,19 @@ def _select_gtf_resource_for_unit(
         text = f"{path} {url}".lower()
 
         s = 0
-        # Strong hint from description if present.
         gu = getattr(desc, "genomic_unit", None)
         if isinstance(gu, str) and gu.lower() == genomic_unit:
             s += 200
 
-        # Filename/path heuristics.
         if genomic_unit == "gene" and ("gene" in text or "genes" in text):
             s += 120
         if genomic_unit == "exon" and ("exon" in text or "exons" in text):
             s += 120
 
-        # Prefer obvious GTFs.
         if ".gtf" in text:
             s += 20
         return s
 
-    # Sort by heuristic score, then validate by peeking for required feature.
     candidates = sorted(candidates, key=score, reverse=True)
 
     for res in candidates:
@@ -791,11 +790,13 @@ def _select_gtf_resource_for_unit(
                     dict(feats.most_common(5)),
                 )
                 return res
-        except Exception as exc:
-            logging.warning("Failed to peek GTF features for %s: %r", res.url, exc)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logging.warning(
+                "Failed to peek GTF features for %s: %r", res.url, exc
+            )
 
-    # If none contain the feature kind, return the best-scoring one (will error later with a clearer message).
     return candidates[0]
+
 
 def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
     """Construct a GenomicRanges object from a pandas DataFrame.
@@ -810,8 +811,8 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
     Raises:
       ImportError: If :mod:`genomicranges` cannot be imported.
     """
-    GenomicRangesCls = _utils.get_genomicranges_class()
-    return GenomicRangesCls.from_pandas(ranges_df)
+    genomic_ranges_cls = _utils.get_genomicranges_class()
+    return genomic_ranges_cls.from_pandas(ranges_df)
 
 
 def _construct_summarized_experiment(
@@ -851,14 +852,16 @@ def _construct_summarized_experiment(
     Raises:
       ValueError: If shapes are inconsistent or assay contains invalid values.
     """
-    SummarizedExperimentCls = _utils.get_summarizedexperiment_class()
+    summarized_experiment_cls = _utils.get_summarizedexperiment_class()
 
     if counts_df.ndim != 2:
         raise ValueError("counts_df must be a 2D DataFrame.")
 
     n_features, n_samples = counts_df.shape
     if n_features == 0 or n_samples == 0:
-        raise ValueError("Empty assay matrix; cannot build SummarizedExperiment.")
+        raise ValueError(
+            "Empty assay matrix; cannot build SummarizedExperiment."
+        )
 
     row_names = [str(x) for x in counts_df.index]
     col_names = [str(x) for x in counts_df.columns]
@@ -902,10 +905,11 @@ def _construct_summarized_experiment(
 
     counts_np = numeric.fillna(0).to_numpy(dtype=float, copy=False)
 
-    return SummarizedExperimentCls(
+    biocframe_cls = _utils.get_biocframe_class()
+    return summarized_experiment_cls(
         assays={assay_name: counts_np},
-        row_data=row_data,  # pyright: ignore[reportArgumentType] (coerced)
-        column_data=col_data,  # pyright: ignore[reportArgumentType] (coerced)
+        row_data=biocframe_cls.from_pandas(row_data),
+        column_data=biocframe_cls.from_pandas(col_data),
         row_names=row_names,
         column_names=col_names,
         metadata=dict(metadata) if metadata is not None else None,
@@ -920,7 +924,7 @@ def _construct_ranged_summarized_experiment(
     ranges_df: pd.DataFrame,
     assay_name: str,
     metadata: Optional[Mapping[str, Any]] = None,
-) -> Any:
+) -> summarizedexperiment.RangedSummarizedExperiment:
     """Construct a RangedSummarizedExperiment using the latest BiocPy API.
 
     This targets the modern `summarizedexperiment.RangedSummarizedExperiment`
@@ -952,19 +956,25 @@ def _construct_ranged_summarized_experiment(
     Raises:
       ValueError: If shapes/columns are inconsistent or counts are not numeric.
     """
-    RangedSummarizedExperimentCls = _utils.get_ranged_summarizedexperiment_class()
+    ranged_summarized_experiment_cls = (
+        _utils.get_ranged_summarizedexperiment_class()
+    )
 
     if counts_df.ndim != 2:
         raise ValueError("counts_df must be a 2D DataFrame.")
 
     n_features, n_samples = counts_df.shape
     if n_features == 0 or n_samples == 0:
-        raise ValueError("Empty assay matrix; cannot build RangedSummarizedExperiment.")
+        raise ValueError(
+            "Empty assay matrix; cannot build RangedSummarizedExperiment."
+        )
 
     required_range_cols = {"seqnames", "starts", "ends", "strand"}
     missing = required_range_cols - set(ranges_df.columns)
     if missing:
-        raise ValueError(f"ranges_df is missing required columns: {sorted(missing)!r}.")
+        raise ValueError(
+            f"ranges_df is missing required columns: {sorted(missing)!r}."
+        )
 
     if len(ranges_df) != n_features:
         raise ValueError(
@@ -993,10 +1003,21 @@ def _construct_ranged_summarized_experiment(
 
     ranges_aligned = ranges_df.copy()
     ranges_aligned.index = row_names
-    ranges_aligned["starts"] = pd.to_numeric(ranges_aligned["starts"], errors="coerce")
-    ranges_aligned["ends"] = pd.to_numeric(ranges_aligned["ends"], errors="coerce")
-    if ranges_aligned[["seqnames", "starts", "ends", "strand"]].isna().any().any():
-        raise ValueError("ranges_df contains missing values in coordinate columns.")
+    ranges_aligned["starts"] = pd.to_numeric(
+        ranges_aligned["starts"], errors="coerce"
+    )
+    ranges_aligned["ends"] = pd.to_numeric(
+        ranges_aligned["ends"], errors="coerce"
+    )
+    if (
+        ranges_aligned[["seqnames", "starts", "ends", "strand"]]
+        .isna()
+        .any()
+        .any()
+    ):
+        raise ValueError(
+            "ranges_df contains missing values in coordinate columns."
+        )
 
     raw = counts_df.copy()
     numeric = raw.apply(pd.to_numeric, errors="coerce")
@@ -1005,7 +1026,13 @@ def _construct_ranged_summarized_experiment(
         bad_positions = list(zip(*np.where(invalid.to_numpy())))
         examples = []
         for r, c in bad_positions[:5]:
-            examples.append({"row": row_names[r], "col": col_names[c], "value": raw.iat[r, c]})
+            examples.append(
+                {
+                    "row": row_names[r],
+                    "col": col_names[c],
+                    "value": raw.iat[r, c],
+                }
+            )
         raise ValueError(
             "counts_df contains non-numeric values that cannot be coerced. "
             f"Examples: {examples!r}"
@@ -1015,11 +1042,12 @@ def _construct_ranged_summarized_experiment(
 
     gr = _to_genomic_ranges(ranges_aligned)
 
-    return RangedSummarizedExperimentCls(
+    biocframe_cls = _utils.get_biocframe_class()
+    return ranged_summarized_experiment_cls(
         assays={assay_name: counts_np},
         row_ranges=gr,
-        row_data=row_data,  # pyright: ignore[reportArgumentType] (coerced)
-        column_data=col_data,  # pyright: ignore[reportArgumentType] (coerced)
+        row_data=biocframe_cls.from_pandas(row_data),
+        column_data=biocframe_cls.from_pandas(col_data),
         row_names=row_names,
         column_names=col_names,
         metadata=dict(metadata) if metadata is not None else None,
@@ -1066,6 +1094,7 @@ def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
         "Resource is not a recognized count-file type for stacking: "
         f"{rtype!r}"
     )
+
 
 def _make_unique_names(
     names: Sequence[str],
@@ -1275,7 +1304,6 @@ class R3ResourceBundle:
                 project=proj,
             )
 
-        # Multi-project bundles do not advertise a single project identity.
         return cls(resources=resources_list)
 
     def add(self, res: resource.R3Resource) -> None:
@@ -1479,7 +1507,9 @@ class R3ResourceBundle:
             "junction_extension": junction_extension,
         }
         field_specs = {
-            key: value for key, value in field_specs.items() if value is not None
+            key: value
+            for key, value in field_specs.items()
+            if value is not None
         }
 
         selected: list[resource.R3Resource] = []
@@ -1559,8 +1589,6 @@ class R3ResourceBundle:
           ``predicate`` returned :data:`True`.
         """
         return self.filter(predicate=predicate)
-
-    # Convenience aliases that mirror the former R3Project API.
 
     def counts(self) -> R3ResourceBundle:
         """Return a sub-bundle containing only count-file resources.
@@ -1843,9 +1871,8 @@ class R3ResourceBundle:
         load_errors: list[tuple[str, Exception]] = []
 
         if genomic_unit in {"gene", "exon"}:
-            sel = (
-                self.filter(resource_type="count_files_gene_or_exon")
-                .filter(genomic_unit=genomic_unit)
+            sel = self.filter(resource_type="count_files_gene_or_exon").filter(
+                genomic_unit=genomic_unit
             )
 
             if autoload:
@@ -1853,7 +1880,9 @@ class R3ResourceBundle:
                     try:
                         res.load()
                     except Exception as exc:  # pylint: disable=broad-except
-                        url = res.url or f"<no-url:{res.description.url_path()}>"
+                        url = (
+                            res.url or f"<no-url:{res.description.url_path()}>"
+                        )
                         load_errors.append((url, exc))
 
             try:
@@ -1873,9 +1902,8 @@ class R3ResourceBundle:
                     ) from exc
                 raise
 
-        sel = (
-            self.filter(resource_type="count_files_junctions")
-            .filter(junction_extension="MM")
+        sel = self.filter(resource_type="count_files_junctions").filter(
+            junction_extension="MM"
         )
         if autoload:
             for res in sel.resources:
@@ -1966,7 +1994,6 @@ class R3ResourceBundle:
         aligned = merged.set_index(align_key, drop=False).reindex(sample_ids)
         aligned.index.name = None
 
-        # Always expose external_id as the canonical user-facing sample ID.
         if "external_id" not in aligned.columns:
             aligned["external_id"] = sample_ids
         elif aligned["external_id"].isna().any():
@@ -1993,7 +2020,7 @@ class R3ResourceBundle:
         sample metadata, and constructs a BiocPy
         :class:`SummarizedExperiment` using a compatibility-aware
         constructor that supports multiple versions of the
-        :mod:`summarizedexperiment` package. 
+        :mod:`summarizedexperiment` package.
 
         Args:
           genomic_unit: Genomic unit to summarize, such as ``"gene"``,
@@ -2020,15 +2047,14 @@ class R3ResourceBundle:
         """
         working = self
         if genomic_unit in {"gene", "exon"} and annotation_extension:
-            working = (
-                self.filter(resource_type="count_files_gene_or_exon")
-                .filter(
-                    genomic_unit=genomic_unit,
-                    annotation_extension=annotation_extension,
-                )
+            working = self.filter(
+                resource_type="count_files_gene_or_exon"
+            ).filter(
+                genomic_unit=genomic_unit,
+                annotation_extension=annotation_extension,
             )
 
-        counts_df = working._stack_counts_for(
+        counts_df = working._stack_counts_for(  # pylint: disable=protected-access
             genomic_unit=genomic_unit,
             join_policy=join_policy,
             autoload=autoload,
@@ -2083,7 +2109,10 @@ class R3ResourceBundle:
         join_policy: str = "inner",
         autoload: bool = True,
         allow_fallback_to_se: bool = False,
-    ) -> summarizedexperiment.RangedSummarizedExperiment | summarizedexperiment.SummarizedExperiment:
+    ) -> (
+        summarizedexperiment.RangedSummarizedExperiment
+        | summarizedexperiment.SummarizedExperiment
+    ):
         """Build a BiocPy :class:`RangedSummarizedExperiment` when possible.
 
         For ``"gene"`` and ``"exon"`` genomic units, row ranges are
@@ -2125,7 +2154,7 @@ class R3ResourceBundle:
         last_ranges_error: Exception | None = None
 
         working = self
-        counts_df = working._stack_counts_for(
+        counts_df = working._stack_counts_for(  # pylint: disable=protected-access
             genomic_unit=genomic_unit,
             join_policy=join_policy,
             autoload=autoload,
@@ -2184,7 +2213,9 @@ class R3ResourceBundle:
                         feature_kind=feature_kind,
                     )
                     ranges = _dedupe_ranges_on_feature_id(ranges)
-                    idxed = _align_ranges_to_features(ranges, feature_ids=feature_ids)
+                    idxed = _align_ranges_to_features(
+                        ranges, feature_ids=feature_ids
+                    )
                     missing_mask = (
                         idxed["seqnames"].isna()
                         | idxed["starts"].isna()
@@ -2192,7 +2223,11 @@ class R3ResourceBundle:
                         | idxed["strand"].isna()
                     )
                     if missing_mask.any():
-                        missing_ids = [str(feature_ids[i]) for i, m in enumerate(missing_mask) if m][:10]
+                        missing_ids = [
+                            str(feature_ids[i])
+                            for i, m in enumerate(missing_mask)
+                            if m
+                        ][:10]
                         raise ValueError(
                             "Annotation does not contain ranges for some feature IDs present in "
                             "the counts matrix. Example missing feature_ids: "
@@ -2200,11 +2235,21 @@ class R3ResourceBundle:
                             "setting annotation_extension to match the counts resource."
                         )
 
-                    ranges_df = idxed[["seqnames", "starts", "ends", "strand"]].copy()
+                    ranges_df = idxed[
+                        ["seqnames", "starts", "ends", "strand"]
+                    ].copy()
                     ranges_df.index = row_names
                     enrich_cols = [
-                        col for col in ranges.columns
-                        if col not in {"seqnames", "starts", "ends", "strand", "feature_id"}
+                        col
+                        for col in ranges.columns
+                        if col
+                        not in {
+                            "seqnames",
+                            "starts",
+                            "ends",
+                            "strand",
+                            "feature_id",
+                        }
                     ]
 
                     base_cols = ["seqnames", "starts", "ends", "strand"]
@@ -2233,7 +2278,9 @@ class R3ResourceBundle:
                 )
                 rr_res = rr_candidates[0] if rr_candidates else None
                 if rr_res is None:
-                    raise ValueError("No RR junction coordinate resource found in bundle.")
+                    raise ValueError(
+                        "No RR junction coordinate resource found in bundle."
+                    )
 
                 if autoload:
                     rr_res.download(path=None, cache_mode="enable")
@@ -2253,15 +2300,23 @@ class R3ResourceBundle:
                 required = {"seqnames", "starts", "ends"}
                 missing = required.difference(std.columns)
                 if missing:
-                    raise ValueError(f"RR file missing required columns: {sorted(missing)}")
+                    raise ValueError(
+                        f"RR file missing required columns: {sorted(missing)}"
+                    )
 
                 if "strand" not in std.columns:
                     std["strand"] = "*"
 
                 std["seqnames"] = std["seqnames"].astype(str)
-                std["strand"] = std["strand"].astype(str).replace({"?": "*"}).fillna("*")
-                std["starts"] = pd.to_numeric(std["starts"], errors="raise").astype(int)
-                std["ends"] = pd.to_numeric(std["ends"], errors="raise").astype(int)
+                std["strand"] = (
+                    std["strand"].astype(str).replace({"?": "*"}).fillna("*")
+                )
+                std["starts"] = pd.to_numeric(
+                    std["starts"], errors="raise"
+                ).astype(int)
+                std["ends"] = pd.to_numeric(std["ends"], errors="raise").astype(
+                    int
+                )
 
                 if len(std) != n_features:
                     raise ValueError(
@@ -2269,20 +2324,26 @@ class R3ResourceBundle:
                     )
 
                 id_candidates = ("junction_id", "jxn_id", "jid", "id", "name")
-                id_col = next((c for c in id_candidates if c in std.columns), None)
+                id_col = next(
+                    (c for c in id_candidates if c in std.columns), None
+                )
 
                 if id_col is not None:
                     row_names_from_rr = std[id_col].astype(str).tolist()
                 else:
                     row_names_from_rr = [
                         f"{seq}:{start}-{end}:{strand}"
-                        for seq, start, end, strand in zip(std["seqnames"], std["starts"], std["ends"], std["strand"])
+                        for seq, start, end, strand in zip(
+                            std["seqnames"],
+                            std["starts"],
+                            std["ends"],
+                            std["strand"],
+                        )
                     ]
 
                 if pd.Index(row_names_from_rr).duplicated().any():
                     row_names_from_rr = _make_unique_names(row_names_from_rr)
 
-                # reindex counts to RR-derived row names (RR and MM are same row order)
                 counts_df = counts_df.copy()
                 counts_df.index = row_names_from_rr
 
@@ -2290,7 +2351,10 @@ class R3ResourceBundle:
                 ranges_df.index = row_names_from_rr
 
                 row_data_df = pd.DataFrame(
-                    {"feature_id": row_names_from_rr, "mm_row": original_feature_ids},
+                    {
+                        "feature_id": row_names_from_rr,
+                        "mm_row": original_feature_ids,
+                    },
                     index=row_names_from_rr,
                 )
 
@@ -2327,7 +2391,6 @@ class R3ResourceBundle:
             ranges_df=ranges_df,
             assay_name=assay_name,
         )
-
 
     def download(
         self,
