@@ -21,9 +21,45 @@ from recount3._descriptions import (
 from recount3.resource import R3Resource
 from recount3.types import FieldSpec, StringOrIterable
 
+#   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)
+# Human:  G026 (Gencode v26), G029 (Gencode v29), F006 (FANTOM6_cat),
+#         R109 (RefSeq), ERCC (ERCC), SIRV (SIRV)
+# Mouse:  M023 (Gencode v23)
+_ANN_EXT_HUMAN: Final[tuple[str, ...]] = (
+    "G026",
+    "G029",
+    "F006",
+    "R109",
+    "ERCC",
+    "SIRV",
+)
+
+_ANN_EXT_MOUSE: Final[tuple[str, ...]] = ("M023",)
+
+_ANNOTATION_NAME_TO_EXT_HUMAN: Final[dict[str, str]] = {
+    "gencode_v26": "G026",
+    "gencode_v29": "G029",
+    "fantom6_cat": "F006",
+    "refseq": "R109",
+    "ercc": "ERCC",
+    "sirv": "SIRV",
+}
+
+_ANNOTATION_NAME_TO_EXT_MOUSE: Final[dict[str, str]] = {
+    "gencode_v23": "M023",
+}
+
 
 def as_tuple(value: StringOrIterable) -> tuple[str, ...]:
-    """Normalize a string or iterable of strings into a tuple of strings."""
+    """Normalize a string or iterable of strings into a tuple of strings.
+
+    Args:
+        value: A single string or any iterable of strings.
+
+    Returns:
+        A tuple containing the input string, or a tuple built from the
+        iterable's elements.
+    """
     if isinstance(value, str):
         return (value,)
     return tuple(value)
@@ -32,7 +68,24 @@ def as_tuple(value: StringOrIterable) -> tuple[str, ...]:
 def _build_param_grid(
     resource_type: str, **required_values: StringOrIterable
 ) -> list[dict[str, str]]:
-    """Cartesian product over provided values."""
+    """Build the Cartesian product of field values for resource construction.
+
+    Each keyword argument may be a single string or an iterable of strings.
+    The function produces one dictionary per combination, always including
+    ``resource_type`` as a key.
+
+    Args:
+        resource_type: The resource-type key used by
+            :class:`~recount3._descriptions.R3ResourceDescription` to select
+            the concrete description class (e.g. ``"annotations"``).
+        **required_values: One or more field-name/value pairs. Each value may
+            be a single string or an iterable of strings; all combinations are
+            enumerated.
+
+    Returns:
+        A list of dictionaries, each representing one fully-specified set of
+        resource parameters including ``resource_type``.
+    """
     keys = list(required_values.keys())
     vals = [as_tuple(required_values[k]) for k in keys]
     grid: list[dict[str, str]] = []
@@ -49,7 +102,27 @@ def _make_resources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Build R3Resource objects from param dicts; deduplicate by URL."""
+    """Build R3Resource objects from parameter dicts, optionally deduplicating.
+
+    Args:
+        param_dicts: An iterable of parameter dictionaries, each containing at
+            minimum a ``resource_type`` key plus the fields required by the
+            corresponding description class.
+        strict: If ``True`` (default), any exception raised while constructing
+            a description or resource propagates immediately. If ``False``,
+            invalid combinations are silently skipped.
+        deduplicate: If ``True`` (default), resources whose resolved URL has
+            already appeared in the output are discarded. Resources with a
+            ``None`` URL are always included regardless of this setting.
+
+    Returns:
+        A list of unique :class:`~recount3.resource.R3Resource` objects in the
+        order they were produced.
+
+    Raises:
+        Exception: Any exception from description or resource construction
+            when ``strict=True``.
+    """
     out: list[R3Resource] = []
     seen: set[str] = set()
     for params in param_dicts:
@@ -72,7 +145,20 @@ def _make_resources(
 
 
 def match_spec(value: object | None, spec: FieldSpec) -> bool:
-    """Return True if ``value`` satisfies the selection ``spec``."""
+    """Return True if ``value`` satisfies the selection ``spec``.
+
+    Args:
+        value: The candidate value to test.
+        spec: The selection specification. Accepted forms:
+
+            * ``None`` — matches everything.
+            * A callable — called with ``value``; truthy return means match.
+            * A string or iterable of strings — matches if ``value`` is among
+              the normalised tuple of strings.
+
+    Returns:
+        ``True`` if ``value`` matches ``spec``, ``False`` otherwise.
+    """
     if spec is None:
         return True
     if callable(spec):
@@ -90,7 +176,26 @@ def search_annotations(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for annotation files."""
+    """Return R3Resource objects for annotation GTF files.
+
+    Constructs the Cartesian product of all provided values and returns one
+    :class:`~recount3.resource.R3Resource` per unique combination.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        genomic_unit: One or more genomic units (e.g. ``"gene"``, ``"exon"``).
+        annotation_extension: One or more annotation extension strings
+            (e.g. ``"G026"``).
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique (organism, genomic_unit, annotation_extension) combination.
+    """
     grid = _build_param_grid(
         "annotations",
         organism=organism,
@@ -110,7 +215,49 @@ def search_count_files_gene_or_exon(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for per-project gene/exon counts."""
+    """Return R3Resource objects for per-project gene or exon count matrices.
+
+    Constructs the Cartesian product of all provided values and returns one
+    :class:`~recount3.resource.R3Resource` per unique combination.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        data_source: One or more data-source identifiers
+            (e.g. ``"sra"``, ``"gtex"``).
+        genomic_unit: One or more genomic units (``"gene"`` or ``"exon"``).
+        project: One or more project identifiers (e.g. ``"SRP009615"``).
+        annotation_extension: One or more annotation extension strings.
+            Defaults to ``("G026",)``.
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique (organism, data_source, genomic_unit, project,
+        annotation_extension) combination.
+
+    Examples:
+        Single project, gene-level counts::
+
+            resources = search_count_files_gene_or_exon(
+                organism="human",
+                data_source="sra",
+                genomic_unit="gene",
+                project="SRP009615",
+            )
+
+        Multiple projects — returns one resource per project (Cartesian product)::
+
+            resources = search_count_files_gene_or_exon(
+                organism="human",
+                data_source="sra",
+                genomic_unit="gene",
+                project=["SRP009615", "SRP012682"],
+            )
+    """
     grid = _build_param_grid(
         "count_files_gene_or_exon",
         organism=organism,
@@ -132,7 +279,37 @@ def search_count_files_junctions(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for per-project junction count files."""
+    """Return R3Resource objects for per-project junction count files.
+
+    Constructs the Cartesian product of all provided values and returns one
+    :class:`~recount3.resource.R3Resource` per unique combination. Junction
+    files are distributed as a triplet of sidecar files sharing a common stem:
+    a MatrixMarket matrix (``.MM.gz``), a sample-ID table (``.ID.gz``), and a
+    row-ranges table (``.RR.gz``). The ``junction_extension`` selects which of
+    these three files is the primary resource.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        data_source: One or more data-source identifiers
+            (e.g. ``"sra"``, ``"gtex"``).
+        project: One or more project identifiers (e.g. ``"SRP009615"``).
+        junction_type: One or more junction-type tokens. Defaults to
+            ``"ALL"``.
+        junction_extension: One or more file-extension tokens selecting the
+            junction sidecar file to retrieve. Accepted values are ``"MM"``
+            (count matrix), ``"ID"`` (sample IDs), and ``"RR"`` (row ranges).
+            Defaults to ``"MM"``.
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique (organism, data_source, project, junction_type,
+        junction_extension) combination.
+    """
     grid = _build_param_grid(
         "count_files_junctions",
         organism=organism,
@@ -153,7 +330,28 @@ def search_metadata_files(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for per-project metadata tables."""
+    """Return R3Resource objects for per-project metadata tables.
+
+    Constructs the Cartesian product of all provided values and returns one
+    :class:`~recount3.resource.R3Resource` per unique combination.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        data_source: One or more data-source identifiers
+            (e.g. ``"sra"``, ``"gtex"``).
+        table_name: One or more metadata table name suffixes
+            (e.g. ``"recount_project"``, ``"recount_qc"``).
+        project: One or more project identifiers (e.g. ``"SRP009615"``).
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique (organism, data_source, table_name, project) combination.
+    """
     grid = _build_param_grid(
         "metadata_files",
         organism=organism,
@@ -173,7 +371,27 @@ def search_bigwig_files(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for per-sample BigWig coverage files."""
+    """Return R3Resource objects for per-sample BigWig coverage files.
+
+    Constructs the Cartesian product of all provided values and returns one
+    :class:`~recount3.resource.R3Resource` per unique combination.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        data_source: One or more data-source identifiers
+            (e.g. ``"sra"``, ``"gtex"``).
+        project: One or more project identifiers (e.g. ``"SRP009615"``).
+        sample: One or more sample identifiers (e.g. a rail_id or SRR accession).
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique (organism, data_source, project, sample) combination.
+    """
     grid = _build_param_grid(
         "bigwig_files",
         organism=organism,
@@ -190,7 +408,23 @@ def search_data_sources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for the organism-level data-source index."""
+    """Return R3Resource objects for the organism-level data-source index.
+
+    Each resource resolves to the ``homes_index`` file for one organism,
+    which lists the available data sources for that organism.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique organism.
+    """
     grid = _build_param_grid("data_sources", organism=organism)
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
@@ -202,7 +436,26 @@ def search_data_source_metadata(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return resources for data-source-level metadata listings."""
+    """Return R3Resource objects for data-source-level metadata listings.
+
+    Each resource resolves to the ``recount_project`` metadata file for one
+    (organism, data_source) pair, which enumerates all projects within that
+    data source.
+
+    Args:
+        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
+        data_source: One or more data-source identifiers
+            (e.g. ``"sra"``, ``"gtex"``).
+        strict: If ``True`` (default), re-raise any exception encountered while
+            constructing a resource. If ``False``, silently skip invalid
+            combinations.
+        deduplicate: If ``True`` (default), discard resources whose resolved
+            URL duplicates an earlier entry in the result list.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        unique (organism, data_source) combination.
+    """
     grid = _build_param_grid(
         "data_source_metadata",
         organism=organism,
@@ -692,35 +945,6 @@ def project_homes(
     )
 
     return grouped
-
-
-#   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)
-# Human:  G026 (Gencode v26), G029 (Gencode v29), F006 (FANTOM6_cat),
-#         R109 (RefSeq), ERCC (ERCC), SIRV (SIRV)
-# Mouse:  M023 (Gencode v23)
-_ANN_EXT_HUMAN: Final[tuple[str, ...]] = (
-    "G026",
-    "G029",
-    "F006",
-    "R109",
-    "ERCC",
-    "SIRV",
-)
-
-_ANN_EXT_MOUSE: Final[tuple[str, ...]] = ("M023",)
-
-_ANNOTATION_NAME_TO_EXT_HUMAN: Final[dict[str, str]] = {
-    "gencode_v26": "G026",
-    "gencode_v29": "G029",
-    "fantom6_cat": "F006",
-    "refseq": "R109",
-    "ercc": "ERCC",
-    "sirv": "SIRV",
-}
-
-_ANNOTATION_NAME_TO_EXT_MOUSE: Final[dict[str, str]] = {
-    "gencode_v23": "M023",
-}
 
 
 def annotation_options(organism: str) -> dict[str, str]:
