@@ -1273,6 +1273,33 @@ class R3ResourceBundle:
             normalization.
           recount3.errors.ConfigurationError: If the underlying search
             logic reports configuration problems.
+
+        Examples:
+            Discover all default resources for a single project::
+
+                bundle = R3ResourceBundle.discover(
+                    organism="human",
+                    data_source="sra",
+                    project="SRP009615",
+                )
+
+            Discover gene counts only across two projects::
+
+                bundle = R3ResourceBundle.discover(
+                    organism="human",
+                    data_source="sra",
+                    project=["SRP009615", "SRP012682"],
+                    genomic_units=("gene",),
+                )
+
+            Include BigWig coverage files alongside counts::
+
+                bundle = R3ResourceBundle.discover(
+                    organism="human",
+                    data_source="sra",
+                    project="SRP009615",
+                    include_bigwig=True,
+                )
         """
         organism_values = search.as_tuple(organism)
         data_source_values = search.as_tuple(data_source)
@@ -1513,6 +1540,27 @@ class R3ResourceBundle:
         Returns:
           A new :class:`R3ResourceBundle` containing only the resources
           that match all supplied filters and the optional predicate.
+
+        Examples:
+            Keep only gene-level resources::
+
+                gene_bundle = bundle.filter(genomic_unit="gene")
+
+            Keep gene or exon resources (iterable form)::
+
+                ge_bundle = bundle.filter(genomic_unit=["gene", "exon"])
+
+            Keep resources whose type contains "count" (callable form)::
+
+                counts = bundle.filter(
+                    resource_type=lambda t: "count" in (t or "")
+                )
+
+            Invert a filter to exclude metadata tables::
+
+                no_meta = bundle.filter(
+                    resource_type="metadata_files", invert=True
+                )
         """
         field_specs: dict[str, r3_types.FieldSpec] = {
             "resource_type": resource_type,
@@ -1781,6 +1829,20 @@ class R3ResourceBundle:
             :class:`pandas.DataFrame`.
           ValueError: If no applicable resources are present or if no
             loaded count matrices are found.
+
+        Examples:
+            Stack gene counts across all projects in the bundle::
+
+                df = bundle.filter(
+                    resource_type="count_files_gene_or_exon",
+                    genomic_unit="gene",
+                ).stack_count_matrices()
+
+            Require identical feature sets (faster; fails if annotations differ)::
+
+                df = bundle.filter(
+                    resource_type="count_files_gene_or_exon"
+                ).stack_count_matrices(compat="feature")
         """
         wanted = {
             "count_files_gene_or_exon",

@@ -312,6 +312,31 @@ def create_ranged_summarized_experiment(
       TypeError: If the underlying
         :class:`RangedSummarizedExperiment` constructor rejects all
         compatibility variants.
+
+    Examples:
+        Build an RSE for a human SRA gene-count project (GENCODE 26)::
+
+            rse = create_ranged_summarized_experiment(
+                project="SRP009615",
+                organism="human",
+                annotation_label="gencode_v26",
+            )
+
+        Use the raw annotation extension instead of a label::
+
+            rse = create_ranged_summarized_experiment(
+                project="SRP009615",
+                organism="human",
+                annotation_extension="G026",
+            )
+
+        Build a junction-level RSE::
+
+            rse = create_ranged_summarized_experiment(
+                project="SRP009615",
+                organism="human",
+                genomic_unit="junction",
+            )
     """
     unit = _utils._normalize_genomic_unit(genomic_unit)  # pylint: disable=protected-access
     ann_ext = _resolve_annotation_extension(
@@ -376,6 +401,23 @@ def create_rse(
 
     The parameters and behavior are identical; see that function for
     full documentation.
+
+    Examples:
+        Build an RSE for a human SRA gene-count project::
+
+            rse = create_rse(
+                project="SRP009615",
+                organism="human",
+                annotation_label="gencode_v26",
+            )
+
+        Use the raw extension string instead of a label::
+
+            rse = create_rse(
+                project="SRP009615",
+                organism="human",
+                annotation_extension="G026",
+            )
     """
     return create_ranged_summarized_experiment(
         project=project,
@@ -454,6 +496,20 @@ def expand_sra_attributes(
         ``column_data`` or ``set_column_data`` in the expected API.
       TypeError: If ``experiment_or_coldata`` is neither a pandas DataFrame nor a
         supported BiocPy experiment object.
+
+    Examples:
+        Expand attributes on a metadata DataFrame::
+
+            expanded_df = expand_sra_attributes(col_data_df)
+
+        Expand attributes directly on an RSE (returns a new RSE)::
+
+            rse2 = expand_sra_attributes(rse)
+
+        Inspect the new attribute columns::
+
+            attr_cols = [c for c in rse2.column_data.column_names
+                         if c.startswith("sra_attribute.")]
     """
     # DataFrame mode: no BiocPy dependency.
     if isinstance(experiment_or_coldata, pd.DataFrame):
@@ -639,6 +695,13 @@ def compute_tpm(
     Raises:
       TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).
       ValueError: If feature widths or read lengths are missing.
+
+    Examples:
+        Compute TPM from an RSE built with :func:`create_rse`::
+
+            rse = create_rse(project="SRP009615", organism="human",
+                             annotation_label="gencode_v26")
+            tpm_df = compute_tpm(rse)
     """
     ranged_summarized_experiment_cls = (
         _utils.get_ranged_summarizedexperiment_class()
@@ -810,6 +873,16 @@ def compute_scale_factors(
       ValueError: If `by` is invalid, required metadata columns are missing, or
         non-numeric metadata values are present.
       TypeError: If `target_read_count` or `target_read_length_bp` are not numeric scalars.
+
+    Examples:
+        AUC-based scaling (default)::
+
+            sf = compute_scale_factors(rse)
+            scaled = transform_counts(rse, scale_factors=sf)
+
+        Mapped-reads-based scaling::
+
+            sf = compute_scale_factors(rse, by="mapped_reads")
     """
     if by not in ("auc", "mapped_reads"):
         raise ValueError(

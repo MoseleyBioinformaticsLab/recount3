@@ -65,8 +65,10 @@ def default_config() -> Config:
       include a trailing slash (matching the original behavior).
     """
     base = (
-        os.environ.get("RECOUNT3_URL", "http://duffel.rail.bio/recount3/")
-        .rstrip("/") + "/"
+        os.environ.get(
+            "RECOUNT3_URL", "http://duffel.rail.bio/recount3/"
+        ).rstrip("/")
+        + "/"
     )
     cache_dir = Path(
         os.environ.get(
@@ -178,6 +180,19 @@ def recount3_cache_rm(
 
     Raises:
       OSError: If filesystem operations fail during deletion.
+
+    Examples:
+        List everything that would be removed, without deleting::
+
+            to_delete = recount3_cache_rm(dry_run=True)
+
+        Remove all cached files (empty the cache)::
+
+            recount3_cache_rm()
+
+        Remove only files related to the ``"sra"`` data source::
+
+            recount3_cache_rm(predicate=lambda p: "sra" in str(p))
     """
     cfg = config or default_config()
     root = cfg.cache_dir

@@ -82,7 +82,23 @@ def _ensure_cached_url(
 
 
 def _read_id_rail_ids(id_path: Path) -> list[str]:
-    """Read junction *.ID(.gz) and return rail_id column as strings, in order."""
+    """Read a junction ``.ID`` or ``.ID.gz`` file and return rail IDs in order.
+
+    The file is a tab-separated table with a header row. The function looks for
+    a column named ``rail_id`` (case-insensitive); if absent, it falls back to
+    the first column. A second parse attempt with ``sep=None`` (Python engine)
+    is made if the initial tab-delimited parse fails.
+
+    Args:
+        id_path: Path to the junction ID file (``.ID`` or ``.ID.gz``).
+
+    Returns:
+        An ordered list of rail ID strings, one per row.
+
+    Raises:
+        LoadError: If the file parses to an empty DataFrame or if the resulting
+            list of IDs is empty.
+    """
     try:
         df = pd.read_csv(
             id_path,
@@ -289,6 +305,23 @@ class R3Resource:
         Raises:
             ValueError: Combinations are invalid (e.g., path=None with
                 cache_mode='disable') or path has an unsupported format.
+
+        Examples:
+            Cache the file without copying it anywhere::
+
+                res.download(path=None, cache_mode="enable")
+
+            Copy the cached file into a local directory::
+
+                dest = res.download(path="/data/recount3")
+
+            Append the file to a ZIP archive::
+
+                res.download(path="/data/recount3.zip")
+
+            Force a cache refresh before copying::
+
+                dest = res.download(path="/data/recount3", cache_mode="update")
         """
         cfg = self.config or default_config()
         if cfg.cache_disabled:
@@ -381,6 +414,21 @@ class R3Resource:
             FileNotFoundError: The file is missing from the cache post-download.
             LoadError: Parsing fails, matrix shapes mismatch, or the resource
                 type is currently unsupported.
+
+        Examples:
+            Load a gene/exon count matrix as a DataFrame::
+
+                counts_df = gene_count_res.load()  # -> pd.DataFrame
+
+            Load a BigWig coverage file (close it when done)::
+
+                bw = bigwig_res.load()  # -> BigWigFile
+                vals = bw.values("chr1", 0, 1_000_000)
+                bw.close()
+
+            Re-parse from disk, bypassing the in-memory cache::
+
+                counts_df = res.load(force=True)
         """
         if not force and self._cached_data is not None:
             return self._cached_data
