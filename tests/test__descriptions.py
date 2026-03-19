@@ -20,9 +20,9 @@ COMMON_FIELDS = recount3._descriptions._R3CommonFields  # pylint: disable=protec
         ("SRP107565", "65"),
     ],
 )
-def test_p2(value: str | None, expected: str) -> None:
+def test_project_shard(value: str | None, expected: str) -> None:
     descriptions = recount3._descriptions
-    result = descriptions._p2(value)  # pylint: disable=protected-access
+    result = descriptions._project_shard(value)  # pylint: disable=protected-access
     assert result == expected
 
 
@@ -435,12 +435,12 @@ def test_common_fields_is_dataclass_with_slots() -> None:
         ("GTEX-SAMPLE-XYZ1", "GTEX", "XY"),
     ],
 )
-def test_bigwig_sample_shard(
+def test_sample_shard(
     sample: str | None,
     data_source: str | None,
     expected: str,
 ) -> None:
-    result = recount3._descriptions._bigwig_sample_shard(  # pylint: disable=protected-access
+    result = recount3._descriptions._sample_shard(  # pylint: disable=protected-access
         sample, data_source
     )
     assert result == expected

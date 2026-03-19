@@ -56,51 +56,48 @@ VALID_DATA_SOURCES: frozenset[str] = frozenset({"sra", "gtex", "tcga"})
 _VALID_GENOMIC_UNITS: frozenset[str] = frozenset({"gene", "exon"})
 
 
-def _p2(value: str | None) -> str:
-    """Returns the last two characters of an identifier for duffel shard paths.
+def _project_shard(project: str | None) -> str:
+    """Return the 2-character directory shard for a project identifier.
 
-    Many duffel directories are sharded by a 2-character suffix to reduce the
-    number of entries in a single directory. This helper returns that suffix.
+    Project-level URLs (counts, junctions, metadata, BigWig) include a
+    shard subdirectory derived from the last two characters of the project
+    ID to limit directory fanout. For example, project ``SRP009615``
+    produces the shard ``"15"``, yielding a path segment like
+    ``.../gene_sums/15/SRP009615/...``.
 
     Args:
-        value: Identifier string to shard (e.g., a project ID) or None.
+        project: Project identifier string (e.g., ``"SRP107565"``) or
+            ``None``.
 
     Returns:
-        The final two characters of `value`. If `value` is None or empty,
-        returns the empty string.
-
-    Examples:
-        >>> _p2(None)
-        ''
-        >>> _p2('')
-        ''
-        >>> _p2('A')
-        'A'
-        >>> _p2('SRP107565')
-        '65'
+        The final two characters of ``project``. Returns the empty string
+        when ``project`` is ``None`` or empty.
     """
-    if not value:
+    if not project:
         return ""
-    return value[-2:]
+    return project[-2:]
 
 
-def _bigwig_sample_shard(sample: str | None, data_source: str | None) -> str:
-    """Return the shard subdirectory for a BigWig sample file.
+def _sample_shard(sample: str | None, data_source: str | None) -> str:
+    """Return the 2-character directory shard for a BigWig sample identifier.
 
-    The recount3 duffel layout uses a 2-character subdirectory derived from
-    the sample identifier to reduce directory fanout. For GTEx samples the
-    shard is drawn from two characters *before* the final two (positions
-    ``[-4:-2]``), whereas for all other sources it is the final two
-    characters (``[-2:]``). The result is always uppercased, matching the
-    R reference implementation.
+    BigWig coverage file URLs include a shard subdirectory derived from the
+    sample identifier. The offset within the identifier depends on the data
+    source:
+
+    * GTEx: uses positions ``[-4:-2]`` (e.g., ``"GTEX-11DXZ-0526-SM-5EQRP"``
+      produces ``"EQ"``).
+    * SRA / TCGA: uses the final two characters ``[-2:]`` (e.g.,
+      ``"SRR387777"`` produces ``"77"``).
 
     Args:
-        sample: Sample identifier string.
+        sample: Sample identifier string (e.g., ``"SRR387777"`` or
+            ``"GTEX-11DXZ-0526-SM-5EQRP"``).
         data_source: Data source identifier (e.g., ``"sra"``, ``"gtex"``).
 
     Returns:
         A 2-character uppercase shard string, or the empty string if
-        ``sample`` is None or too short.
+        ``sample`` is ``None`` or too short.
     """
     if not sample:
         return ""
@@ -390,7 +387,7 @@ class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
     def url_path(self) -> str:
         return (
             f"{self.organism}/data_sources/{self.data_source}/"
-            f"{self.genomic_unit}_sums/{_p2(self.project)}/{self.project}/"
+            f"{self.genomic_unit}_sums/{_project_shard(self.project)}/{self.project}/"
             f"{self.data_source}.{self.genomic_unit}_sums.{self.project}."
             f"{self.annotation_extension}.gz"
         )
@@ -428,7 +425,7 @@ class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
     def url_path(self) -> str:
         return (
             f"{self.organism}/data_sources/{self.data_source}/junctions/"
-            f"{_p2(self.project)}/{self.project}/"
+            f"{_project_shard(self.project)}/{self.project}/"
             f"{self.data_source}.junctions.{self.project}."
             f"{self.junction_type}.{self.junction_extension}.gz"
         )
@@ -459,7 +456,7 @@ class R3ProjectMetadata(_R3CommonFields, R3ResourceDescription):
     def url_path(self) -> str:
         return (
             f"{self.organism}/data_sources/{self.data_source}/metadata/"
-            f"{_p2(self.project)}/{self.project}/"
+            f"{_project_shard(self.project)}/{self.project}/"
             f"{self.data_source}.{self.table_name}.{self.project}.MD.gz"
         )
 
@@ -481,7 +478,7 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
         {data_source}.base_sums.{project}_{sample}.ALL.bw
 
     The sample shard subdirectory uses a different offset for GTEx samples
-    compared to SRA/TCGA samples; see :func:`_bigwig_sample_shard`.
+    compared to SRA/TCGA samples; see :func:`_sample_shard`.
     """
 
     def __post_init__(self) -> None:
@@ -490,10 +487,10 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
         self._check_data_source()
 
     def url_path(self) -> str:
-        shard = _bigwig_sample_shard(self.sample, self.data_source)
+        shard = _sample_shard(self.sample, self.data_source)
         return (
             f"{self.organism}/data_sources/{self.data_source}/base_sums/"
-            f"{_p2(self.project)}/{self.project}/{shard}/"
+            f"{_project_shard(self.project)}/{self.project}/{shard}/"
             f"{self.data_source}.base_sums.{self.project}_{self.sample}.ALL.bw"
         )
 
