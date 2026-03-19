@@ -410,7 +410,7 @@ def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     return wide
 
 
-def _coerce_gtf_phase(frame: pd.Series) -> pd.Series:
+def _coerce_gtf_phase_column(phase_column: pd.Series) -> pd.Series:
     """Coerce a GTF frame/phase column to a nullable integer Series.
 
     GTF "frame" (a.k.a. phase) is typically one of {"0", "1", "2"} or "."
@@ -418,13 +418,13 @@ def _coerce_gtf_phase(frame: pd.Series) -> pd.Series:
     integer (Int64) Series where "." and missing values become <NA>.
 
     Args:
-      frame: A Series containing the 8th GTF column ("frame"/phase).
+      phase_column: A Series containing the 8th GTF column ("frame"/phase).
 
     Returns:
       A pandas Series of dtype Int64 with values in {0, 1, 2} or <NA>.
     """
     # Normalize to string to handle mixed types (object, int, float, NA).
-    frame_str = frame.astype("string").str.strip()
+    frame_str = phase_column.astype("string").str.strip()
 
     # GTF uses "." to indicate missing.
     frame_str = frame_str.replace(
@@ -720,7 +720,7 @@ def _ranges_from_gtf(
             "bp_length": _coerce_gtf_bp_length(
                 df["score"], starts=df["start"], ends=df["end"]
             ),
-            "phase": _coerce_gtf_phase(df["frame"]),
+            "phase": _coerce_gtf_phase_column(df["frame"]),
         },
         index=df.index,
     )
@@ -1329,9 +1329,9 @@ class R3ResourceBundle:
                     include_bigwig=True,
                 )
         """
-        organism_values = search.as_tuple(organism)
-        data_source_values = search.as_tuple(data_source)
-        project_values = search.as_tuple(project)
+        organism_values = search._normalize_to_tuple(organism)
+        data_source_values = search._normalize_to_tuple(data_source)
+        project_values = search._normalize_to_tuple(project)
 
         if not organism_values or not data_source_values or not project_values:
             raise ValueError(

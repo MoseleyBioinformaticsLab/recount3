@@ -21,7 +21,7 @@ from recount3.bundle import (
     _align_ranges_to_features,
     _choose_alignment_key,
     _coerce_gtf_bp_length,
-    _coerce_gtf_phase,
+    _coerce_gtf_phase_column,
     _collapse_rows_by_key,
     _construct_ranged_summarized_experiment,
     _construct_summarized_experiment,
@@ -476,7 +476,7 @@ class TestParseGtfAttributes:
 class TestCoerceGtfPhase:
     def test_valid_phases(self) -> None:
         s = pd.Series(["0", "1", "2", ".", pd.NA])
-        result = _coerce_gtf_phase(s)
+        result = _coerce_gtf_phase_column(s)
         assert result.iloc[0] == 0
         assert result.iloc[1] == 1
         assert result.iloc[2] == 2
@@ -486,14 +486,14 @@ class TestCoerceGtfPhase:
     def test_invalid_phase_coerced_to_na_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         s = pd.Series(["0", "5", "9"])
         with caplog.at_level(logging.WARNING):
-            result = _coerce_gtf_phase(s)
+            result = _coerce_gtf_phase_column(s)
         assert pd.isna(result.iloc[1])
         assert pd.isna(result.iloc[2])
         assert "unexpected values" in caplog.text
 
     def test_empty_string_becomes_na(self) -> None:
         s = pd.Series([""])
-        result = _coerce_gtf_phase(s)
+        result = _coerce_gtf_phase_column(s)
         assert pd.isna(result.iloc[0])
 
 

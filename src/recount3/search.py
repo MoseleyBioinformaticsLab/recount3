@@ -107,7 +107,7 @@ _ANNOTATION_NAME_TO_EXT_MOUSE: Final[dict[str, str]] = {
 }
 
 
-def as_tuple(value: StringOrIterable) -> tuple[str, ...]:
+def _normalize_to_tuple(value: StringOrIterable) -> tuple[str, ...]:
     """Normalize a string or iterable of strings into a tuple of strings.
 
     Args:
@@ -144,7 +144,7 @@ def _build_param_grid(
         resource parameters including ``resource_type``.
     """
     keys = list(required_values.keys())
-    vals = [as_tuple(required_values[k]) for k in keys]
+    vals = [_normalize_to_tuple(required_values[k]) for k in keys]
     grid: list[dict[str, str]] = []
     for combo in itertools.product(*vals):
         d: dict[str, str] = {"resource_type": resource_type}
@@ -220,7 +220,7 @@ def match_spec(value: object | None, spec: FieldSpec) -> bool:
         return True
     if callable(spec):
         return bool(spec(value))
-    return value in as_tuple(spec)
+    return value in _normalize_to_tuple(spec)
 
 
 # ---- Type-specific search wrappers -----------------------------------
@@ -627,7 +627,7 @@ def _normalize_organism_name(organism: str) -> str:
     return org
 
 
-def _strip_md_prefix(df: pd.DataFrame) -> pd.DataFrame:
+def _strip_metadata_column_prefix(df: pd.DataFrame) -> pd.DataFrame:
     """Strip recount3-style prefixes from metadata column names.
 
     Per-data-source metadata tables usually prefix columns with a
@@ -645,7 +645,7 @@ def _strip_md_prefix(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _path_basename(path: str) -> str:
+def _posix_basename(path: str) -> str:
     """Return the basename of a POSIX-style path without trailing slash.
 
     Args:
@@ -660,7 +660,7 @@ def _path_basename(path: str) -> str:
     return posixpath.basename(path.rstrip("/"))
 
 
-def _path_dirname(path: str) -> str:
+def _posix_dirname(path: str) -> str:
     """Return the dirname of a POSIX-style path without trailing slash.
 
     Args:
@@ -718,7 +718,7 @@ def available_samples(
     if data_sources is None:
         selected_sources = sorted(VALID_DATA_SOURCES)
     else:
-        selected_sources = list(as_tuple(data_sources))
+        selected_sources = list(_normalize_to_tuple(data_sources))
         invalid = [
             source
             for source in selected_sources
@@ -764,7 +764,7 @@ def available_samples(
             continue
 
         if isinstance(obj, pd.DataFrame):
-            frames.append(_strip_md_prefix(obj))
+            frames.append(_strip_metadata_column_prefix(obj))
 
     if not frames:
         if load_errors:
@@ -805,7 +805,7 @@ def available_samples(
 
     if "file_source" in samples.columns:
         samples["file_source"] = (
-            samples["file_source"].astype(str).map(_path_basename)
+            samples["file_source"].astype(str).map(_posix_basename)
         )
 
     if (
@@ -817,7 +817,7 @@ def available_samples(
 
     if "project_home" in samples.columns:
         samples["project_type"] = (
-            samples["project_home"].astype(str).map(_path_dirname)
+            samples["project_home"].astype(str).map(_posix_dirname)
         )
 
     for col in ("rail_id",):
@@ -911,7 +911,7 @@ def available_projects(
 
     if "project_home" in projects.columns:
         projects["project_type"] = (
-            projects["project_home"].astype(str).map(_path_dirname)
+            projects["project_home"].astype(str).map(_posix_dirname)
         )
 
     if key_cols:
@@ -988,7 +988,7 @@ def project_homes(
 
     if "project_type" not in projects.columns:
         projects["project_type"] = (
-            projects["project_home"].astype(str).map(_path_dirname)
+            projects["project_home"].astype(str).map(_posix_dirname)
         )
 
     if "file_source" not in projects.columns:
@@ -1149,7 +1149,7 @@ def samples_for_project(
     df = ds_meta[0].load()
     if not isinstance(df, pd.DataFrame) or df.empty:
         raise ValueError("Empty data-source metadata; cannot resolve samples.")
-    df = _strip_md_prefix(df)
+    df = _strip_metadata_column_prefix(df)
 
     proj_keys = ("project", "study", "project_id", "project_accession")
     samp_keys = ("sample", "sample_id", "run", "run_accession", "external_id")

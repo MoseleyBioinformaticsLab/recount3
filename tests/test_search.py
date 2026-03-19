@@ -20,13 +20,13 @@ from recount3.search import (
     _build_param_grid,
     _make_resources,
     _normalize_organism_name,
-    _path_basename,
-    _path_dirname,
+    _posix_basename,
+    _posix_dirname,
     _resolve_annotation_exts,
-    _strip_md_prefix,
+    _strip_metadata_column_prefix,
     annotation_ext,
     annotation_options,
-    as_tuple,
+    _normalize_to_tuple,
     available_projects,
     available_samples,
     create_sample_project_lists,
@@ -114,16 +114,16 @@ def _seed_mouse_sra(cfg: Config) -> None:
 
 class TestAsTuple:
     def test_string_becomes_single_element_tuple(self) -> None:
-        assert as_tuple("human") == ("human",)
+        assert _normalize_to_tuple("human") == ("human",)
 
     def test_list_becomes_tuple(self) -> None:
-        assert as_tuple(["a", "b", "c"]) == ("a", "b", "c")
+        assert _normalize_to_tuple(["a", "b", "c"]) == ("a", "b", "c")
 
     def test_generator_becomes_tuple(self) -> None:
-        assert as_tuple(x for x in ["x", "y"]) == ("x", "y")
+        assert _normalize_to_tuple(x for x in ["x", "y"]) == ("x", "y")
 
     def test_empty_list_becomes_empty_tuple(self) -> None:
-        assert as_tuple([]) == ()
+        assert _normalize_to_tuple([]) == ()
 
 
 class TestMatchSpec:
@@ -278,49 +278,49 @@ class TestNormalizeOrganismName:
 class TestStripMdPrefix:
     def test_strips_dot_prefix(self) -> None:
         df = pd.DataFrame({"sra.study": ["a"], "sra.project": ["b"]})
-        result = _strip_md_prefix(df)
+        result = _strip_metadata_column_prefix(df)
         assert list(result.columns) == ["study", "project"]
 
     def test_no_prefix_unchanged(self) -> None:
         df = pd.DataFrame({"study": ["a"], "project": ["b"]})
-        result = _strip_md_prefix(df)
+        result = _strip_metadata_column_prefix(df)
         assert list(result.columns) == ["study", "project"]
 
     def test_original_frame_not_mutated(self) -> None:
         df = pd.DataFrame({"sra.col": [1]})
-        _strip_md_prefix(df)
+        _strip_metadata_column_prefix(df)
         assert list(df.columns) == ["sra.col"]
 
     def test_multiple_dots_keeps_last_segment(self) -> None:
         df = pd.DataFrame({"a.b.c": [1]})
-        result = _strip_md_prefix(df)
+        result = _strip_metadata_column_prefix(df)
         assert list(result.columns) == ["c"]
 
 
 class TestPathHelpers:
     def test_basename_empty_string(self) -> None:
-        assert _path_basename("") == ""
+        assert _posix_basename("") == ""
 
     def test_basename_normal_path(self) -> None:
-        assert _path_basename("data_sources/sra") == "sra"
+        assert _posix_basename("data_sources/sra") == "sra"
 
     def test_basename_trailing_slash_stripped(self) -> None:
-        assert _path_basename("data_sources/sra/") == "sra"
+        assert _posix_basename("data_sources/sra/") == "sra"
 
     def test_basename_single_component(self) -> None:
-        assert _path_basename("human") == "human"
+        assert _posix_basename("human") == "human"
 
     def test_dirname_empty_string(self) -> None:
-        assert _path_dirname("") == ""
+        assert _posix_dirname("") == ""
 
     def test_dirname_normal_path(self) -> None:
-        assert _path_dirname("data_sources/sra") == "data_sources"
+        assert _posix_dirname("data_sources/sra") == "data_sources"
 
     def test_dirname_trailing_slash_stripped(self) -> None:
-        assert _path_dirname("data_sources/sra/") == "data_sources"
+        assert _posix_dirname("data_sources/sra/") == "data_sources"
 
     def test_dirname_single_component_is_empty(self) -> None:
-        assert _path_dirname("human") == ""
+        assert _posix_dirname("human") == ""
 
 
 class TestSearchAnnotations:

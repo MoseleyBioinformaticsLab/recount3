@@ -718,7 +718,7 @@ def _parse_filters(tokens: Iterable[str]) -> dict[str, str]:
     return result
 
 
-def _resource_from_dict(d: Mapping[str, Any], cfg: Config) -> R3Resource:
+def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
     """Create an :class:`R3Resource` from a manifest mapping.
 
     The mapping may contain convenience keys like ``url`` and ``arcname``.
@@ -726,7 +726,7 @@ def _resource_from_dict(d: Mapping[str, Any], cfg: Config) -> R3Resource:
     are derived from the description and the current :class:`Config`.
 
     Args:
-      d: JSON-like mapping for a single resource (often a line from JSONL).
+      mapping: JSON-like mapping for a single resource (often a line from JSONL).
       cfg: :class:`Config` for URL construction and caching behavior.
 
     Returns:
@@ -736,7 +736,7 @@ def _resource_from_dict(d: Mapping[str, Any], cfg: Config) -> R3Resource:
       KeyError: If ``resource_type`` is missing.
       ValueError: If the resource fields are invalid for that type.
     """
-    clean = dict(d)
+    clean = dict(mapping)
     clean.pop("url", None)
     clean.pop("arcname", None)
 
@@ -744,7 +744,7 @@ def _resource_from_dict(d: Mapping[str, Any], cfg: Config) -> R3Resource:
     return R3Resource(description=desc, config=cfg)
 
 
-def _write_jsonl(resources: Iterable[R3Resource], out: Path | None) -> None:
+def _write_jsonl(resources: Iterable[R3Resource], output_path: Path | None) -> None:
     """Write one JSON object per line describing each resource.
 
     The JSON schema contains all dataclass fields from the description plus
@@ -752,13 +752,13 @@ def _write_jsonl(resources: Iterable[R3Resource], out: Path | None) -> None:
 
     Args:
       resources: Iterable of resources to serialize.
-      out: Optional file path; when ``None``, writes to stdout.
+      output_path: Optional file path; when ``None``, writes to stdout.
     """
     sink: Any
     close = False
-    if out:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        sink = out.open("w", encoding="utf-8")
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        sink = output_path.open("w", encoding="utf-8")
         close = True
     else:
         sink = sys.stdout
@@ -781,7 +781,7 @@ def _write_jsonl(resources: Iterable[R3Resource], out: Path | None) -> None:
             sink.close()
 
 
-def _write_tsv(resources: Iterable[R3Resource], out: Path | None) -> None:
+def _write_tsv(resources: Iterable[R3Resource], output_path: Path | None) -> None:
     """Write a TSV manifest with a stable column ordering.
 
     Columns:
@@ -793,7 +793,7 @@ def _write_tsv(resources: Iterable[R3Resource], out: Path | None) -> None:
 
     Args:
       resources: Iterable of resources to serialize.
-      out: Optional file path; when ``None``, writes to stdout.
+      output_path: Optional file path; when ``None``, writes to stdout.
     """
     order = [
         "resource_type",
@@ -812,9 +812,9 @@ def _write_tsv(resources: Iterable[R3Resource], out: Path | None) -> None:
 
     sink: Any
     close = False
-    if out:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        sink = out.open("w", encoding="utf-8", newline="")
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        sink = output_path.open("w", encoding="utf-8", newline="")
         close = True
     else:
         sink = sys.stdout
