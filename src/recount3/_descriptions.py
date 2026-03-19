@@ -1,16 +1,35 @@
 """Resource descriptions and duffel URL-path construction.
 
-This module defines a small set of resource description dataclasses for the
-recount3 duffel layout. A description is a validated, immutable-ish bundle of
-parameters (organism, project, etc.) that can deterministically construct the
-relative path to a resource in the duffel repository.
+This module defines a small set of resource description dataclasses for 
+recount3. A description is a validated, immutable-ish bundle of parameters
+(organism, project, etc.) that can deterministically construct the relative
+path to a resource in the repository.
 
 The main entry point is :class:`R3ResourceDescription`, which acts as a
 multi-factory: instantiating ``R3ResourceDescription(resource_type=...)``
 returns an instance of the registered concrete subclass for that
 ``resource_type``.
 
-Typical usage:
+Registered resource types
+  ==========================================  ============================
+  ``resource_type`` string                    Class
+  ==========================================  ============================
+  ``"annotations"``                           :class:`R3Annotations`
+  ``"count_files_gene_or_exon"``              :class:`R3GeneOrExonCounts`
+  ``"count_files_junctions"``                 :class:`R3JunctionCounts`
+  ``"metadata_files"``                        :class:`R3ProjectMetadata`
+  ``"bigwig_files"``                          :class:`R3BigWig`
+  ``"data_sources"``                          :class:`R3DataSources`
+  ``"data_source_metadata"``                  :class:`R3DataSourceMetadata`
+  ==========================================  ============================
+
+Valid values for the ``organism`` and ``data_source`` fields are exposed as
+the module-level constants :data:`VALID_ORGANISMS` and
+:data:`VALID_DATA_SOURCES`.
+
+Typical usage::
+
+  from recount3._descriptions import R3ResourceDescription
 
   desc = R3ResourceDescription(
       resource_type="count_files_gene_or_exon",
@@ -22,18 +41,8 @@ Typical usage:
   )
   path = desc.url_path()
 
-You can also pass the resource type positionally as the first argument:
-
+  # Resource type can also be passed as the first positional argument:
   desc = R3ResourceDescription("data_sources", organism="human")
-
-Design notes:
-- The duffel layout often uses 2-character "shard" directories derived from an
-  identifier (e.g., project ID) to reduce directory fanout. The helper `_p2()`
-  implements that convention.
-- Concrete description classes are dataclasses with ``slots=True`` to minimize
-  per-instance overhead and reduce accidental attribute creation.
-- ``_TYPE_REGISTRY`` is mutable by design: it is the factory registry used to
-  bind resource-type strings to concrete classes. See `register_type()`.
 """
 
 from __future__ import annotations

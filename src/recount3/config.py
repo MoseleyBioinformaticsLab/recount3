@@ -2,19 +2,42 @@
 
 This module centralizes configuration so that environment-dependent values
 are not hidden as mutable module globals. Values are read once via
-:func:`default_config` and can be overridden by constructing :class:`Config`.
+:func:`default_config` and can be overridden by constructing :class:`Config`
+directly. CLI flags in :mod:`recount3.cli` take the highest precedence and
+override both environment variables and :class:`Config` defaults.
 
-The defaults match the original script's behavior.
+The module also exposes three cache utility functions:
+:func:`recount3_cache`, :func:`recount3_cache_files`, and
+:func:`recount3_cache_rm`.
 
-Environment variables:
-  * RECOUNT3_URL
-  * RECOUNT3_CACHE_DIR
-  * RECOUNT3_CACHE_DISABLE
-  * RECOUNT3_HTTP_TIMEOUT
-  * RECOUNT3_MAX_RETRIES
-  * RECOUNT3_INSECURE_SSL
-  * RECOUNT3_USER_AGENT
-  * RECOUNT3_CHUNK_SIZE
+Environment variables (all optional):
+  * ``RECOUNT3_URL``: base URL of the duffel mirror
+    (default: ``https://duffel.rail.bio/recount3/``).
+  * ``RECOUNT3_CACHE_DIR``: directory for the on-disk file cache
+    (default: ``~/.cache/recount3``).
+  * ``RECOUNT3_CACHE_DISABLE``: set to ``"1"`` to disable caching entirely.
+  * ``RECOUNT3_HTTP_TIMEOUT``: HTTP request timeout in seconds (default: 30).
+  * ``RECOUNT3_MAX_RETRIES``: maximum retry attempts for transient errors
+    (default: 3).
+  * ``RECOUNT3_INSECURE_SSL``: set to ``"1"`` to skip TLS verification
+    (unsafe; use only for debugging certificate issues).
+  * ``RECOUNT3_USER_AGENT``: custom ``User-Agent`` header string.
+  * ``RECOUNT3_CHUNK_SIZE``: streaming chunk size in bytes (default: 65536).
+
+Typical usage example::
+
+    from pathlib import Path
+    from recount3.config import Config, recount3_cache, recount3_cache_rm
+
+    # Read the current cache directory (creates it if absent):
+    cache_dir = recount3_cache()
+
+    # Use a custom cache location for this session:
+    cfg = Config(cache_dir=Path("/scratch/recount3_cache"))
+
+    # Remove cached files matching a pattern (dry run first):
+    to_delete = recount3_cache_rm(dry_run=True)
+    recount3_cache_rm(predicate=lambda p: "sra" in str(p))
 """
 
 from __future__ import annotations

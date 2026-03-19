@@ -2,7 +2,7 @@
 # pylint: disable=invalid-name
 """Module entry point.
 
-Delegates to :mod:`recount3.cli`.
+Delegates to :mod:`recount3.cli`. Invoke via ``python -m recount3 --help``.
 """
 
 from __future__ import annotations

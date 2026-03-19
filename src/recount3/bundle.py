@@ -1,17 +1,32 @@
 """Resource bundles, project discovery, and concatenation helpers.
 
 This module defines :class:`R3ResourceBundle`, a general-purpose
-container for groups of :class:`recount3.resource.R3Resource` objects.
+container for groups of :class:`~recount3.resource.R3Resource` objects.
 
 Bundles support lazy loading, filtering by description fields,
 project-aware discovery, and high-level helpers for combining recount3
 resources into BiocPy objects such as
-:class:`summarizedexperiment.SummarizedExperiment` and
-:class:`summarizedexperiment.RangedSummarizedExperiment`.
+:class:`~summarizedexperiment.SummarizedExperiment` and
+:class:`~summarizedexperiment.RangedSummarizedExperiment`.
 
-Typical usage example:
+When discovery covers exactly one ``(organism, data_source, project)``
+triple, the bundle's ``organism``, ``data_source``, and ``project``
+attributes are set accordingly. For multi-project bundles these attributes
+are ``None`` to avoid misrepresenting the identity.
 
-  from recount3.bundle import R3ResourceBundle
+Filtering with FieldSpec
+  :meth:`~R3ResourceBundle.filter` accepts a
+  :data:`~recount3.types.FieldSpec` for each description field. Three
+  forms are accepted:
+
+  * A string: exact match (e.g. ``genomic_unit="gene"``).
+  * An iterable of strings: keep if the field is any of the given values.
+  * A callable: called with the field value; truthy return keeps the resource.
+  * ``None`` (default): no filtering on that field.
+
+Typical usage example::
+
+  from recount3 import R3ResourceBundle
 
   bundle = R3ResourceBundle.discover(
       organism="human",
@@ -19,11 +34,24 @@ Typical usage example:
       project="SRP009615",
   )
 
-  # Stack raw count matrices across samples.
-  counts = bundle.only_counts().stack_count_matrices()
+  # Filter to gene-level count resources and stack into a DataFrame:
+  counts = bundle.filter(
+      resource_type="count_files_gene_or_exon",
+      genomic_unit="gene",
+  ).stack_count_matrices()
 
-  # Build a RangedSummarizedExperiment for gene-level counts.
-  rse = bundle.to_ranged_summarized_experiment(genomic_unit="gene")
+  # Filter with a callable predicate:
+  meta_only = bundle.filter(
+      resource_type=lambda t: t == "metadata_files"
+  )
+
+Note:
+    The :meth:`~R3ResourceBundle.to_summarized_experiment` and
+    :meth:`~R3ResourceBundle.to_ranged_summarized_experiment` methods
+    require the BiocPy package ``summarizedexperiment``, which might be
+    difficult to install on Windows. Install with::
+
+        pip install summarizedexperiment
 """
 
 from __future__ import annotations

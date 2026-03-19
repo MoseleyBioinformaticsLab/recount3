@@ -1,31 +1,31 @@
 """Internal utilities for HTTP, filesystem, and caching operations.
 
-This module consolidates low-level implementation details for network operations,
-filesystem management, and caching that support the public recount3 API. These
-utilities are designed to be thread-safe, configurable, and side-effect free
-beyond their intended operations.
-
-The module is organized into three sections:
+The module is organized into four sections:
 
 1. Caching Utilities: URL-based cache key generation and path management
-2. Filesystem Utilities: Directory management and atomic file operations  
+2. Filesystem Utilities: Directory management and atomic file operations
 3. HTTP Utilities: Network requests with retries, streaming, and ZIP handling
+4. Optional Dependency Management: lazy import helpers for BiocPy packages
+   (``biocframe``, ``summarizedexperiment``, ``genomicranges``) and
+   ``pyBigWig``; raises a standardized :exc:`ImportError` when a required
+   optional package is missing.
 
 Note:
     This module is considered internal implementation detail and may change
     without notice. Users should prefer the public API in the main package.
 
 Examples:
-    Typical usage is through the public API, but direct usage might look like:
+    Typical usage is through the public API, but direct usage might look like::
 
-    >>> from recount3._utils import _cache_path, download_to_file
-    >>> cache_path = _cache_path("http://example.com/data.tsv", "/tmp/cache")
-    >>> download_to_file("http://example.com/data.tsv", cache_path, ...)
+        from pathlib import Path
+        from recount3._utils import _cache_path
+
+        path = _cache_path("https://example.com/data.tsv", Path("/tmp/cache"))
 
 Attributes:
     _ZIP_LOCKS_GUARD: Threading lock to safely interact with the weakref dictionary.
-    _ZIP_LOCKS: A weak reference dictionary mapping ZIP file paths to specific 
-        threading locks. This synchronizes ZIP mutations per-file, preventing 
+    _ZIP_LOCKS: A weak reference dictionary mapping ZIP file paths to specific
+        threading locks. This synchronizes ZIP mutations per-file, preventing
         race conditions without leaking memory for inactive cache paths.
 """
 
@@ -64,17 +64,30 @@ if TYPE_CHECKING:  # pragma: no cover
     import summarizedexperiment  # type: ignore[import-not-found]
 
 _ZIP_LOCKS_GUARD = threading.Lock()
-_ZIP_LOCKS: weakref.WeakValueDictionary[str, _WeakRefLock] = weakref.WeakValueDictionary()
+_ZIP_LOCKS: weakref.WeakValueDictionary[str, _WeakRefLock] = (
+    weakref.WeakValueDictionary()
+)
 
 
 class _WeakRefLock:
-    """A wrapper around threading.Lock to allow weak references."""
+    """A threading.Lock wrapper that supports weak references.
+
+    :class:`threading.Lock` objects cannot be stored in a
+    :class:`weakref.WeakValueDictionary` because they do not support weak
+    references. This class wraps a lock instance, making the wrapper itself
+    weakly referenceable while proxying the context-manager protocol
+    (``__enter__`` / ``__exit__``) to the inner lock.
+    """
+
     def __init__(self):
         self._lock = threading.Lock()
+
     def __enter__(self):
         return self._lock.__enter__()
+
     def __exit__(self, *args):
         return self._lock.__exit__(*args)
+
 
 def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
     """Return the shared lock for a specific ZIP path.
@@ -93,16 +106,18 @@ def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
             _ZIP_LOCKS[key] = lock
         return lock
 
+
 # =============================================================================
 # Caching Utilities
 # =============================================================================
 
+
 def _sha256(text: str) -> str:
     """Return the hex SHA256 digest of input text.
-    
+
     Args:
         text: Input string to hash.
-        
+
     Returns:
         64-character hexadecimal SHA256 digest.
     """
@@ -111,17 +126,17 @@ def _sha256(text: str) -> str:
 
 def _cache_key_for_url(url: str) -> str:
     """Generate stable cache key derived from full URL.
-    
+
     Creates a deterministic cache filename using a short SHA256 prefix
     combined with the URL path's basename. This ensures unique but
     recognizable cache entries.
-    
+
     Args:
         url: Full resource URL to generate key for.
-        
+
     Returns:
         Cache key in format: `{sha256_prefix}__{url_basename}`.
-        
+
     Example:
         >>> _cache_key_for_url("http://example.com/path/to/file.tsv.gz")
         'a1b2c3d4e5f67890__file.tsv.gz'
@@ -134,14 +149,14 @@ def _cache_key_for_url(url: str) -> str:
 
 def _cache_path(url: str, cache_root: str | Path) -> Path:
     """Return full filesystem path for cached URL content.
-    
+
     Args:
         url: Resource URL to locate in cache.
         cache_root: Base cache directory path.
-        
+
     Returns:
         Absolute Path where URL content should be cached.
-        
+
     Raises:
         NotADirectoryError: If cache_root exists but is not a directory.
     """
@@ -150,15 +165,16 @@ def _cache_path(url: str, cache_root: str | Path) -> Path:
 
 
 # =============================================================================
-# Filesystem Utilities  
+# Filesystem Utilities
 # =============================================================================
+
 
 def _ensure_dir(path: str | Path) -> None:
     """Ensure directory exists, creating parents as needed.
-    
+
     Args:
         path: Directory path to create.
-        
+
     Raises:
         NotADirectoryError: If path exists as a non-directory.
         OSError: If directory creation fails due to permissions or other system
@@ -167,31 +183,41 @@ def _ensure_dir(path: str | Path) -> None:
     p = Path(path)
     try:
         p.mkdir(parents=True, exist_ok=True)
-    except FileExistsError:
-        raise NotADirectoryError(f"Exists but is not a directory: {p}")
+    except FileExistsError as exc:
+        raise NotADirectoryError(
+            f"Exists but is not a directory: {p}"
+        ) from exc
 
 
 def _hardlink_or_copy(src: Path, dst: Path) -> None:
     """Materialize file by hardlink, falling back to copy on errors.
-    
+
     Attempts to create a hardlink for efficiency. Falls back to copy operation
     on cross-device, permission, or too-many-links errors.
-    
+
     Args:
         src: Source file path.
         dst: Destination file path.
-        
+
     Raises:
         OSError: On unexpected filesystem errors beyond the handled cases.
         FileNotFoundError: If source file doesn't exist.
     """
-    tmp_dst = dst.parent / f".{dst.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmp"
-    
+    tmp_dst = (
+        dst.parent
+        / f".{dst.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmp"
+    )
+
     try:
         try:
             os.link(src, tmp_dst)
         except OSError as e:
-            if e.errno in (errno.EXDEV, errno.EPERM, errno.EACCES, errno.EMLINK):
+            if e.errno in (
+                errno.EXDEV,
+                errno.EPERM,
+                errno.EACCES,
+                errno.EMLINK,
+            ):
                 shutil.copy2(src, tmp_dst)
             else:
                 raise
@@ -206,15 +232,15 @@ def _hardlink_or_copy(src: Path, dst: Path) -> None:
 
 def _atomic_replace(src_tmp: Path, final_path: Path) -> None:
     """Atomically replace final path with temporary file.
-    
+
     Uses filesystem atomic replace operation to ensure the destination
     file either exists completely or not at all, preventing partial
     file states.
-    
+
     Args:
         src_tmp: Temporary file path containing new content.
         final_path: Final destination path for the content.
-        
+
     Raises:
         OSError: If the replace operation fails.
     """
@@ -226,13 +252,14 @@ def _atomic_replace(src_tmp: Path, final_path: Path) -> None:
 # HTTP Utilities
 # =============================================================================
 
+
 def _ssl_insecure_context() -> ssl.SSLContext:
     """Return SSL context with verification disabled (not recommended).
-    
+
     Warning:
         This disables certificate verification and should only be used
         for testing or with trusted networks.
-        
+
     Returns:
         SSL context with hostname verification and certificate checking
         disabled.
@@ -252,17 +279,17 @@ def http_open(
     user_agent: str,
 ) -> BinaryIO:
     """Open URL with urllib, ensuring all headers are valid strings.
-    
+
     Args:
         url: Absolute URL to open.
         timeout: Socket timeout in seconds.
         headers: Optional extra headers to send. None values are dropped.
         insecure_ssl: If True, disable TLS verification.
         user_agent: User-Agent header override.
-        
+
     Returns:
         Binary HTTP response object.
-        
+
     Raises:
         URLError: For network-level errors.
         HTTPError: For HTTP protocol errors.
@@ -291,18 +318,18 @@ def http_open(
 
 def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
     """Execute function with simple exponential backoff on transient errors.
-    
+
     Implements retry logic for network operations that may fail transiently.
     Sleeps between attempts follow exponential backoff pattern.
-    
+
     Args:
         func: Callable to execute with retries.
         attempts: Maximum number of execution attempts.
         base_sleep: Base sleep time in seconds for backoff calculation.
-        
+
     Returns:
         Return value of the successful function execution.
-        
+
     Raises:
         Exception: The last exception encountered if all attempts fail.
     """
@@ -327,12 +354,12 @@ def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
 
 def _stream_copy(src_fh, dst_fh, *, chunk_size: int) -> int:
     """Copy bytes in chunks from source to destination filehandle.
-    
+
     Args:
         src_fh: Source file-like object supporting read().
         dst_fh: Destination file-like object supporting write().
         chunk_size: Number of bytes to read/write per chunk.
-        
+
     Returns:
         Total number of bytes copied.
     """
@@ -357,11 +384,11 @@ def download_to_file(
     attempts: int,
 ) -> None:
     """Download URL atomically into output path.
-    
+
     Streams content directly to temporary file then atomically replaces
     destination to avoid partial files on failure. Implements retry logic
     for transient network errors.
-    
+
     Args:
         url: Resource URL to download.
         out_path: Destination file path.
@@ -370,22 +397,29 @@ def download_to_file(
         insecure_ssl: If True, disable TLS verification.
         user_agent: HTTP User-Agent header.
         attempts: Maximum retry attempts for transient errors.
-        
+
     Raises:
         DownloadError: If download fails after all retry attempts.
         OSError: If filesystem operations fail.
     """
+
     def _do():
         with contextlib.closing(
             http_open(
-                url, timeout=timeout, headers=None,
-                insecure_ssl=insecure_ssl, user_agent=user_agent,
+                url,
+                timeout=timeout,
+                headers=None,
+                insecure_ssl=insecure_ssl,
+                user_agent=user_agent,
             )
         ) as resp:
             _ensure_dir(out_path.parent)
-            
-            tmp = out_path.parent / f".{out_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.downloading"
-            
+
+            tmp = (
+                out_path.parent
+                / f".{out_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.downloading"
+            )
+
             try:
                 with open(tmp, "wb") as fh:
                     _stream_copy(resp, fh, chunk_size=chunk_size)
@@ -441,7 +475,9 @@ def _write_or_replace_in_zip(
 
     with _zip_lock_for_path(zip_path):
         if not zip_path.exists():
-            with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(
+                zip_path, "w", compression=zipfile.ZIP_DEFLATED
+            ) as zf:
                 zf.write(source_path, arcname)
             return
 
@@ -467,14 +503,18 @@ def _write_or_replace_in_zip(
             )
             try:
                 with zipfile.ZipFile(zip_path, "r") as zf_in:
-                    with zipfile.ZipFile(tmp_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf_out:
+                    with zipfile.ZipFile(
+                        tmp_zip, "w", compression=zipfile.ZIP_DEFLATED
+                    ) as zf_out:
                         zf_out.comment = zf_in.comment
 
                         for info in zf_in.infolist():
                             if info.filename == arcname:
                                 continue
 
-                            out_info = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+                            out_info = zipfile.ZipInfo(
+                                info.filename, date_time=info.date_time
+                            )
                             out_info.compress_type = info.compress_type
                             out_info.comment = info.comment
                             out_info.extra = info.extra
@@ -500,7 +540,9 @@ def _write_or_replace_in_zip(
                     except OSError:
                         pass
         else:
-            with zipfile.ZipFile(zip_path, "a", compression=zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(
+                zip_path, "a", compression=zipfile.ZIP_DEFLATED
+            ) as zf:
                 zf.write(source_path, arcname)
 
 
@@ -625,8 +667,9 @@ def write_cached_file_to_zip(
 
 
 # =============================================================================
-# Summarized Experiment Utilities 
+# Summarized Experiment Utilities
 # =============================================================================
+
 
 def _normalize_genomic_unit(genomic_unit: str) -> str:
     """Return a normalized genomic unit string and validate it.
@@ -701,7 +744,9 @@ def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
     if isinstance(sample_metadata_source, pd.DataFrame):
         return sample_metadata_source
 
-    if hasattr(sample_metadata_source, "col_data") and hasattr(sample_metadata_source.col_data, "to_pandas"):
+    if hasattr(sample_metadata_source, "col_data") and hasattr(
+        sample_metadata_source.col_data, "to_pandas"
+    ):
         return sample_metadata_source.col_data.to_pandas()
 
     raise TypeError(
@@ -723,10 +768,10 @@ def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
     Raises:
         ValueError: If non-missing values cannot be coerced to numeric.
     """
-    cleaned = series.replace(r'^\s*$', pd.NA, regex=True)
-    
+    cleaned = series.replace(r"^\s*$", pd.NA, regex=True)
+
     numeric = pd.to_numeric(cleaned, errors="coerce")
-    
+
     invalid = cleaned.notna() & numeric.isna()
     if invalid.any():
         examples = cleaned[invalid].head(3).tolist()
@@ -782,15 +827,17 @@ def _resolve_metadata_column(
 # Optional Dependency Utilities
 # =============================================================================
 
-_OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType({
-    "biocframe": "pip install biocframe genomicranges summarizedexperiment",
-    "genomicranges": "pip install biocframe genomicranges summarizedexperiment",
-    "summarizedexperiment": "pip install biocframe genomicranges summarizedexperiment",
-    "pyBigWig": (
-        "pip install pyBigWig\n"
-        "  conda install -c conda-forge -c bioconda pybigwig"
-    ),
-})
+_OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
+    {
+        "biocframe": "pip install biocframe genomicranges summarizedexperiment",
+        "genomicranges": "pip install biocframe genomicranges summarizedexperiment",
+        "summarizedexperiment": "pip install biocframe genomicranges summarizedexperiment",
+        "pyBigWig": (
+            "pip install pyBigWig\n"
+            "  conda install -c conda-forge -c bioconda pybigwig"
+        ),
+    }
+)
 
 
 def _format_optional_dependency_import_error(
@@ -941,8 +988,9 @@ def get_genomicranges_class() -> type["genomicranges.GenomicRanges"]:
     )
 
 
-def get_summarizedexperiment_class(
-) -> type["summarizedexperiment.SummarizedExperiment"]:
+def get_summarizedexperiment_class() -> (
+    type["summarizedexperiment.SummarizedExperiment"]
+):
     """Return the BiocPy "summarizedexperiment.SummarizedExperiment" class.
 
     Returns:
@@ -962,8 +1010,9 @@ def get_summarizedexperiment_class(
     )
 
 
-def get_ranged_summarizedexperiment_class(
-) -> type["summarizedexperiment.RangedSummarizedExperiment"]:
+def get_ranged_summarizedexperiment_class() -> (
+    type["summarizedexperiment.RangedSummarizedExperiment"]
+):
     """Return the BiocPy "summarizedexperiment.RangedSummarizedExperiment" class.
 
     Returns:
@@ -1006,14 +1055,33 @@ _JXN_SIDECAR_RE = re.compile(r"\.(MM|ID|RR)\.gz$", re.IGNORECASE)
 
 
 def _derive_junction_sidecar_url(url: str, new_ext: str) -> str:
-    """Return a junction sidecar URL by swapping the .{MM,ID,RR}.gz suffix."""
+    """Return a junction sidecar URL by swapping the ``.{MM,ID,RR}.gz`` suffix.
+
+    Junction files come in a triplet sharing a common stem: a MatrixMarket
+    matrix (``.MM.gz``), a sample-ID table (``.ID.gz``), and a row-ranges
+    table (``.RR.gz``). Given the URL for any one of the three, this function
+    produces the URL for another member of the triplet.
+
+    Args:
+        url: A non-empty URL whose path ends with ``.MM.gz``, ``.ID.gz``, or
+            ``.RR.gz`` (case-insensitive).
+        new_ext: The target extension token. Must be one of ``"MM"``, ``"ID"``,
+            or ``"RR"`` (case-insensitive).
+
+    Returns:
+        The URL with the trailing ``.<ext>.gz`` replaced by
+        ``.<new_ext>.gz``.
+
+    Raises:
+        ValueError: If ``url`` is empty, if ``new_ext`` is not one of
+            ``MM``/``ID``/``RR``, or if ``url`` does not end with a
+            recognised junction suffix.
+    """
     if not url:
         raise ValueError("url must be non-empty")
     new_ext_u = new_ext.upper()
     if new_ext_u not in {"MM", "ID", "RR"}:
         raise ValueError(f"new_ext must be one of MM/ID/RR, got {new_ext!r}")
-
     if _JXN_SIDECAR_RE.search(url):
         return _JXN_SIDECAR_RE.sub(f".{new_ext_u}.gz", url)
-    # If the URL doesn't match the expected pattern, fall back to a strict error:
     raise ValueError(f"Cannot derive junction sidecar URL from {url!r}")

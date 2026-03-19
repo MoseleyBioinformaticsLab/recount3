@@ -1,7 +1,64 @@
-"""Discovery and search helpers.
+"""Discovery and search helpers for the recount3 data repository.
 
-These functions generate :class:`R3Resource` objects for common queries and
-preserve the original behavior.
+This module provides two tiers of functions:
+
+Tier 1: Type-specific search wrappers
+  These functions accept field values and return a list of
+  :class:`~recount3.resource.R3Resource` objects:
+
+  * :func:`search_annotations`: annotation GTF files
+  * :func:`search_count_files_gene_or_exon`: gene/exon count matrices
+  * :func:`search_count_files_junctions`: junction count files (MM/ID/RR)
+  * :func:`search_metadata_files`: per-project metadata tables
+  * :func:`search_bigwig_files`: per-sample BigWig coverage files
+  * :func:`search_data_sources`: organism-level data-source index
+  * :func:`search_data_source_metadata`: data-source metadata listings
+  * :func:`search_project_all`: convenience orchestrator that calls all of
+    the above for a given project and returns a combined resource list
+
+Tier 2: Discovery helpers
+  These functions download and parse metadata to return structured results:
+
+  * :func:`available_samples`: DataFrame of samples available across data sources
+  * :func:`available_projects`: DataFrame of projects with sample counts
+  * :func:`project_homes`: DataFrame mapping projects to their data-source home URLs
+  * :func:`samples_for_project`: sample IDs for a specific project
+  * :func:`annotation_options`: mapping of annotation names to extension codes
+  * :func:`annotation_ext`: resolve a name or code to a canonical extension string
+
+StringOrIterable and the Cartesian product pattern
+  All Tier 1 functions accept :data:`~recount3.types.StringOrIterable` for
+  each parameter: either a single string or an iterable of strings. When
+  iterables are supplied, the function computes the Cartesian product across
+  all parameters and returns one resource per unique combination. For example,
+  passing ``project=["SRP009615", "SRP012682"]`` and ``genomic_unit=["gene",
+  "exon"]`` produces four resources.
+
+Annotation names and extension codes
+  Gene/exon count resources are keyed by an annotation extension code
+  (e.g. ``"G026"``). Human-readable annotation labels (e.g.
+  ``"gencode_v26"``) are resolved to their codes via
+  :func:`annotation_ext`. Use :func:`annotation_options` to list all
+  available mappings for an organism.
+
+Typical usage example::
+
+    from recount3 import search_count_files_gene_or_exon, search_project_all
+
+    # Single project, gene-level counts:
+    resources = search_count_files_gene_or_exon(
+        organism="human",
+        data_source="sra",
+        genomic_unit="gene",
+        project="SRP009615",
+    )
+
+    # All resource types for a project in one call:
+    all_res = search_project_all(
+        organism="human",
+        data_source="sra",
+        project="SRP009615",
+    )
 """
 
 from __future__ import annotations
@@ -151,9 +208,9 @@ def match_spec(value: object | None, spec: FieldSpec) -> bool:
         value: The candidate value to test.
         spec: The selection specification. Accepted forms:
 
-            * ``None`` — matches everything.
-            * A callable — called with ``value``; truthy return means match.
-            * A string or iterable of strings — matches if ``value`` is among
+            * ``None``: matches everything.
+            * A callable: called with ``value``; truthy return means match.
+            * A string or iterable of strings: matches if ``value`` is among
               the normalised tuple of strings.
 
     Returns:
@@ -249,7 +306,7 @@ def search_count_files_gene_or_exon(
                 project="SRP009615",
             )
 
-        Multiple projects — returns one resource per project (Cartesian product)::
+        Multiple projects: returns one resource per project (Cartesian product)::
 
             resources = search_count_files_gene_or_exon(
                 organism="human",

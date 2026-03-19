@@ -1,30 +1,50 @@
 """High-level builders and utilities for SummarizedExperiment objects.
 
-This module provides user-facing helpers for constructing BiocPy
-:sup:`SummarizedExperiment` and
-:sup:`RangedSummarizedExperiment` objects from recount3 projects, plus
-utilities for working with SRA-style sample attributes.
+This module provides helpers for constructing BiocPy
+:class:`~summarizedexperiment.SummarizedExperiment` and
+:class:`~summarizedexperiment.RangedSummarizedExperiment` objects from
+recount3 projects, plus utilities for working with SRA-style sample
+attributes and per-sample scaling.
 
 The heavy lifting is implemented as methods on
-:class:`recount3.bundle.R3ResourceBundle`:
+:class:`~recount3.bundle.R3ResourceBundle`:
 
-* :meth:`recount3.bundle.R3ResourceBundle.to_summarized_experiment`
-* :meth:`recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`
+* :meth:`~recount3.bundle.R3ResourceBundle.to_summarized_experiment`
+* :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`
 
 The functions in this module are thin wrappers around those methods (for
 example, :func:`create_rse`) and convenience utilities that operate on
-BiocPy objects directly (for example, :func:`expand_sra_attributes`).
+BiocPy objects directly:
 
-Typical usage example:
+* :func:`expand_sra_attributes`: parse SRA ``key;;value|...`` attribute
+  strings into separate columns on a metadata DataFrame or SE/RSE object.
+* :func:`compute_read_counts`: convert coverage-sum counts to approximate
+  read counts using average mapped read length.
+* :func:`compute_tpm`: compute Transcripts Per Million from an RSE with
+  genomic ranges (uses feature widths from ``row_ranges``).
+* :func:`compute_scale_factors`: compute per-sample AUC- or
+  mapped-reads-based scale factors.
+* :func:`transform_counts`: apply scale factors to a count matrix.
 
-  from recount3 import se
+Typical usage example::
 
-  rse = se.create_rse(
+  from recount3 import create_rse
+  from recount3.se import compute_scale_factors, transform_counts
+
+  rse = create_rse(
       project="SRP009615",
-      genomic_unit="gene",
       organism="human",
-      data_source="sra",
+      annotation_label="gencode_v26",
   )
+  sf = compute_scale_factors(rse)
+  scaled = transform_counts(rse, scale_factors=sf)
+
+Note:
+    Most functions in this module require BiocPy packages
+    (``biocframe``, ``summarizedexperiment``, ``genomicranges``).
+    Install them with::
+
+        pip install summarizedexperiment
 """
 
 from __future__ import annotations
@@ -843,7 +863,9 @@ def compute_scale_factors(
 
        If `paired_end_status` is not provided, paired-end status is inferred from
        metadata by comparing average mapped length to average read length:
+
          ratio = round(avg_mapped_read_length / avg_read_length)
+
        ratio==2 indicates paired-end, ratio==1 indicates single-end. Other
        ratios are treated as unknown and produce missing paired multipliers.
 
@@ -992,6 +1014,7 @@ def transform_counts(
         scale_factor[j] = (
             target_read_count * target_read_length_bp * paired_multiplier[j]
             / (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))
+
         )
 
       where paired_multiplier is 2 for paired-end samples, 1 for single-end

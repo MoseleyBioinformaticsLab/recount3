@@ -28,7 +28,7 @@ Or stream directly, without an intermediate file:
   $ recount3 search annotations \\
         organism=human genomic_unit=gene annotation_extension=G026 \\
         --format=jsonl | \\
-    recount3 download --from=- --dest=./annots
+        recount3 download --from=- --dest=./annots
 
 Commands
 --------
@@ -41,9 +41,9 @@ ids
     --projects-out=<file>       Write projects to plain text file (else stdout).
 
 search
-  Discover resources and print a manifest (JSONL or TSV). Filters are passed  #TODO: Be able to give project ID and find ALL from that project. + Download and Load as a bundle. 
-  as space-separated key=value tokens.                                        #TODO: Then potentially concat multiple (at search/download level)
-                                                                              #TODO: Methods to make and return rangedsummarizedexperiment, usually 1 per project, or sometimes 1 for many projects.
+  Discover resources and print a manifest (JSONL or TSV). Filters are passed
+  as space-separated key=value tokens.
+
   Output:
     By default results are written to stdout (pipe-friendly). Use
     ``--output <file>`` to write a specific file, or ``--outdir <dir>`` to
@@ -52,18 +52,24 @@ search
   Modes and required filters:
     annotations   organism, genomic_unit, annotation_extension
     gene-exon     organism, data_source, genomic_unit, project
+
                   (optional: annotation_extension; default G026)
+
     junctions     organism, data_source, project
+
                   (optional: junction_type=ALL, junction_extension=MM)
+
     metadata      organism, data_source, table_name, project
     bigwig        organism, data_source, project, sample
     project       organism, data_source, project
+
                   (optional: genomic_unit=gene,exon;
                   annotation=default|all|G026,G029;
                   junction_type=ALL;
                   junction_extension=MM,RR,ID;
                   include_metadata=true|false;
                   include_bigwig=true|false)
+
     sources       organism
     source-meta   organism, data_source
 
@@ -86,11 +92,9 @@ download
 
   Behavior:
     --jobs=<n>            Max parallel downloads (default 4).
-    --cache=enable|disable|update
-                          Cache behavior:  #TODO: set cache directory too "--cache-dir"
-                            enable - use cache (default).
-                            disable - stream straight to dest.
-                            update - refresh cache, then use it.
+    --cache=MODE          Cache behavior (default: enable). MODE is one of:
+                          enable - use cache; disable - bypass cache;
+                          update - force re-download then cache.
 
 bundle stack-counts
   Concatenate compatible count matrices (gene/exon or junctions).
@@ -116,11 +120,13 @@ Input and output formats
 JSONL (a.k.a. NDJSON)
   One JSON object per line. Great for streaming, grepping, and piping.
 
-  * **Search output / Download input (manifest):**
+  * Search output / Download input (manifest):
     Each line contains all resource description fields plus two convenience
     keys:
+
       - ``url``: the fully qualified HTTP URL.
       - ``arcname``: the destination path inside a .zip archive.
+
     Example (one line, wrapped for readability):
 
       {"resource_type":"gene_exon_counts",
@@ -129,7 +135,7 @@ JSONL (a.k.a. NDJSON)
        "url":"https://.../gene/SRR999000.gz",
        "arcname":"gene/SRR999000.gz"}
 
-  * **Download progress events (stdout):**
+  * Download progress events (stdout):
     One event per resource:
 
       {"url":"...","status":"ok","dest":"/path/to/file"}
@@ -176,7 +182,7 @@ Exit codes
 
 Security and safety
 -------------------
-* TLS verification is **on** by default. ``--insecure-ssl`` disables it and
+* TLS verification ison by default. ``--insecure-ssl`` disables it and
   should only be used to debug certificate issues.
 * The cache reduces repeated downloads. Choose ``--cache=disable`` to bypass it
   when correctness requires a direct fetch.
@@ -192,9 +198,9 @@ Example recipes
 ---------------
 List human SRA data sources and download their metadata:
 
-  $ recount3 search sources organism=human --format=jsonl \\
-      | recount3 search source-meta organism=human data_source=sra --format=jsonl \\
-      > meta.jsonl
+  $ recount3 search sources organism=human --format=jsonl | \\
+        recount3 search source-meta organism=human data_source=sra --format=jsonl \\
+        > meta.jsonl
 
   $ recount3 download --from=meta.jsonl --dest=./meta
 
@@ -228,13 +234,14 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import dataclasses
+from datetime import datetime
 import json
 import logging
 import os
+import pickle
 from pathlib import Path
 import sys
 from typing import Any, Iterable, Iterator, Mapping
-from datetime import datetime
 
 from recount3._descriptions import R3ResourceDescription
 from recount3.bundle import R3ResourceBundle
@@ -249,7 +256,6 @@ from recount3.resource import R3Resource
 from recount3.types import CacheMode, CompatibilityMode
 from recount3 import search as r3_search
 from recount3.version import __version__
-
 
 # --------------------------------------------------------------------------- #
 # Parser construction
@@ -648,12 +654,16 @@ def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
     retries = args.retries if args.retries is not None else base.max_retries
     insecure_ssl = bool(args.insecure_ssl) or base.insecure_ssl
     user_agent = args.user_agent or base.user_agent
-    chunk_size = args.chunk_size if args.chunk_size is not None else base.chunk_size
+    chunk_size = (
+        args.chunk_size if args.chunk_size is not None else base.chunk_size
+    )
 
     try:
         cache_dir = cache_dir.expanduser().resolve()
     except Exception as exc:  # pragma: no cover
-        raise ConfigurationError(f"Invalid cache directory: {cache_dir!s}") from exc
+        raise ConfigurationError(
+            f"Invalid cache directory: {cache_dir!s}"
+        ) from exc
 
     return Config(
         base_url=base_url,
@@ -734,9 +744,7 @@ def _resource_from_dict(d: Mapping[str, Any], cfg: Config) -> R3Resource:
     return R3Resource(description=desc, config=cfg)
 
 
-def _write_jsonl(
-    resources: Iterable[R3Resource], out: Path | None
-) -> None:
+def _write_jsonl(resources: Iterable[R3Resource], out: Path | None) -> None:
     """Write one JSON object per line describing each resource.
 
     The JSON schema contains all dataclass fields from the description plus
@@ -759,7 +767,11 @@ def _write_jsonl(
         for res in resources:
             desc = res.description
             # Most concrete description types are dataclasses.
-            body = dataclasses.asdict(desc) if dataclasses.is_dataclass(desc) else {}
+            body = (
+                dataclasses.asdict(desc)
+                if dataclasses.is_dataclass(desc)
+                else {}
+            )
             body["url"] = res.url
             # R3Resource.arcname is a property.
             body["arcname"] = res.arcname  # type: ignore[attr-defined]
@@ -769,9 +781,7 @@ def _write_jsonl(
             sink.close()
 
 
-def _write_tsv(
-    resources: Iterable[R3Resource], out: Path | None
-) -> None:
+def _write_tsv(resources: Iterable[R3Resource], out: Path | None) -> None:
     """Write a TSV manifest with a stable column ordering.
 
     Columns:
@@ -813,18 +823,22 @@ def _write_tsv(
         sink.write("\t".join(order) + "\n")
         for res in resources:
             desc = res.description
-            row = dataclasses.asdict(desc) if dataclasses.is_dataclass(desc) else {}
+            row = (
+                dataclasses.asdict(desc)
+                if dataclasses.is_dataclass(desc)
+                else {}
+            )
             row["url"] = res.url
             row["arcname"] = res.arcname  # type: ignore[attr-defined]
-            sink.write("\t".join(str(row.get(k, "") or "") for k in order) + "\n")
+            sink.write(
+                "\t".join(str(row.get(k, "") or "") for k in order) + "\n"
+            )
     finally:
         if close:
             sink.close()
 
 
-def _iter_manifest(
-    path_or_dash: str, cfg: Config
-) -> Iterator[R3Resource]:
+def _iter_manifest(path_or_dash: str, cfg: Config) -> Iterator[R3Resource]:
     """Yield :class:`R3Resource` objects from a JSONL manifest.
 
     Args:
@@ -880,7 +894,9 @@ def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
     """
     del cfg  # Unused in this handler.
 
-    from recount3.search import create_sample_project_lists
+    from recount3.search import (  # pylint: disable=import-outside-toplevel
+        create_sample_project_lists,
+    )
 
     samples, projects = create_sample_project_lists(organism=args.organism)
 
@@ -949,9 +965,9 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
     def _require(*keys: str) -> None:
         missing = [k for k in keys if k not in filters]
         if missing:
+            missing_str = ", ".join(missing)
             raise ValueError(
-                "Missing required filters for mode=%r: %s"
-                % (mode, ", ".join(missing))
+                f"Missing required filters for mode={mode!r}: {missing_str}"
             )
 
     # Build resources via search helpers.
@@ -1029,12 +1045,8 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         gu = _csv_or_default(filters.get("genomic_unit"), ("gene", "exon"))
         # Accept either "annotation=..." or "annotation_extension=..."
         annotations = filters.get("annotation", "default")
-        ann_ext = _csv_or_default(
-            filters.get("annotation_extension"), tuple()
-        )
-        jext = _csv_or_default(
-            filters.get("junction_extension"), ("MM",)
-        )
+        ann_ext = _csv_or_default(filters.get("annotation_extension"), tuple())
+        jext = _csv_or_default(filters.get("junction_extension"), ("MM",))
         jtype = filters.get("junction_type", "ALL")
         inc_meta = _as_bool(filters.get("include_metadata"), True)
         inc_bw = _as_bool(filters.get("include_bigwig"), False)
@@ -1044,6 +1056,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             organism=filters["organism"],
             data_source=filters["data_source"],
             project=filters["project"],
+            project_home=filters.get("project_home"),
             genomic_units=gu,
             # Pass either explicit exts (wins) or the higher-level "annotation"
             annotations=ann_ext if ann_ext else annotations,
@@ -1066,7 +1079,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     else:  # pragma: no cover
-        raise ValueError("Unknown search mode: %r" % mode)
+        raise ValueError(f"Unknown search mode: {mode!r}")
 
     # Attach config (search_* returns resources without a config set).
     configured = [dataclasses.replace(r, config=cfg) for r in found]
@@ -1143,8 +1156,13 @@ def _download_one(
             )
             status = "ok"
         return {"url": res.url, "status": status, "dest": out_path}
-    except Exception as exc:  # Be precise and include URL in message
-        return {"url": res.url, "status": "error", "dest": None, "error": repr(exc)}
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return {
+            "url": res.url,
+            "status": "error",
+            "dest": None,
+            "error": repr(exc),
+        }
 
 
 def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
@@ -1265,12 +1283,13 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
             # Default to TSV, support transparent gzip.
             sep = "\t"
             df.to_csv(out, sep=sep)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to write output (reason: %r): %s", exc, out)
         return 2
 
     logging.info("Wrote stacked table to: %s", out)
     return 0
+
 
 def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     """Implement ``bundle se`` subcommand.
@@ -1299,7 +1318,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     except ImportError as exc:
         logging.error("Missing optional dependency: %s", exc)
         return 3
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to build SE (reason: %r).", exc)
         return 2
 
@@ -1307,16 +1326,14 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     out = Path(args.out)
     try:
         if out.suffix.lower() == ".h5ad":
-            import anndata as ad  # Optional dependency
+            import anndata  # pylint: disable=import-outside-toplevel,unused-import
 
             adata = se.to_anndata()
             adata.write_h5ad(out)
         else:
-            import pickle
-
             with open(out, "wb") as fh:
                 pickle.dump(se, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to write output (reason: %r): %s", exc, out)
         return 2
 
@@ -1352,23 +1369,21 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
     except ImportError as exc:
         logging.error("Missing optional dependency: %s", exc)
         return 3
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to build RSE (reason: %r).", exc)
         return 2
 
     out = Path(args.out)
     try:
         if out.suffix.lower() == ".h5ad":
-            import anndata as ad  # Optional dependency
+            import anndata  # pylint: disable=import-outside-toplevel,unused-import
 
             adata = rse.to_anndata()
             adata.write_h5ad(out)
         else:
-            import pickle
-
             with open(out, "wb") as fh:
                 pickle.dump(rse, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to write output (reason: %r): %s", exc, out)
         return 2
 
@@ -1391,14 +1406,18 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
       Process exit code.
     """
     limit = max(1, int(args.limit))
-    resources = r3_search.search_data_source_metadata(organism="human", data_source="sra")
+    resources = r3_search.search_data_source_metadata(
+        organism="human", data_source="sra"
+    )
     resources = [dataclasses.replace(r, config=cfg) for r in resources[:limit]]
 
     dest = Path("./recount3-smoke")
     dest.mkdir(parents=True, exist_ok=True)
 
     for res in resources:
-        evt = _download_one(res, cfg, dest, cache_mode="enable", overwrite=False)
+        evt = _download_one(
+            res, cfg, dest, cache_mode="enable", overwrite=False
+        )
         sys.stdout.write(json.dumps(evt, ensure_ascii=False) + "\n")
 
     return 0
@@ -1435,10 +1454,12 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
             return _cmd_bundle_se(args, cfg)
         if args.bundle_cmd == "rse":
             return _cmd_bundle_rse(args, cfg)
-        raise ValueError("Unknown bundle subcommand: %r" % args.bundle_cmd)
+        raise ValueError(
+            f"Unknown bundle subcommand: {args.bundle_cmd!r}"
+        )
     if args.command == "smoke-test":
         return _cmd_smoke_test(args, cfg)
-    raise ValueError("Unknown command: %r" % args.command)
+    raise ValueError(f"Unknown command: {args.command!r}")
 
 
 # --------------------------------------------------------------------------- #

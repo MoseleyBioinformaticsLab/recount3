@@ -1,16 +1,13 @@
-"""BigWig file access via a small, safe wrapper around ``pyBigWig``.
+"""BigWig file access via a small wrapper around ``pyBigWig``.
 
-This module provides :class:`BigWigFile`, a lightweight convenience wrapper that:
+This is an internal module. For BigWig access via the public API, use
+:meth:`~recount3.resource.R3Resource.load` on a BigWig
+:class:`~recount3.resource.R3Resource`.
 
-* Defers importing the optional ``pyBigWig`` dependency until the first read.
-* Opens the BigWig file lazily and caches the live handle.
-* Ensures the handle is closed via an explicit :meth:`close` method and
-  context-manager support.
+The optional dependency is imported through
+:func:`~recount3._utils.get_pybigwig_module`.
 
-The optional dependency is imported through :func:`recount3._utils.get_pybigwig_module`,
-which standardizes error handling for missing/failed optional imports.
-
-Typical usage:
+Typical usage::
 
   >>> from pathlib import Path
   >>> from recount3._bigwig import BigWigFile
@@ -18,8 +15,11 @@ Typical usage:
   ...     lengths = bw.chroms()
   ...     mean = bw.stats("chr1", 0, 1000)[0]
 
-Dependency:
-  * pyBigWig (optional)
+Note:
+    Requires the optional ``pyBigWig`` package. Install with
+    ``pip install pyBigWig``. An :exc:`ImportError` is raised on first use
+    if the package is not available. ``pyBigWig`` can be difficult to
+    install on non-Linux systems.
 """
 
 from __future__ import annotations
@@ -114,7 +114,9 @@ class BigWigFile:
         """Return ``True`` if the underlying handle is currently open."""
         return self._bw is not None
 
-    def chroms(self, chrom: str | None = None) -> Mapping[str, int] | int | None:
+    def chroms(
+        self, chrom: str | None = None
+    ) -> Mapping[str, int] | int | None:
         """Return chromosome lengths, or a single chromosome length.
 
         Args:

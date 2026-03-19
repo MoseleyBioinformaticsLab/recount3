@@ -1,7 +1,55 @@
 """Resource orchestration: URL resolution, caching, downloading, and loading.
 
-This module serves as the core I/O and materialization engine for the recount3
-package.
+This module defines :class:`R3Resource`, the central class of the recount3
+package. Every downloadable file (count matrices, metadata tables, annotation
+GTFs, BigWig coverage files, junction counts) is represented as an
+``R3Resource``. The class manages the full lifecycle of a resource:
+
+1. Description -> URL: a :class:`~recount3._descriptions.R3ResourceDescription`
+   provides the structured parameters (organism, project, genomic unit, …) that
+   are used to construct the deterministic duffel-mirror URL.
+2. URL -> cache: :meth:`~R3Resource.download` fetches the file over HTTP
+   and stores it in a persistent on-disk cache keyed by URL hash.
+3. Cache -> materialization: the cached file can be hard-linked or copied
+   to a user-supplied directory, or appended to a ZIP archive.
+4. Cache -> in-memory object: :meth:`~R3Resource.load` parses the cached
+   file into an appropriate Python object (see Notes below).
+
+Typical usage example::
+
+    from recount3 import R3Resource, R3GeneOrExonCounts
+
+    desc = R3GeneOrExonCounts(
+        organism="human",
+        data_source="sra",
+        genomic_unit="gene",
+        project="SRP009615",
+        annotation_extension="G026",
+    )
+    res = R3Resource(desc)
+
+    # Cache the file (no local copy):
+    res.download(path=None, cache_mode="enable")
+
+    # Or copy into a directory:
+    dest = res.download(path="/data/recount3")
+
+    # Parse into a DataFrame (for count resources):
+    df = res.load()
+
+Note:
+    Downloads are protected by a module-level :class:`threading.Lock`, so
+    multiple threads can safely call :meth:`~R3Resource.download` on
+    resources sharing a common cache path without corrupting the cache.
+
+Note:
+    :meth:`~R3Resource.load` returns different types depending on the
+    resource type:
+
+    * Gene/exon count resources -> :class:`pandas.DataFrame` (features x samples).
+    * Junction MM resources -> :class:`scipy.sparse.csr_matrix`.
+    * Junction ID/RR resources -> :class:`pandas.DataFrame`.
+    * BigWig resources -> :class:`~recount3._bigwig.BigWigFile`.
 """
 
 from __future__ import annotations
