@@ -199,6 +199,19 @@ License
 This package is distributed under the BSD_ license.
 
 
+TODO
+~~~~
+
+* Add support for collections: Implement functionality to discover and
+download recount3 collections. In recount3, a "collection" is a manually
+curated set of samples spanning one or more studies that includes
+collection-specific sample metadata. 
+  
+  *Note: This should only be implemented when collections become officially
+  available on the public recount3 mirrors. Currently, they only exist as a
+  pre-release version in the testing servers.*
+
+
 .. _recount3: https://rna.recount.bio
 .. _BiocPy: https://github.com/BiocPy
 .. _GitHub: https://github.com/MoseleyBioinformaticsLab/recount3
