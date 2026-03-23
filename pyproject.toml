@@ -82,6 +82,7 @@ biocpy = [
 ]
 docs = [
   "sphinx>=7",
+  "sphinx-rtd-theme>=2",
 ]
 dev = [
   "pytest>=8,<9",
