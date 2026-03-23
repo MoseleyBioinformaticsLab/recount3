@@ -2,8 +2,8 @@ recount3
 ========
 
 .. image:: https://img.shields.io/pypi/l/recount3.svg
-   :target: https://choosealicense.com/licenses/bsd-3-clause-clear/
-   :alt: License information
+   :target: https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE
+   :alt: Clear BSD License with extra clauses
 
 .. image:: https://img.shields.io/pypi/v/recount3.svg
    :target: https://pypi.org/project/recount3
@@ -199,23 +199,10 @@ License
 This package is distributed under the BSD_ license.
 
 
-TODO
-~~~~
-
-* Add support for collections: Implement functionality to discover and
-download recount3 collections. In recount3, a "collection" is a manually
-curated set of samples spanning one or more studies that includes
-collection-specific sample metadata. 
-  
-  *Note: This should only be implemented when collections become officially
-  available on the public recount3 mirrors. Currently, they only exist as a
-  pre-release version in the testing servers.*
-
-
 .. _recount3: https://rna.recount.bio
 .. _BiocPy: https://github.com/BiocPy
 .. _GitHub: https://github.com/MoseleyBioinformaticsLab/recount3
 .. _PyPI: https://pypi.org/project/recount3
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/
 .. _Issues: https://github.com/MoseleyBioinformaticsLab/recount3/issues
-.. _BSD: https://choosealicense.com/licenses/bsd-3-clause-clear/
+.. _BSD: https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE
