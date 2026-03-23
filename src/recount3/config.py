@@ -47,6 +47,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from recount3.version import __version__
+
 from recount3._utils import _ensure_dir
 
 _DEFAULT_CHUNK_SIZE: int = 1024 * 1024  # 1 MiB
@@ -109,7 +111,7 @@ def default_config() -> Config:
         user_agent=(
             os.environ.get("RECOUNT3_USER_AGENT")
             or (
-                "recount3-python/0.2 "
+                f"recount3-python/{__version__} "
                 "(+https://github.com/MoseleyBioinformaticsLab/recount3)"
             )
         ),
@@ -172,7 +174,6 @@ def recount3_cache_files(
         if path.is_file():
             files.append(path)
 
-    # Stable order for reproducible behavior.
     return sorted(files, key=str)
 
 
@@ -228,7 +229,6 @@ def recount3_cache_rm(
             return True
         return predicate(path)
 
-    # Collect candidates first to avoid mutating while walking.
     candidates: list[Path] = []
     for path in root.rglob("*"):
         if path.is_file() and _select(path):
