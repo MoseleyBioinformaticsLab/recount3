@@ -182,7 +182,7 @@ Exit codes
 
 Security and safety
 -------------------
-* TLS verification ison by default. ``--insecure-ssl`` disables it and
+* TLS verification is on by default. ``--insecure-ssl`` disables it and
   should only be used to debug certificate issues.
 * The cache reduces repeated downloads. Choose ``--cache=disable`` to bypass it
   when correctness requires a direct fetch.
@@ -196,10 +196,10 @@ Performance tips
 
 Example recipes
 ---------------
-List human SRA data sources and download their metadata:
+List human SRA data sources, then download their metadata:
 
-  $ recount3 search sources organism=human --format=jsonl | \\
-        recount3 search source-meta organism=human data_source=sra --format=jsonl \\
+  $ recount3 search sources organism=human --format=jsonl > sources.jsonl
+  $ recount3 search source-meta organism=human data_source=sra --format=jsonl \\
         > meta.jsonl
 
   $ recount3 download --from=meta.jsonl --dest=./meta
@@ -766,14 +766,12 @@ def _write_jsonl(resources: Iterable[R3Resource], output_path: Path | None) -> N
     try:
         for res in resources:
             desc = res.description
-            # Most concrete description types are dataclasses.
             body = (
                 dataclasses.asdict(desc)
                 if dataclasses.is_dataclass(desc)
                 else {}
             )
             body["url"] = res.url
-            # R3Resource.arcname is a property.
             body["arcname"] = res.arcname  # type: ignore[attr-defined]
             sink.write(json.dumps(body, ensure_ascii=False) + "\n")
     finally:
@@ -904,8 +902,8 @@ def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
         if path:
             p = Path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
-            with p.open("w", encoding="utf-8") as infile:
-                infile.write("\n".join(items))
+            with p.open("w", encoding="utf-8") as fh:
+                fh.write("\n".join(items))
             logging.info("Wrote %s list to: %s", label, p)
         else:
             for item in items:
@@ -1300,7 +1298,9 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
       cfg: :class:`Config` used for resource loading.
 
     Returns:
-      Process exit code (0 for success, non-zero for failure).
+      Process exit code:
+        0 - success,
+        2 - fatal error (missing dependency, build failure, or write failure).
     """
     resources = list(_iter_manifest(args.manifest, cfg))
     bundle = R3ResourceBundle()
@@ -1316,17 +1316,16 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
         )
     except ImportError as exc:
         logging.error("Missing optional dependency: %s", exc)
-        return 3
+        return 2
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to build SE (reason: %r).", exc)
         return 2
 
     # Default to pickle; optionally write h5ad through AnnData.
     out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     try:
         if out.suffix.lower() == ".h5ad":
-            import anndata  # pylint: disable=import-outside-toplevel,unused-import
-
             adata = se.to_anndata()
             adata.write_h5ad(out)
         else:
@@ -1350,7 +1349,9 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
       cfg: :class:`Config` used for resource loading.
 
     Returns:
-      Process exit code (0 for success, non-zero for failure).
+      Process exit code:
+        0 - success,
+        2 - fatal error (missing dependency, build failure, or write failure).
     """
     resources = list(_iter_manifest(args.manifest, cfg))
     bundle = R3ResourceBundle()
@@ -1367,16 +1368,15 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
         )
     except ImportError as exc:
         logging.error("Missing optional dependency: %s", exc)
-        return 3
+        return 2
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to build RSE (reason: %r).", exc)
         return 2
 
     out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     try:
         if out.suffix.lower() == ".h5ad":
-            import anndata  # pylint: disable=import-outside-toplevel,unused-import
-
             adata = rse.to_anndata()
             adata.write_h5ad(out)
         else:

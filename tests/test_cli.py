@@ -1481,16 +1481,15 @@ class TestCmdBundleSe:
         mock_se.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_summarized_experiment.return_value = mock_se
-        mock_anndata = mock.MagicMock()
         res = _make_annotation_resource(cfg)
         with mock.patch("recount3.cli._iter_manifest", return_value=[res]), mock.patch(
             "recount3.cli.R3ResourceBundle", return_value=mock_bundle
-        ), mock.patch.dict("sys.modules", {"anndata": mock_anndata}):
+        ):
             code = _cmd_bundle_se(args, cfg)
         assert code == 0
         mock_adata.write_h5ad.assert_called_once_with(out)
 
-    def test_import_error_returns_3(self, tmp_path: Path) -> None:
+    def test_import_error_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -1501,7 +1500,7 @@ class TestCmdBundleSe:
             "recount3.cli.R3ResourceBundle", return_value=mock_bundle
         ):
             code = _cmd_bundle_se(args, cfg)
-        assert code == 3
+        assert code == 2
 
     def test_general_exception_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
@@ -1540,11 +1539,10 @@ class TestCmdBundleSe:
         mock_se.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_summarized_experiment.return_value = mock_se
-        mock_anndata_mod = mock.MagicMock()
         res = _make_annotation_resource(cfg)
         with mock.patch("recount3.cli._iter_manifest", return_value=[res]), mock.patch(
             "recount3.cli.R3ResourceBundle", return_value=mock_bundle
-        ), mock.patch.dict("sys.modules", {"anndata": mock_anndata_mod}):
+        ):
             code = _cmd_bundle_se(args, cfg)
         assert code == 2
 
@@ -1587,11 +1585,10 @@ class TestCmdBundleRse:
         mock_rse.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
-        mock_anndata_mod = mock.MagicMock()
         res = _make_annotation_resource(cfg)
         with mock.patch("recount3.cli._iter_manifest", return_value=[res]), mock.patch(
             "recount3.cli.R3ResourceBundle", return_value=mock_bundle
-        ), mock.patch.dict("sys.modules", {"anndata": mock_anndata_mod}):
+        ):
             code = _cmd_bundle_rse(args, cfg)
         assert code == 0
         mock_adata.write_h5ad.assert_called_once_with(out)
@@ -1612,7 +1609,7 @@ class TestCmdBundleRse:
         _, kwargs = mock_bundle.to_ranged_summarized_experiment.call_args
         assert kwargs["allow_fallback_to_se"] is True
 
-    def test_import_error_returns_3(self, tmp_path: Path) -> None:
+    def test_import_error_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -1623,7 +1620,7 @@ class TestCmdBundleRse:
             "recount3.cli.R3ResourceBundle", return_value=mock_bundle
         ):
             code = _cmd_bundle_rse(args, cfg)
-        assert code == 3
+        assert code == 2
 
     def test_general_exception_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
@@ -1662,11 +1659,10 @@ class TestCmdBundleRse:
         mock_rse.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
-        mock_anndata_mod = mock.MagicMock()
         res = _make_annotation_resource(cfg)
         with mock.patch("recount3.cli._iter_manifest", return_value=[res]), mock.patch(
             "recount3.cli.R3ResourceBundle", return_value=mock_bundle
-        ), mock.patch.dict("sys.modules", {"anndata": mock_anndata_mod}):
+        ):
             code = _cmd_bundle_rse(args, cfg)
         assert code == 2
 
