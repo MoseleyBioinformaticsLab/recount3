@@ -1056,7 +1056,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             organism=filters["organism"],
             data_source=filters["data_source"],
             project=filters["project"],
-            project_home=filters.get("project_home"),
             genomic_units=gu,
             # Pass either explicit exts (wins) or the higher-level "annotation"
             annotations=ann_ext if ann_ext else annotations,
