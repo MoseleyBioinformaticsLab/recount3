@@ -13,7 +13,8 @@ dependencies = [
 ]
 readme = { file = "README.rst", content-type = "text/x-rst" }
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "BSD-3-Clause-Clear"
+license-files = ["LICENSE"]
 authors = [
   { name = "Alexander A. Alsalihi" },
   { name = "Robert M. Flight" },
@@ -35,7 +36,6 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
-  "License :: OSI Approved :: BSD License",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
@@ -92,6 +92,7 @@ dev = [
   "pylint>=3.2,<4",
   "build>=1.2",
   "twine>=5",
+  "commitizen>=3.29",
 ]
 
 all = [
@@ -115,3 +116,11 @@ exclude_lines = [
   "pragma: no cover",
   "if __name__ == .__main__.:",
 ]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.3.0"
+version_files = ["src/recount3/version.py:__version__"]
+tag_format = "v$version"
+changelog_file = "CHANGELOG.rst"
+update_changelog_on_bump = true
