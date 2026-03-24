@@ -107,9 +107,7 @@ def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
         return lock
 
 
-# =============================================================================
-# Caching Utilities
-# =============================================================================
+
 
 
 def _sha256(text: str) -> str:
@@ -164,9 +162,7 @@ def _cache_path(url: str, cache_root: str | Path) -> Path:
     return Path(cache_root) / _cache_key_for_url(url)
 
 
-# =============================================================================
-# Filesystem Utilities
-# =============================================================================
+
 
 
 def _ensure_dir(path: str | Path) -> None:
@@ -248,9 +244,7 @@ def _atomic_replace(src_tmp: Path, final_path: Path) -> None:
     os.replace(src_tmp, final_path)
 
 
-# =============================================================================
-# HTTP Utilities
-# =============================================================================
+
 
 
 def _ssl_insecure_context() -> ssl.SSLContext:
@@ -666,9 +660,7 @@ def write_cached_file_to_zip(
     _write_or_replace_in_zip(zip_path, cached_file, arcname, overwrite)
 
 
-# =============================================================================
-# Summarized Experiment Utilities
-# =============================================================================
+
 
 
 def _normalize_genomic_unit(genomic_unit: str) -> str:
@@ -823,9 +815,7 @@ def _resolve_metadata_column(
     )
 
 
-# =============================================================================
-# Optional Dependency Utilities
-# =============================================================================
+
 
 _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
     {
@@ -1047,9 +1037,7 @@ def get_pybigwig_module() -> types.ModuleType:
     return import_optional_module("pyBigWig")
 
 
-# =============================================================================
-# Other Utilities
-# =============================================================================
+
 
 _JXN_SIDECAR_RE = re.compile(r"\.(MM|ID|RR)\.gz$", re.IGNORECASE)
 

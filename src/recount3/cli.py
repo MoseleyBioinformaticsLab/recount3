@@ -257,9 +257,7 @@ from recount3.types import CacheMode, CompatibilityMode
 from recount3 import search as r3_search
 from recount3.version import __version__
 
-# --------------------------------------------------------------------------- #
-# Parser construction
-# --------------------------------------------------------------------------- #
+
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -626,9 +624,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# --------------------------------------------------------------------------- #
-# Config and shared helpers
-# --------------------------------------------------------------------------- #
+
 
 
 def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
@@ -873,9 +869,7 @@ def _iter_manifest(path_or_dash: str, cfg: Config) -> Iterator[R3Resource]:
         yield _resource_from_dict(obj, cfg)
 
 
-# --------------------------------------------------------------------------- #
-# Subcommand handlers
-# --------------------------------------------------------------------------- #
+
 
 
 def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
@@ -1422,9 +1416,7 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Dispatch
-# --------------------------------------------------------------------------- #
+
 
 
 def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
@@ -1461,9 +1453,7 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
     raise ValueError(f"Unknown command: {args.command!r}")
 
 
-# --------------------------------------------------------------------------- #
-# Main entry point
-# --------------------------------------------------------------------------- #
+
 
 
 def main(argv: list[str] | None = None) -> None:

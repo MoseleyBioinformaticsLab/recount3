@@ -223,8 +223,6 @@ def match_spec(value: object | None, spec: FieldSpec) -> bool:
     return value in _normalize_to_tuple(spec)
 
 
-# ---- Type-specific search wrappers -----------------------------------
-
 def search_annotations(
     *,
     organism: StringOrIterable,
@@ -520,8 +518,6 @@ def search_data_source_metadata(
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
 
-
-# ---------------------------------------------------------------------------
 
 def create_sample_project_lists(
     organism: str = "",

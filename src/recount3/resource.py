@@ -236,8 +236,6 @@ class R3Resource:
 
     _cached_data: object | None = dataclasses.field(default=None, init=False, repr=False)
 
-    # ---- Derived properties --------------------------------------------
-
     def __post_init__(self) -> None:
         """Initialize derived fields after dataclass instantiation."""
         cfg = self.config or default_config()
@@ -248,8 +246,6 @@ class R3Resource:
     def arcname(self) -> str:
         """Deterministic ZIP arcname derived from the URL path."""
         return self.description.url_path().lstrip("/")
-
-    # ---- Cache helpers --------------------------------------------------
 
     def _cache_root(self) -> Path:
         """Resolve the root directory path used for local file caching.
@@ -318,8 +314,6 @@ class R3Resource:
             return cache_path
 
         raise ValueError(f"Unknown cache mode: {mode!r}")
-
-    # ---- Public API -----------------------------------------------------
 
     def download(
         self,
@@ -439,8 +433,6 @@ class R3Resource:
         _hardlink_or_copy(cached, dest_path)
         self.filepath = str(dest_path)
         return str(dest_path)
-
-    # ------------------------------------------------------------------
 
     def load(self, *, force: bool = False) -> object:
         """Parse the resource into an appropriate in-memory Python object.
@@ -605,8 +597,6 @@ class R3Resource:
             f"{getattr(self.description, 'resource_type', None)!r} "
             f"with file {cached.name!r}"
         )
-
-    # ------------------------------------------------------------------
 
     def is_loaded(self) -> bool:
         """Check if the resource currently holds a parsed in-memory object.
