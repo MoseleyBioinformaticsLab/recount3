@@ -11,4 +11,4 @@ jobs:
   test:
     uses: ./.github/workflows/tests.yml
     with:
-      install_command: "python3 -m pip install -e .[dev]"
+      install_command: "python3 -m pip install -e .[dev,bigwig,biocpy]"
