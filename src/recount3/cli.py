@@ -270,57 +270,106 @@ def _build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="recount3",
-        description="Discover, download, and operate on recount3 resources.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description=(
+            "Discover, download, and assemble recount3 RNA-seq "
+            "resources.\n\n"
+            "Typical workflow:\n"
+            "  1. recount3 search  — discover resources, "
+            "produce a JSONL manifest\n"
+            "  2. recount3 download — download resources "
+            "from a manifest\n"
+            "  3. recount3 bundle  — assemble downloaded "
+            "resources into analysis objects\n\n"
+            "All flags below are optional and override "
+            "environment variables\n"
+            "(RECOUNT3_URL, RECOUNT3_CACHE_DIR, "
+            "RECOUNT3_HTTP_TIMEOUT, etc.)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
         "--base-url",
         default=None,
-        help="Override base URL for the duffel mirror (advanced).",
+        metavar="URL",
+        help=(
+            "Override the recount3 mirror base URL. "
+            "Env: RECOUNT3_URL. "
+            "Default: http://duffel.rail.bio/recount3/."
+        ),
     )
     parser.add_argument(
         "--cache-dir",
         default=None,
-        help="Override cache directory for downloaded files.",
+        metavar="DIR",
+        help=(
+            "Local directory for caching downloaded files. "
+            "Env: RECOUNT3_CACHE_DIR. "
+            "Default: ~/.cache/recount3/files."
+        ),
     )
     parser.add_argument(
         "--timeout",
         type=int,
         default=None,
-        help="HTTP timeout in seconds.",
+        metavar="SEC",
+        help=(
+            "HTTP request timeout in seconds. "
+            "Env: RECOUNT3_HTTP_TIMEOUT. Default: 60."
+        ),
     )
     parser.add_argument(
         "--retries",
         type=int,
         default=None,
-        help="Maximum retry attempts for transient network errors.",
+        metavar="N",
+        help=(
+            "Maximum retry attempts for transient HTTP "
+            "errors (5xx, timeouts). "
+            "Env: RECOUNT3_MAX_RETRIES. Default: 3."
+        ),
     )
     parser.add_argument(
         "--insecure-ssl",
         action="store_true",
-        help="Disable TLS verification (NOT recommended).",
+        help=(
+            "Disable TLS certificate verification. "
+            "NOT recommended outside debugging. "
+            "Env: RECOUNT3_INSECURE_SSL=1."
+        ),
     )
     parser.add_argument(
         "--user-agent",
         default=None,
-        help="Custom HTTP User-Agent string.",
+        metavar="STRING",
+        help=("Custom HTTP User-Agent header. " "Env: RECOUNT3_USER_AGENT."),
     )
     parser.add_argument(
         "--chunk-size",
         type=int,
         default=None,
-        help="Streaming chunk size in bytes for downloads/copies.",
+        metavar="BYTES",
+        help=(
+            "Streaming read/write chunk size for downloads "
+            "and file copies. "
+            "Env: RECOUNT3_CHUNK_SIZE. Default: 1048576 (1 MiB)."
+        ),
     )
     parser.add_argument(
         "--quiet",
         action="store_true",
-        help="Reduce log verbosity (WARNING level).",
+        help=(
+            "Suppress informational messages; only show "
+            "warnings and errors (WARNING level)."
+        ),
     )
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Increase log verbosity (DEBUG level).",
+        help=(
+            "Show detailed debug output including HTTP "
+            "requests and cache operations (DEBUG level)."
+        ),
     )
     parser.add_argument(
         "--version",
@@ -337,50 +386,102 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ids = subparsers.add_parser(
         "ids",
         help="Emit unique sample and project ID lists.",
+        description=(
+            "Query the recount3 mirror for every known sample "
+            "and project ID. Useful for scripting loops or "
+            "verifying that a project exists before running a "
+            "full search."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p_ids.add_argument(
         "--organism",
         default="",
-        help='Organism filter: "human" or "mouse". Empty = all.',
+        help=(
+            'Restrict to "human" or "mouse". '
+            "Omit or leave empty to list IDs for both."
+        ),
     )
     p_ids.add_argument(
         "--samples-out",
         default=None,
-        help="Write samples to this file (default: print to stdout).",
+        metavar="FILE",
+        help=(
+            "Write the sample ID list to FILE "
+            "(one ID per line). Prints to stdout if omitted."
+        ),
     )
     p_ids.add_argument(
         "--projects-out",
         default=None,
-        help="Write projects to this file (default: print to stdout).",
+        metavar="FILE",
+        help=(
+            "Write the project ID list to FILE "
+            "(one ID per line). Prints to stdout if omitted."
+        ),
     )
 
     p_search = subparsers.add_parser(
         "search",
-        help="Discover resources and print a manifest (JSONL/TSV).",
+        help="Discover resources and emit a manifest.",
+        description=(
+            "Discover recount3 resources and emit a "
+            "JSONL or TSV manifest.\n\n"
+            "Choose a MODE to select the resource family, "
+            "then supply the required key=value filters as "
+            "positional arguments. The manifest can be piped "
+            "directly into 'recount3 download --from=-'."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Required filters per mode:\n"
-            "  annotations: organism, genomic_unit, annotation_extension\n"
-            "  gene-exon:   organism, data_source, genomic_unit, project\n"
-            "               (optional: annotation_extension; default G026)\n"
+            "  annotations: organism, genomic_unit,"
+            " annotation_extension\n"
+            "  gene-exon:   organism, data_source,"
+            " genomic_unit, project\n"
+            "               (optional:"
+            " annotation_extension; default G026)\n"
             "  junctions:   organism, data_source, project\n"
             "               (optional: junction_type=ALL,"
             " junction_extension=MM)\n"
-            "  metadata:    organism, data_source, table_name, project\n"
-            "  bigwig:      organism, data_source, project, sample\n"
+            "  metadata:    organism, data_source,"
+            " table_name, project\n"
+            "  bigwig:      organism, data_source,"
+            " project, sample\n"
             "  project:     organism, data_source, project\n"
-            "               (optional: genomic_unit=gene,exon; "
-            "annotation=default|all|G026,G029; "
-            "junction_extension=MM,RR,ID; "
-            "include_metadata=true|false; include_bigwig=true|false)\n"
+            "               (optional: genomic_unit=gene,exon;"
+            " annotation=default|all|G026,G029;\n"
+            "               junction_extension=MM,RR,ID;"
+            " include_metadata=true|false;\n"
+            "               include_bigwig=true|false)\n"
             "  sources:     organism\n"
             "  source-meta: organism, data_source\n"
+            "\nFilter value reference:\n"
+            "  organism:             human | mouse\n"
+            "  data_source:          sra | gtex | tcga\n"
+            "  genomic_unit:         gene | exon | junction\n"
+            "  annotation_extension: G026 | G029 | R109 | "
+            "F006 | V029 ...\n"
+            "  table_name:           recount_qc | "
+            "recount_project_info | ...\n"
             "\nExamples:\n"
-            "  recount3 search annotations organism=human genomic_unit=gene "
-            "annotation_extension=G026 --format=jsonl\n"
-            "  recount3 search gene-exon organism=human data_source=sra "
-            "genomic_unit=gene project=SRP012345 --format=tsv\n"
+            "  # Discover gene annotations and save as "
+            "JSONL:\n"
+            "  recount3 search annotations "
+            "organism=human genomic_unit=gene \\\n"
+            "      annotation_extension=G026 "
+            "--format=jsonl > manifest.jsonl\n\n"
+            "  # Search gene counts and pipe directly "
+            "into download:\n"
+            "  recount3 search gene-exon organism=human "
+            "data_source=sra \\\n"
+            "      genomic_unit=gene project=SRP009615 "
+            "--format=jsonl | \\\n"
+            "  recount3 download --from=- --dest=./out\n\n"
+            "  # Discover all resources for a project:\n"
+            "  recount3 search project organism=human "
+            "data_source=sra \\\n"
+            "      project=SRP009615\n"
         ),
     )
     p_search.add_argument(
@@ -395,221 +496,422 @@ def _build_parser() -> argparse.ArgumentParser:
             "sources",
             "source-meta",
         ),
-        help="Which resource family to search.",
+        metavar="MODE",
+        help=(
+            "Resource family to search. Choices: "
+            "annotations, gene-exon, junctions, metadata, "
+            "bigwig, project, sources, source-meta."
+        ),
     )
     p_search.add_argument(
         "filters",
         nargs="*",
-        help="Key=Value filters (e.g., organism=human project=SRP000000).",
+        metavar="key=value",
+        help=(
+            "One or more key=value filter pairs "
+            "(e.g., organism=human data_source=sra "
+            "project=SRP009615). Required filters depend "
+            "on MODE; see epilog below."
+        ),
     )
     p_search.add_argument(
         "--format",
         choices=("jsonl", "tsv"),
         default="jsonl",
-        help="Output format for discovered resources.",
+        help=(
+            "Output format. 'jsonl' emits one JSON object "
+            "per resource (ideal for piping into download). "
+            "'tsv' emits a tab-separated table."
+        ),
     )
     out_dest = p_search.add_mutually_exclusive_group()
     out_dest.add_argument(
         "--output",
         default=None,
-        help="Write results to this file (default: print to stdout).",
+        metavar="FILE",
+        help=(
+            "Write the manifest to FILE instead of stdout. "
+            "Mutually exclusive with --outdir."
+        ),
     )
     out_dest.add_argument(
         "--outdir",
         default=None,
+        metavar="DIR",
         help=(
-            "Directory to place a timestamped manifest filename in. "
-            "Example: annotations-20251102-143015.jsonl. "
-            "Ignored if --output is supplied."
+            "Write the manifest to DIR with an "
+            "auto-generated timestamped filename "
+            "(e.g., gene-exon-20250315-091200.jsonl). "
+            "Mutually exclusive with --output."
         ),
     )
 
     p_dl = subparsers.add_parser(
         "download",
-        help="Materialize resources from a manifest or inline JSON.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        help="Download resources from a manifest.",
+        description=(
+            "Download recount3 resources described by a "
+            "JSONL manifest (from 'recount3 search') or a "
+            "single inline JSON object.\n\n"
+            "Progress is streamed as one JSON event per "
+            "resource to stdout (fields: url, status, dest, "
+            "error). Status is 'ok', 'skipped', or 'error'."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  # Download from a saved manifest file:\n"
+            "  recount3 download --from=manifest.jsonl "
+            "--dest=./data --jobs=8\n\n"
+            "  # Pipe search output directly into "
+            "download:\n"
+            "  recount3 search gene-exon organism=human "
+            "data_source=sra \\\n"
+            "      genomic_unit=gene project=SRP009615 "
+            "--format=jsonl | \\\n"
+            "  recount3 download --from=- --dest=./data\n\n"
+            "  # Download into a zip archive:\n"
+            "  recount3 download --from=manifest.jsonl "
+            "--dest=bundle.zip\n\n"
+            "Exit codes:\n"
+            "  0  All resources downloaded successfully.\n"
+            "  3  Some resources failed (partial failure)."
+        ),
     )
     src = p_dl.add_mutually_exclusive_group(required=True)
     src.add_argument(
         "--from",
         dest="manifest",
         default=None,
-        help="Path to JSONL manifest (use '-' for stdin).",
+        metavar="FILE",
+        help=(
+            "Path to a JSONL manifest file produced by "
+            "'recount3 search'. Use '-' to read from "
+            "stdin (enables piping)."
+        ),
     )
     src.add_argument(
         "--inline",
         default=None,
-        help="Inline one-resource JSON mapping on the command line.",
+        metavar="JSON",
+        help=(
+            "A single resource as an inline JSON object "
+            "on the command line. Useful for downloading "
+            "one resource without creating a manifest file."
+        ),
     )
     p_dl.add_argument(
         "--dest",
         default=".",
-        help="Destination directory or .zip file.",
+        metavar="PATH",
+        help=(
+            "Destination directory or .zip file path. "
+            "If a directory, files are placed flat inside "
+            "it. If a .zip path, all resources are bundled "
+            "into the archive."
+        ),
     )
     p_dl.add_argument(
         "--overwrite",
         action="store_true",
-        help="Overwrite existing files in directory materialization.",
+        help=(
+            "Overwrite files that already exist at the "
+            "destination. Without this flag, existing files "
+            "are skipped (status='skipped')."
+        ),
     )
     p_dl.add_argument(
         "--jobs",
         type=int,
         default=4,
-        help="Max parallel downloads.",
+        metavar="N",
+        help=(
+            "Number of parallel download threads. "
+            "Increase for high-bandwidth connections or "
+            "large manifests."
+        ),
     )
     p_dl.add_argument(
         "--cache",
         choices=("enable", "disable", "update"),
         default="enable",
         help=(
-            "Cache behavior: 'enable' uses cache; 'disable' streams direct to "
-            "dest; 'update' refreshes cache first then behaves like 'enable'."
+            "Cache behavior. 'enable': use local cache, "
+            "download only if missing. 'disable': stream "
+            "directly to dest, bypass cache entirely. "
+            "'update': re-download into cache first, then "
+            "copy to dest."
         ),
     )
 
     p_bundle = subparsers.add_parser(
         "bundle",
-        help="Operate on multiple resources (subcommands).",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        help="Assemble resources into analysis objects.",
+        description=(
+            "Assemble multiple recount3 resources into "
+            "analysis-ready objects: stacked count "
+            "matrices, SummarizedExperiments, or "
+            "RangedSummarizedExperiments.\n\n"
+            "Each bundle subcommand reads a JSONL manifest "
+            "(from 'recount3 search') and produces a single "
+            "output file."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sp_bundle = p_bundle.add_subparsers(
-        dest="bundle_cmd", metavar="<bundle-cmd>", required=True
+        dest="bundle_cmd",
+        metavar="<bundle-cmd>",
+        required=True,
     )
 
     p_stack = sp_bundle.add_parser(
         "stack-counts",
-        help="Concatenate count matrices (gene/exon or junctions).",
+        help="Stack count matrices into a single table.",
+        description=(
+            "Load gene/exon or junction count matrices "
+            "from a manifest and concatenate them into a "
+            "single pandas DataFrame. Outputs TSV, "
+            "gzip-compressed TSV, or Parquet."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p_stack.add_argument(
         "--from",
         dest="manifest",
         required=True,
-        help="Path to JSONL manifest (use '-' for stdin).",
+        metavar="FILE",
+        help=(
+            "Path to a JSONL manifest (or '-' for stdin) "
+            "containing count-file resources."
+        ),
     )
     p_stack.add_argument(
         "--compat",
         choices=("family", "feature"),
         default="family",
-        help="Compatibility mode for stacking.",
+        help=(
+            "Compatibility mode for stacking. 'family': "
+            "require all resources to be the same type "
+            "(gene, exon, or junction). 'feature': allow "
+            "mixing types that share the same feature index."
+        ),
     )
     p_stack.add_argument(
         "--join",
         choices=("inner", "outer"),
         default="inner",
-        help="Pandas join type for concatenation.",
+        help=(
+            "How to handle mismatched row/column indices "
+            "across matrices. 'inner': keep only shared "
+            "features/samples. 'outer': keep all, fill "
+            "missing values with NaN."
+        ),
     )
     p_stack.add_argument(
         "--axis",
         type=int,
         choices=(0, 1),
         default=1,
-        help="Concatenate along rows (0) or columns (1).",
+        help=(
+            "Concatenation axis. 0: stack rows (add more "
+            "features). 1: stack columns (add more samples, "
+            "the typical case)."
+        ),
     )
     p_stack.add_argument(
         "--verify-integrity",
         action="store_true",
-        help="Verify that the new index has no duplicates.",
+        help=(
+            "Raise an error if the resulting index "
+            "contains duplicates. Useful for catching "
+            "accidentally overlapping manifests."
+        ),
     )
     p_stack.add_argument(
         "--out",
         required=True,
-        help="Output file (.tsv, .tsv.gz, or .parquet).",
+        metavar="FILE",
+        help=(
+            "Output file path. Extension determines "
+            "format: .tsv (tab-separated), .tsv.gz "
+            "(gzip-compressed TSV), or .parquet "
+            "(Apache Parquet; requires pyarrow or "
+            "fastparquet)."
+        ),
     )
 
     p_se = sp_bundle.add_parser(
         "se",
-        help="Build a SummarizedExperiment from a manifest.",
+        help="Build a SummarizedExperiment.",
+        description=(
+            "Assemble resources from a manifest into a "
+            "BiocPy SummarizedExperiment. Requires the "
+            "'recount3[biocpy]' extra. Output as a Python "
+            "pickle (.pkl) or, if anndata is installed, "
+            "an AnnData HDF5 file (.h5ad)."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p_se.add_argument(
         "--from",
         dest="manifest",
         required=True,
-        help="Path to a JSONL manifest (or '-' for stdin).",
+        metavar="FILE",
+        help=(
+            "Path to a JSONL manifest (or '-' for stdin) "
+            "produced by 'recount3 search'."
+        ),
     )
     p_se.add_argument(
         "--genomic-unit",
         choices=("gene", "exon", "junction"),
         required=True,
-        help="Feature family to assemble into an SE.",
+        help=(
+            "Which feature type to assemble. Only "
+            "resources matching this unit are included."
+        ),
     )
     p_se.add_argument(
         "--annotation",
         default=None,
-        help="Annotation key for gene/exon (e.g., 'G026', 'V29').",
+        metavar="KEY",
+        help=(
+            "Annotation extension to select for gene/exon "
+            "counts (e.g., 'G026', 'G029', 'V029'). "
+            "If omitted, uses the first available."
+        ),
     )
     p_se.add_argument(
         "--assay-name",
         default="raw_counts",
-        help="Assay name in the SE.",
+        help=(
+            "Name for the assay slot in the SE. Change "
+            "this if you plan to merge multiple assays."
+        ),
     )
     p_se.add_argument(
         "--join",
         choices=("inner", "outer"),
         default="inner",
-        help="Join policy across projects when stacking.",
+        help=(
+            "Join policy when stacking matrices across "
+            "projects. 'inner': only shared features. "
+            "'outer': union of all features (NaN fill)."
+        ),
     )
     p_se.add_argument(
         "--out",
         required=True,
-        help="Output file (.pkl or .h5ad if anndata is available).",
+        metavar="FILE",
+        help=(
+            "Output file path. Use .pkl for a Python "
+            "pickle or .h5ad for an AnnData HDF5 file "
+            "(requires anndata)."
+        ),
     )
 
     p_rse = sp_bundle.add_parser(
         "rse",
-        help="Build a RangedSummarizedExperiment from a manifest.",
+        help="Build a RangedSummarizedExperiment.",
+        description=(
+            "Assemble resources from a manifest into a "
+            "BiocPy RangedSummarizedExperiment, which adds "
+            "genomic coordinates (GenomicRanges) to each "
+            "feature row. Requires the 'recount3[biocpy]' "
+            "extra. Output as .pkl or .h5ad."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p_rse.add_argument(
         "--from",
         dest="manifest",
         required=True,
-        help="Path to a JSONL manifest (or '-' for stdin).",
+        metavar="FILE",
+        help=(
+            "Path to a JSONL manifest (or '-' for stdin) "
+            "produced by 'recount3 search'."
+        ),
     )
     p_rse.add_argument(
         "--genomic-unit",
         choices=("gene", "exon", "junction"),
         required=True,
-        help="Feature family to assemble into an RSE.",
+        help=(
+            "Which feature type to assemble. Only "
+            "resources matching this unit are included."
+        ),
     )
     p_rse.add_argument(
         "--annotation",
         default=None,
-        help="Annotation key for gene/exon (e.g., 'G026', 'V29').",
+        metavar="KEY",
+        help=(
+            "Annotation extension to select for gene/exon "
+            "counts (e.g., 'G026', 'G029', 'V029'). "
+            "If omitted, uses the first available."
+        ),
     )
     p_rse.add_argument(
         "--assay-name",
         default="raw_counts",
-        help="Assay name in the RSE.",
+        help=(
+            "Name for the assay slot in the RSE. Change "
+            "this if you plan to merge multiple assays."
+        ),
     )
     p_rse.add_argument(
         "--join",
         choices=("inner", "outer"),
         default="inner",
-        help="Join policy across projects when stacking.",
+        help=(
+            "Join policy when stacking matrices across "
+            "projects. 'inner': only shared features. "
+            "'outer': union of all features (NaN fill)."
+        ),
     )
     p_rse.add_argument(
         "--allow-fallback-to-se",
         action="store_true",
-        help="If ranges cannot be derived, emit a plain SE.",
+        help=(
+            "If genomic ranges cannot be derived for the "
+            "selected annotation, fall back to emitting a "
+            "plain SummarizedExperiment instead of raising "
+            "an error."
+        ),
     )
     p_rse.add_argument(
         "--out",
         required=True,
-        help="Output file (.pkl or .h5ad if anndata is available).",
+        metavar="FILE",
+        help=(
+            "Output file path. Use .pkl for a Python "
+            "pickle or .h5ad for an AnnData HDF5 file "
+            "(requires anndata)."
+        ),
     )
 
     p_smoke = subparsers.add_parser(
         "smoke-test",
-        help="Small connectivity smoke test (CI/dev).",
+        help="Quick connectivity smoke test.",
+        description=(
+            "Verify that the recount3 mirror is reachable "
+            "by discovering and downloading a small number "
+            "of resources. Intended for CI pipelines, dev "
+            "setup verification, and network diagnostics. "
+            "Downloads are placed in ./recount3-smoke/."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p_smoke.add_argument(
         "--limit",
         type=int,
         default=1,
-        help="Number of resources to attempt to download.",
+        metavar="N",
+        help=(
+            "Number of resources to discover and attempt "
+            "to download. Increase to exercise more of "
+            "the mirror."
+        ),
     )
 
     return parser
