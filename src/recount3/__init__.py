@@ -75,9 +75,10 @@ from recount3.errors import (
     Recount3Error,
 )
 from recount3.resource import R3Resource
-from recount3.se import (  # noqa: F401
+from recount3.se import (
     build_ranged_summarized_experiment,
     build_summarized_experiment,
+    create_rse,
 )
 from recount3.search import (
     annotation_ext,
@@ -136,6 +137,7 @@ __all__ = [
     # Builders
     "build_ranged_summarized_experiment",
     "build_summarized_experiment",
+    "create_rse",
     # Search
     "samples_for_project",
     "search_project_all",

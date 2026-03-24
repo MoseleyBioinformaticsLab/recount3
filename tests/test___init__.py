@@ -90,3 +90,4 @@ def test_se_builders_are_callable() -> None:
     """SummarizedExperiment builders must be callable."""
     assert callable(recount3.build_summarized_experiment)
     assert callable(recount3.build_ranged_summarized_experiment)
+    assert callable(recount3.create_rse)
