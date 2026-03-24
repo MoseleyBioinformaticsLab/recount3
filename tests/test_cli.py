@@ -167,6 +167,12 @@ class TestBuildParser:
         args = parser.parse_args(["smoke-test"])
         assert args.command == "smoke-test"
         assert args.limit == 1
+        assert args.dest == "./recount3-smoke"
+
+    def test_smoke_test_custom_dest(self) -> None:
+        parser = _build_parser()
+        args = parser.parse_args(["smoke-test", "--dest=/tmp/my-smoke"])
+        assert args.dest == "/tmp/my-smoke"
 
     def test_global_flags_parsed(self) -> None:
         parser = _build_parser()
@@ -331,8 +337,13 @@ class TestParseFilters:
         assert result == {"key": "a=b"}
 
     def test_missing_equals_raises(self) -> None:
-        with pytest.raises(ValueError, match="Expected key=value"):
+        with pytest.raises(ValueError, match="Expected.*key=value"):
             _parse_filters(["badtoken"])
+
+    def test_error_message_mentions_spaces(self) -> None:
+        with pytest.raises(ValueError, match="no spaces") as exc_info:
+            _parse_filters(["project"])
+        assert "ensure no spaces" in str(exc_info.value)
 
     def test_empty_key_raises(self) -> None:
         with pytest.raises(ValueError, match="Empty filter key"):
@@ -1015,7 +1026,7 @@ class TestCmdSearchProject:
         _, kwargs = m.call_args
         assert kwargs["junction_extension"] == ("MM", "RR")
 
-    def test_annotation_filter_used_when_no_annotation_extension(
+    def test_annotation_filter_used_when_no_extension(
         self, tmp_path: Path
     ) -> None:
         args = self._project_args(["annotation=G026"])
@@ -1023,7 +1034,7 @@ class TestCmdSearchProject:
         _, kwargs = m.call_args
         assert kwargs["annotations"] == "G026"
 
-    def test_annotation_extension_filter_overrides_annotation(
+    def test_annotation_extension_overrides_annotation(
         self, tmp_path: Path
     ) -> None:
         args = self._project_args(
@@ -1394,6 +1405,21 @@ class TestCmdBundleStackCounts:
         assert code == 0
         mock_df.to_csv.assert_called_once_with(out, sep="\t")
 
+    def test_success_csv_uses_comma_separator(self, tmp_path: Path) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.csv"
+        args = self._make_args(str(out))
+        mock_df = mock.MagicMock()
+        mock_bundle = mock.MagicMock()
+        mock_bundle.stack_count_matrices.return_value = mock_df
+        res = _make_annotation_resource(cfg)
+        with mock.patch("recount3.cli._iter_manifest", return_value=[res]), mock.patch(
+            "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+        ):
+            code = _cmd_bundle_stack_counts(args, cfg)
+        assert code == 0
+        mock_df.to_csv.assert_called_once_with(out, sep=",")
+
     def test_compatibility_error_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
@@ -1690,7 +1716,7 @@ class TestCmdSmokeTest:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
-        args = argparse.Namespace(limit=1)
+        args = argparse.Namespace(limit=1, dest="./recount3-smoke")
         desc = R3ResourceDescription(
             resource_type="data_source_metadata",
             organism="human",
@@ -1711,7 +1737,7 @@ class TestCmdSmokeTest:
 
     def test_smoke_test_limit_respected(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
-        args = argparse.Namespace(limit=1)
+        args = argparse.Namespace(limit=1, dest="./recount3-smoke")
         desc = R3ResourceDescription(
             resource_type="data_source_metadata",
             organism="human",
@@ -1869,6 +1895,49 @@ class TestMain:
         captured = capsys.readouterr()
         assert "SRR001" in captured.out
         assert "SRP001" in captured.out
+
+
+class TestSmokeTestCustomDest:
+    def test_uses_custom_dest(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        custom = str(tmp_path / "my-smoke")
+        args = argparse.Namespace(limit=1, dest=custom)
+        desc = R3ResourceDescription(
+            resource_type="data_source_metadata",
+            organism="human",
+            data_source="sra",
+        )
+        res = R3Resource(description=desc)
+        with mock.patch(
+            "recount3.cli.r3_search.search_data_source_metadata",
+            return_value=[res],
+        ), mock.patch("recount3.cli._download_one") as m:
+            m.return_value = {
+                "url": "http://x",
+                "status": "ok",
+                "dest": "/f",
+            }
+            code = _cmd_smoke_test(args, cfg)
+        assert code == 0
+        assert Path(custom).exists()
+
+
+class TestMainBrokenPipe:
+    def test_broken_pipe_exits_cleanly(self) -> None:
+        with mock.patch(
+            "recount3.cli._dispatch",
+            side_effect=BrokenPipeError,
+        ), mock.patch(
+            "recount3.cli._build_config_from_env_and_flags"
+        ), mock.patch(
+            "os.open", return_value=99
+        ), mock.patch(
+            "os.dup2"
+        ), pytest.raises(SystemExit) as exc:
+            main(["smoke-test"])
+        assert exc.value.code == 0
 
 
 class TestMainGuard:

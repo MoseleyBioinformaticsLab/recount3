@@ -64,7 +64,18 @@ search
     project       organism, data_source, project
 
                   (optional: genomic_unit=gene,exon;
-                  annotation=default|all|G026,G029;
+                  annotation=default|all|gencode_v26,gencode_v29
+                    Human-readable name or convenience alias.
+                    'default' → primary annotation (G026 for
+                    human, M023 for mouse). 'all' → every
+                    available annotation. A comma list of
+                    names (e.g. gencode_v26) or raw extension
+                    codes (e.g. G026) also works.
+                  annotation_extension=G026,G029
+                    Raw annotation file-extension codes. When
+                    set, overrides 'annotation' completely.
+                    Use this when you already know the exact
+                    code(s) you need.
                   junction_type=ALL;
                   junction_extension=MM,RR,ID;
                   include_metadata=true|false;
@@ -101,7 +112,7 @@ bundle stack-counts
 
   Required:
     --from=<manifest>     JSONL manifest (or '-' for stdin).
-    --out=<path>          Output file (.tsv, .tsv.gz, or .parquet).
+    --out=<path>          Output file (.csv, .tsv, .tsv.gz, or .parquet).
 
   Options:
     --compat=family|feature    Compatibility mode (default: family).
@@ -113,6 +124,7 @@ smoke-test
   Download a few tiny files to verify connectivity and configuration.
 
   Options:
+    --dest=<dir>          Destination directory (default ./recount3-smoke).
     --limit=<n>           Number of resources to attempt (default 1).
 
 Input and output formats
@@ -176,9 +188,11 @@ Google guide, and include greppable context (e.g., ``url=...``, ``dest=...``).
 Exit codes
 ----------
   0  Success
-  1  Usage error (bad flags, missing filters, malformed JSON)
-  2  Fatal I/O or runtime error (nothing succeeded)
+  1  Malformed ``--inline`` JSON in ``download``
+  2  Fatal error (missing filters, I/O failures, bad configuration;
+     also argparse validation errors such as unrecognized flags)
   3  Partial failure in ``download`` (some items failed)
+  130  Interrupted (Ctrl-C)
 
 Security and safety
 -------------------
@@ -450,7 +464,9 @@ def _build_parser() -> argparse.ArgumentParser:
             " project, sample\n"
             "  project:     organism, data_source, project\n"
             "               (optional: genomic_unit=gene,exon;"
-            " annotation=default|all|G026,G029;\n"
+            " annotation=default|all|name;\n"
+            "               annotation_extension=G026,G029"
+            " [overrides annotation];\n"
             "               junction_extension=MM,RR,ID;"
             " include_metadata=true|false;\n"
             "               include_bigwig=true|false)\n"
@@ -897,10 +913,18 @@ def _build_parser() -> argparse.ArgumentParser:
             "Verify that the recount3 mirror is reachable "
             "by discovering and downloading a small number "
             "of resources. Intended for CI pipelines, dev "
-            "setup verification, and network diagnostics. "
-            "Downloads are placed in ./recount3-smoke/."
+            "setup verification, and network diagnostics."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    p_smoke.add_argument(
+        "--dest",
+        default="./recount3-smoke",
+        metavar="DIR",
+        help=(
+            "Destination directory for smoke-test "
+            "downloads (default: ./recount3-smoke)."
+        ),
     )
     p_smoke.add_argument(
         "--limit",
@@ -994,7 +1018,10 @@ def _parse_filters(tokens: Iterable[str]) -> dict[str, str]:
     result: dict[str, str] = {}
     for t in tokens:
         if "=" not in t:
-            raise ValueError(f"Expected key=value filter, got: {t!r}")
+            raise ValueError(
+                f"Expected 'key=value' filter, got: {t!r} "
+                f"(ensure no spaces around '=' or after commas)"
+            )
         k, v = t.split("=", 1)
         k = k.strip().lower()
         v = v.strip()
@@ -1219,8 +1246,15 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
       Required: organism, data_source, project
       Optional:
         genomic_unit=gene,exon
-        annotation=default|all|G026,G029
-        annotation_extension=G026,G029   # overrides 'annotation'
+        annotation=default|all|gencode_v26,gencode_v29
+          Human-readable name or convenience alias that is
+          resolved to extension codes internally.  Accepts
+          'default' (organism primary), 'all' (every
+          available), a comma list of annotation names
+          (e.g. gencode_v26), or raw codes (e.g. G026).
+        annotation_extension=G026,G029
+          Raw annotation file-extension codes.  When set,
+          overrides 'annotation' completely.
         junction_type=ALL
         junction_extension=MM,RR,ID
         include_metadata=true|false
@@ -1317,7 +1351,12 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             return tuple(p.strip() for p in s.split(",") if p.strip())
 
         gu = _csv_or_default(filters.get("genomic_unit"), ("gene", "exon"))
-        # Accept either "annotation=..." or "annotation_extension=..."
+        # 'annotation' is a human-readable name or alias ("default",
+        # "all", "gencode_v26", or a raw code like "G026").
+        # 'annotation_extension' is the raw file-extension code
+        # (e.g. "G026").  When both are provided the explicit
+        # extension wins, mirroring the library's two-tier API
+        # (see search._resolve_annotation_exts).
         annotations = filters.get("annotation", "default")
         ann_ext = _csv_or_default(filters.get("annotation_extension"), tuple())
         jext = _csv_or_default(filters.get("junction_extension"), ("MM",))
@@ -1330,7 +1369,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             data_source=filters["data_source"],
             project=filters["project"],
             genomic_units=gu,
-            # Pass either explicit exts (wins) or the higher-level "annotation"
             annotations=ann_ext if ann_ext else annotations,
             junction_type=jtype,
             junction_extension=jext,
@@ -1438,9 +1476,9 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
     Prints one JSONL progress event per attempted download to stdout. The exit
     code is:
       0 - all OK,
-      3 - partial failures,
+      1 - malformed ``--inline`` JSON,
       2 - fatal I/O or setup problems,
-      1 - usage errors (argparse already emits help).
+      3 - partial failures.
 
     Args:
       args: Parsed CLI arguments for the ``download`` subcommand.
@@ -1546,7 +1584,7 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
             # Defer heavy deps to runtime; let pandas raise.
             df.to_parquet(out)
         else:
-            sep = "\t"
+            sep = "," if out.suffix.lower() == ".csv" else "\t"
             df.to_csv(out, sep=sep)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logging.error("Failed to write output (reason: %r): %s", exc, out)
@@ -1677,7 +1715,7 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
     )
     resources = [dataclasses.replace(r, config=cfg) for r in resources[:limit]]
 
-    dest = Path("./recount3-smoke")
+    dest = Path(args.dest)
     dest.mkdir(parents=True, exist_ok=True)
 
     for res in resources:
@@ -1743,6 +1781,10 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         logging.error("Interrupted.")
         code = 130
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        code = 0
     except (ConfigurationError, Recount3Error, ValueError) as exc:
         logging.error("Fatal error: %r", exc)
         code = 2
