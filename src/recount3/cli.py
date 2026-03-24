@@ -258,8 +258,6 @@ from recount3 import search as r3_search
 from recount3.version import __version__
 
 
-
-
 def _build_parser() -> argparse.ArgumentParser:
     """Return the top-level argument parser for the recount3 CLI.
 
@@ -276,7 +274,6 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    # Global flags (config-affecting)
     parser.add_argument(
         "--base-url",
         default=None,
@@ -337,7 +334,6 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
     )
 
-    # ids
     p_ids = subparsers.add_parser(
         "ids",
         help="Emit unique sample and project ID lists.",
@@ -359,7 +355,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Write projects to this file (default: print to stdout).",
     )
 
-    # search
     p_search = subparsers.add_parser(
         "search",
         help="Discover resources and print a manifest (JSONL/TSV).",
@@ -370,7 +365,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "  gene-exon:   organism, data_source, genomic_unit, project\n"
             "               (optional: annotation_extension; default G026)\n"
             "  junctions:   organism, data_source, project\n"
-            "               (optional: junction_type=ALL, junction_extension=MM)\n"
+            "               (optional: junction_type=ALL,"
+            " junction_extension=MM)\n"
             "  metadata:    organism, data_source, table_name, project\n"
             "  bigwig:      organism, data_source, project, sample\n"
             "  project:     organism, data_source, project\n"
@@ -383,8 +379,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "\nExamples:\n"
             "  recount3 search annotations organism=human genomic_unit=gene "
             "annotation_extension=G026 --format=jsonl\n"
-            "  recount3 search gene-exon organism=human data_source=sra genomic_unit=gene "
-            "project=SRP012345 --format=tsv\n"
+            "  recount3 search gene-exon organism=human data_source=sra "
+            "genomic_unit=gene project=SRP012345 --format=tsv\n"
         ),
     )
     p_search.add_argument(
@@ -428,7 +424,6 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # download
     p_dl = subparsers.add_parser(
         "download",
         help="Materialize resources from a manifest or inline JSON.",
@@ -472,7 +467,6 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
-    # bundle
     p_bundle = subparsers.add_parser(
         "bundle",
         help="Operate on multiple resources (subcommands).",
@@ -523,7 +517,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output file (.tsv, .tsv.gz, or .parquet).",
     )
 
-    # se
     p_se = sp_bundle.add_parser(
         "se",
         help="Build a SummarizedExperiment from a manifest.",
@@ -563,7 +556,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output file (.pkl or .h5ad if anndata is available).",
     )
 
-    # rse
     p_rse = sp_bundle.add_parser(
         "rse",
         help="Build a RangedSummarizedExperiment from a manifest.",
@@ -608,7 +600,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output file (.pkl or .h5ad if anndata is available).",
     )
 
-    # smoke-test
     p_smoke = subparsers.add_parser(
         "smoke-test",
         help="Small connectivity smoke test (CI/dev).",
@@ -622,9 +613,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
-
-
-
 
 
 def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
@@ -722,7 +710,8 @@ def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
     are derived from the description and the current :class:`Config`.
 
     Args:
-      mapping: JSON-like mapping for a single resource (often a line from JSONL).
+      mapping: JSON-like mapping for a single resource
+        (often a line from JSONL).
       cfg: :class:`Config` for URL construction and caching behavior.
 
     Returns:
@@ -740,7 +729,9 @@ def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
     return R3Resource(description=desc, config=cfg)
 
 
-def _write_jsonl(resources: Iterable[R3Resource], output_path: Path | None) -> None:
+def _write_jsonl(
+    resources: Iterable[R3Resource], output_path: Path | None
+) -> None:
     """Write one JSON object per line describing each resource.
 
     The JSON schema contains all dataclass fields from the description plus
@@ -775,7 +766,9 @@ def _write_jsonl(resources: Iterable[R3Resource], output_path: Path | None) -> N
             sink.close()
 
 
-def _write_tsv(resources: Iterable[R3Resource], output_path: Path | None) -> None:
+def _write_tsv(
+    resources: Iterable[R3Resource], output_path: Path | None
+) -> None:
     """Write a TSV manifest with a stable column ordering.
 
     Columns:
@@ -860,16 +853,12 @@ def _iter_manifest(path_or_dash: str, cfg: Config) -> Iterator[R3Resource]:
                 yield _resource_from_dict(obj, cfg)
         return
 
-    # stdin mode
     for line in stream:
         line = line.strip()
         if not line:
             continue
         obj = json.loads(line)
         yield _resource_from_dict(obj, cfg)
-
-
-
 
 
 def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
@@ -962,10 +951,8 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
                 f"Missing required filters for mode={mode!r}: {missing_str}"
             )
 
-    # Build resources via search helpers.
     found: list[R3Resource]
     if mode == "annotations":
-        # search_annotations(*, organism, genomic_unit, annotation_extension)
         _require("organism", "genomic_unit", "annotation_extension")
         found = r3_search.search_annotations(
             organism=filters["organism"],
@@ -974,9 +961,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     elif mode == "gene-exon":
-        # search_count_files_gene_or_exon(
-        #   *, organism, data_source, genomic_unit, project,
-        #   annotation_extension=("G026",))
         _require("organism", "data_source", "genomic_unit", "project")
         ann_ext = filters.get("annotation_extension", ("G026",))
         found = r3_search.search_count_files_gene_or_exon(
@@ -988,7 +972,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     elif mode == "junctions":
-        # search_count_files_junctions(*, organism, data_source, project, ..., ...)
         _require("organism", "data_source", "project")
         found = r3_search.search_count_files_junctions(
             organism=filters["organism"],
@@ -999,7 +982,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     elif mode == "metadata":
-        # search_metadata_files(*, organism, data_source, table_name, project)
         _require("organism", "data_source", "table_name", "project")
         found = r3_search.search_metadata_files(
             organism=filters["organism"],
@@ -1009,7 +991,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     elif mode == "bigwig":
-        # search_bigwig_files(*, organism, data_source, project, sample)
         _require("organism", "data_source", "project", "sample")
         found = r3_search.search_bigwig_files(
             organism=filters["organism"],
@@ -1019,7 +1000,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     elif mode == "project":
-        # search_project_all(*, organism, data_source, project, ...)
         _require("organism", "data_source", "project")
 
         def _as_bool(s: str | None, default: bool = False) -> bool:
@@ -1043,7 +1023,6 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         inc_meta = _as_bool(filters.get("include_metadata"), True)
         inc_bw = _as_bool(filters.get("include_bigwig"), False)
 
-        # Delegate to library helper.
         found = r3_search.search_project_all(
             organism=filters["organism"],
             data_source=filters["data_source"],
@@ -1058,12 +1037,10 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         )
 
     elif mode == "sources":
-        # search_data_sources(*, organism)
         _require("organism")
         found = r3_search.search_data_sources(organism=filters["organism"])
 
     elif mode == "source-meta":
-        # search_data_source_metadata(*, organism, data_source)
         _require("organism", "data_source")
         found = r3_search.search_data_source_metadata(
             organism=filters["organism"], data_source=filters["data_source"]
@@ -1072,10 +1049,8 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
     else:  # pragma: no cover
         raise ValueError(f"Unknown search mode: {mode!r}")
 
-    # Attach config (search_* returns resources without a config set).
     configured = [dataclasses.replace(r, config=cfg) for r in found]
 
-    # Choose destination: explicit --output, or auto-named file in --outdir, else stdout.
     out_path: Path | None
     if args.output:
         out_path = Path(args.output)
@@ -1121,7 +1096,6 @@ def _download_one(
     """
     res = dataclasses.replace(res, config=cfg)
 
-    # Pre-compute skip condition for directory materialization.
     is_zip = dest.suffix.lower() == ".zip"
     will_skip = False
     dest_file: Path | None = None
@@ -1198,7 +1172,6 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
     total = len(resources)
     errors = 0
 
-    # Streaming JSONL progress.
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futs = [
             pool.submit(_download_one, r, cfg, dest, cache_mode, overwrite)
@@ -1268,10 +1241,9 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         if out.suffix.lower() == ".parquet":
-            # Defer heavy deps to runtime (pyarrow/fastparquet), let pandas raise.
+            # Defer heavy deps to runtime; let pandas raise.
             df.to_parquet(out)
         else:
-            # Default to TSV, support transparent gzip.
             sep = "\t"
             df.to_csv(out, sep=sep)
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -1315,7 +1287,6 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
         logging.error("Failed to build SE (reason: %r).", exc)
         return 2
 
-    # Default to pickle; optionally write h5ad through AnnData.
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -1416,9 +1387,6 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-
-
-
 def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
     """Dispatch parsed arguments to the appropriate subcommand handler.
 
@@ -1445,15 +1413,10 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
             return _cmd_bundle_se(args, cfg)
         if args.bundle_cmd == "rse":
             return _cmd_bundle_rse(args, cfg)
-        raise ValueError(
-            f"Unknown bundle subcommand: {args.bundle_cmd!r}"
-        )
+        raise ValueError(f"Unknown bundle subcommand: {args.bundle_cmd!r}")
     if args.command == "smoke-test":
         return _cmd_smoke_test(args, cfg)
     raise ValueError(f"Unknown command: {args.command!r}")
-
-
-
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -1479,8 +1442,6 @@ def main(argv: list[str] | None = None) -> None:
         logging.error("Interrupted.")
         code = 130
     except (ConfigurationError, Recount3Error, ValueError) as exc:
-        # Be precise and greppable; the handler already logged context where
-        # appropriate. We keep this generic here to avoid duplicated messages.
         logging.error("Fatal error: %r", exc)
         code = 2
 
