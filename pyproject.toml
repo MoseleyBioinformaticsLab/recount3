@@ -119,7 +119,7 @@ exclude_lines = [
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.3.0"
+version = "1.0.0"
 version_files = ["src/recount3/version.py:__version__"]
 tag_format = "v$version"
 changelog_file = "CHANGELOG.rst"
