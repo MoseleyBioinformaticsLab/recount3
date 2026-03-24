@@ -269,6 +269,14 @@ class TestBuildConfigFromEnvAndFlags:
         cfg = _build_config_from_env_and_flags(args)
         assert cfg.cache_disabled is False
 
+    def test_invalid_cache_dir_raises_configuration_error(self) -> None:
+        args = _make_namespace(cache_dir="/some/path")
+        with mock.patch.object(
+            Path, "resolve", side_effect=OSError("broken")
+        ):
+            with pytest.raises(ConfigurationError, match="Invalid cache"):
+                _build_config_from_env_and_flags(args)
+
 
 class TestInitLogging:
     def test_quiet_sets_warning(self) -> None:
@@ -1030,6 +1038,16 @@ class TestCmdSearchProject:
         code, m = self._run(tmp_path, args)
         _, kwargs = m.call_args
         assert kwargs["junction_type"] == "ALL"
+
+
+class TestCmdSearchUnknownMode:
+    def test_unknown_mode_raises_value_error(
+        self, tmp_path: Path
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        args = _make_search_args(mode="bogus", filters=[])
+        with pytest.raises(ValueError, match="Unknown search mode"):
+            _cmd_search(args, cfg)
 
 
 class TestCmdSearchOutputDestination:
@@ -1851,3 +1869,18 @@ class TestMain:
         captured = capsys.readouterr()
         assert "SRR001" in captured.out
         assert "SRP001" in captured.out
+
+
+class TestMainGuard:
+    def test_dunder_main_calls_main(self) -> None:
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-m", "recount3.cli", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0
+        assert "recount3" in result.stdout

@@ -644,7 +644,7 @@ def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
 
     try:
         cache_dir = cache_dir.expanduser().resolve()
-    except Exception as exc:  # pragma: no cover
+    except Exception as exc:
         raise ConfigurationError(
             f"Invalid cache directory: {cache_dir!s}"
         ) from exc
@@ -1046,7 +1046,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             organism=filters["organism"], data_source=filters["data_source"]
         )
 
-    else:  # pragma: no cover
+    else:
         raise ValueError(f"Unknown search mode: {mode!r}")
 
     configured = [dataclasses.replace(r, config=cfg) for r in found]
@@ -1448,5 +1448,5 @@ def main(argv: list[str] | None = None) -> None:
     sys.exit(code)
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     main()
