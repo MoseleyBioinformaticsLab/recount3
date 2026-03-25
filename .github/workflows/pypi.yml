@@ -28,3 +28,4 @@ jobs:
         with:
           password: ${{ secrets.API_TOKEN }}
           repository-url: ${{ inputs.repository_url }}
+          skip-existing: true
