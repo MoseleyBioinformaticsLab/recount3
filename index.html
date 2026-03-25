@@ -1,0 +1,332 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>recount3 &mdash; recount3 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Tutorial" href="tutorial.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            recount3
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">recount3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">recount3</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="recount3">
+<h1>recount3<a class="headerlink" href="#recount3" title="Link to this heading"></a></h1>
+</section>
+<section id="id1">
+<h1>recount3<a class="headerlink" href="#id1" title="Link to this heading"></a></h1>
+<a class="reference external image-reference" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE"><img alt="Clear BSD License with extra clauses" src="https://img.shields.io/pypi/l/recount3.svg" />
+</a>
+<a class="reference external image-reference" href="https://pypi.org/project/recount3"><img alt="Current library version" src="https://img.shields.io/pypi/v/recount3.svg" />
+</a>
+<a class="reference external image-reference" href="https://pypi.org/project/recount3"><img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/recount3.svg" />
+</a>
+<a class="reference external image-reference" href="https://github.com/MoseleyBioinformaticsLab/recount3"><img alt="GitHub project" src="https://img.shields.io/github/stars/MoseleyBioinformaticsLab/recount3.svg?style=social&amp;label=Star" />
+</a>
+<div class="line-block">
+<div class="line"><br /></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">recount3</span></code> package is a Python library and command-line tool for
+interacting with the <a class="reference external" href="https://rna.recount.bio">recount3</a> data repository, a uniformly processed
+collection of RNA-seq studies covering human and mouse samples from SRA,
+GTEx, and TCGA.</p>
+<p>The package provides a typed API for discovering, downloading, and assembling
+recount3 resources into analysis-ready objects.  A companion CLI implements a
+discover -&gt; manifest -&gt; materialize workflow suitable for use in scripts and
+pipelines.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">recount3</span></code> package can be used in two ways:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>As a Python library for searching, downloading, and assembling
+recount3 gene/exon/junction count matrices, sample metadata, genome
+annotations, and BigWig coverage files into
+<code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> / <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> objects via
+the BiocPy stack.</p></li>
+<li><p>As a command-line tool (<code class="docutils literal notranslate"><span class="pre">recount3</span></code>) to search the mirror, produce
+JSONL manifests, and materialize resources to disk or into a <code class="docutils literal notranslate"><span class="pre">.zip</span></code>
+archive.</p></li>
+</ul>
+</div></blockquote>
+<section id="links">
+<h2>Links<a class="headerlink" href="#links" title="Link to this heading"></a></h2>
+<blockquote>
+<div><ul class="simple">
+<li><p>recount3 &#64; <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3">GitHub</a></p></li>
+<li><p>recount3 &#64; <a class="reference external" href="https://pypi.org/project/recount3">PyPI</a></p></li>
+<li><p>Documentation &#64; <a class="reference external" href="https://moseleybioinformaticslab.github.io/recount3/">Pages</a></p></li>
+<li><p>Questions &amp; bug reports &#64; <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3/issues">Issues</a></p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>The core package requires Python 3.10 or newer and depends on NumPy, pandas,
+and SciPy.  Optional extras unlock BiocPy integration and BigWig support.</p>
+<section id="install-on-linux-mac-os-x">
+<h3>Install on Linux, Mac OS X<a class="headerlink" href="#install-on-linux-mac-os-x" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3
+</pre></div>
+</div>
+</section>
+<section id="install-on-windows">
+<h3>Install on Windows<a class="headerlink" href="#install-on-windows" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>py<span class="w"> </span>-3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3
+</pre></div>
+</div>
+</section>
+<section id="optional-extras">
+<h3>Optional extras<a class="headerlink" href="#optional-extras" title="Link to this heading"></a></h3>
+<p>Install with BiocPy support (<code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code>, <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>,
+<code class="docutils literal notranslate"><span class="pre">GenomicRanges</span></code>):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy]&quot;</span>
+</pre></div>
+</div>
+<p>Install with BigWig support (<code class="docutils literal notranslate"><span class="pre">pybigwig</span></code>):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[bigwig]&quot;</span>
+</pre></div>
+</div>
+<p>Install all optional extras:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy,bigwig]&quot;</span>
+</pre></div>
+</div>
+</section>
+<section id="upgrade-on-linux-mac-os-x">
+<h3>Upgrade on Linux, Mac OS X<a class="headerlink" href="#upgrade-on-linux-mac-os-x" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w"> </span>--upgrade
+</pre></div>
+</div>
+</section>
+<section id="upgrade-on-windows">
+<h3>Upgrade on Windows<a class="headerlink" href="#upgrade-on-windows" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>py<span class="w"> </span>-3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w"> </span>--upgrade
+</pre></div>
+</div>
+</section>
+</section>
+<section id="quickstart">
+<h2>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading"></a></h2>
+<section id="python-api">
+<h3>Python API<a class="headerlink" href="#python-api" title="Link to this heading"></a></h3>
+<p>Discover all resources for a project, stack the gene-level count matrices
+across samples, and build a <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceBundle</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Discover every resource for a human SRA project.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Stack raw gene-count matrices across all samples.</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">only_counts</span><span class="p">()</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Build a RangedSummarizedExperiment (requires recount3[biocpy]).</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="command-line-tool">
+<h3>Command-line tool<a class="headerlink" href="#command-line-tool" title="Link to this heading"></a></h3>
+<p>Discover resources, save a JSONL manifest, and download in parallel:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Search for gene-level count files and write a manifest.</span>
+recount3<span class="w"> </span>search<span class="w"> </span>gene-exon<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">data_source</span><span class="o">=</span>sra<span class="w"> </span><span class="nv">genomic_unit</span><span class="o">=</span>gene<span class="w"> </span><span class="nv">project</span><span class="o">=</span>SRP009615<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--format<span class="o">=</span>jsonl<span class="w"> </span>&gt;<span class="w"> </span>manifest.jsonl
+
+<span class="c1"># Materialize all resources from the manifest (8 parallel jobs).</span>
+recount3<span class="w"> </span>download<span class="w"> </span>--from<span class="o">=</span>manifest.jsonl<span class="w"> </span>--dest<span class="o">=</span>./downloads<span class="w"> </span>--jobs<span class="o">=</span><span class="m">8</span>
+</pre></div>
+</div>
+<p>Stream search output directly into download without an intermediate file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>recount3<span class="w"> </span>search<span class="w"> </span>annotations<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">genomic_unit</span><span class="o">=</span>gene<span class="w"> </span><span class="nv">annotation_extension</span><span class="o">=</span>G026<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--format<span class="o">=</span>jsonl<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+recount3<span class="w"> </span>download<span class="w"> </span>--from<span class="o">=</span>-<span class="w"> </span>--dest<span class="o">=</span>./annotations
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Read the full documentation on <a class="reference external" href="https://moseleybioinformaticslab.github.io/recount3/">Pages</a> for the complete API reference,
+CLI guide, and worked examples.</p>
+</div>
+</section>
+</section>
+<section id="dependencies">
+<h2>Dependencies<a class="headerlink" href="#dependencies" title="Link to this heading"></a></h2>
+<p>Core (installed automatically):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>numpy&gt;=2.0
+pandas&gt;=2.2
+scipy&gt;=1.13
+</pre></div>
+</div>
+<p>Optional: BiocPy integration (<code class="docutils literal notranslate"><span class="pre">recount3[biocpy]</span></code>):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>biocframe&gt;=0.7
+genomicranges&gt;=0.8
+summarizedexperiment&gt;=0.6
+</pre></div>
+</div>
+<p>Optional: BigWig support (<code class="docutils literal notranslate"><span class="pre">recount3[bigwig]</span></code>):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pybigwig&gt;=0.3.18
+</pre></div>
+</div>
+</section>
+<section id="questions-feature-requests-and-bug-reports">
+<h2>Questions, Feature Requests, and Bug Reports<a class="headerlink" href="#questions-feature-requests-and-bug-reports" title="Link to this heading"></a></h2>
+<p>Please submit questions, feature requests, and bug reports on <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3/issues">Issues</a>.</p>
+</section>
+<section id="license">
+<h2>License<a class="headerlink" href="#license" title="Link to this heading"></a></h2>
+<p>This package is distributed under the <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE">BSD</a> license.</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#discovering-resources-for-a-project">Discovering Resources for a Project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#stacking-count-matrices">Stacking Count Matrices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#building-a-summarizedexperiment">Building a SummarizedExperiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#building-a-rangedsummarizedexperiment">Building a RangedSummarizedExperiment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#accessing-metadata">Accessing Metadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#filtering-bundles">Filtering Bundles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#working-with-individual-resources">Working with Individual Resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#searching-without-a-bundle">Searching Without a Bundle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#cache-management">Cache Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#sra-attribute-expansion">SRA Attribute Expansion</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#commands">Commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#input-and-output-formats">Input and output formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#logging">Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#exit-codes">Exit codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#security-and-safety">Security and safety</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#performance-tips">Performance tips</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#example-recipes">Example recipes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#import-safety">Import safety</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli.html#full-usage">Full usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.config">recount3.config</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.resource">recount3.resource</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.bundle">recount3.bundle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.search">recount3.search</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.se">recount3.se</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3._descriptions">recount3._descriptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.errors">recount3.errors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3.types">recount3.types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-recount3._bigwig">recount3._bigwig</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+</div>
+</section>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="tutorial.html" class="btn btn-neutral float-right" title="Tutorial" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

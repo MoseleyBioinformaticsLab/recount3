@@ -1,0 +1,1267 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>recount3.se &mdash; recount3 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            recount3
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../license.html">License</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">recount3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">recount3.se</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for recount3.se</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2026, Alexander A. Alsalihi, Robert M. Flight,</span>
+<span class="c1"># Hunter N.B. Moseley. All rights reserved.</span>
+<span class="c1">#</span>
+<span class="c1"># Redistribution and use in source and binary forms, with or without</span>
+<span class="c1"># modification, are permitted provided that the following conditions are met:</span>
+<span class="c1">#</span>
+<span class="c1"># * Redistributions of source code must retain the above copyright notice, this</span>
+<span class="c1">#   list of conditions and the following disclaimer.</span>
+<span class="c1"># * Redistributions in binary form must reproduce the above copyright notice,</span>
+<span class="c1">#   this list of conditions and the following disclaimer in the documentation</span>
+<span class="c1">#   and/or other materials provided with the distribution.</span>
+<span class="c1"># * All advertising materials mentioning features or use of this software must</span>
+<span class="c1">#   display the following acknowledgement: This product includes software</span>
+<span class="c1">#   developed by the copyright holder.</span>
+<span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
+<span class="c1">#   specific prior written permission.</span>
+<span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
+<span class="c1">#   source code must be included with the published work.</span>
+<span class="c1">#</span>
+<span class="c1"># THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS AS IS AND</span>
+<span class="c1"># ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED</span>
+<span class="c1"># WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE</span>
+<span class="c1"># DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE</span>
+<span class="c1"># FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL</span>
+<span class="c1"># DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR</span>
+<span class="c1"># SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER</span>
+<span class="c1"># CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,</span>
+<span class="c1"># OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
+<span class="c1"># OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
+<span class="c1">#</span>
+<span class="sd">&quot;&quot;&quot;High-level builders and utilities for SummarizedExperiment objects.</span>
+
+<span class="sd">This module provides helpers for constructing BiocPy</span>
+<span class="sd">:class:`~summarizedexperiment.SummarizedExperiment` and</span>
+<span class="sd">:class:`~summarizedexperiment.RangedSummarizedExperiment` objects from</span>
+<span class="sd">recount3 projects, plus utilities for working with SRA-style sample</span>
+<span class="sd">attributes and per-sample scaling.</span>
+
+<span class="sd">The heavy lifting is implemented as methods on</span>
+<span class="sd">:class:`~recount3.bundle.R3ResourceBundle`:</span>
+
+<span class="sd">* :meth:`~recount3.bundle.R3ResourceBundle.to_summarized_experiment`</span>
+<span class="sd">* :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`</span>
+
+<span class="sd">The functions in this module are thin wrappers around those methods (for</span>
+<span class="sd">example, :func:`create_rse`) and convenience utilities that operate on</span>
+<span class="sd">BiocPy objects directly:</span>
+
+<span class="sd">* :func:`expand_sra_attributes`: parse SRA ``key;;value|...`` attribute</span>
+<span class="sd">  strings into separate columns on a metadata DataFrame or SE/RSE object.</span>
+<span class="sd">* :func:`compute_read_counts`: convert coverage-sum counts to approximate</span>
+<span class="sd">  read counts using average mapped read length.</span>
+<span class="sd">* :func:`compute_tpm`: compute Transcripts Per Million from an RSE with</span>
+<span class="sd">  genomic ranges (uses feature widths from ``row_ranges``).</span>
+<span class="sd">* :func:`compute_scale_factors`: compute per-sample AUC- or</span>
+<span class="sd">  mapped-reads-based scale factors.</span>
+<span class="sd">* :func:`transform_counts`: apply scale factors to a count matrix.</span>
+
+<span class="sd">Typical usage example::</span>
+
+<span class="sd">  from recount3 import create_rse</span>
+<span class="sd">  from recount3.se import compute_scale_factors, transform_counts</span>
+
+<span class="sd">  rse = create_rse(</span>
+<span class="sd">      project=&quot;SRP009615&quot;,</span>
+<span class="sd">      organism=&quot;human&quot;,</span>
+<span class="sd">      annotation_label=&quot;gencode_v26&quot;,</span>
+<span class="sd">  )</span>
+<span class="sd">  sf = compute_scale_factors(rse)</span>
+<span class="sd">  scaled = transform_counts(rse, scale_factors=sf)</span>
+
+<span class="sd">Note:</span>
+<span class="sd">    Most functions in this module require BiocPy packages</span>
+<span class="sd">    (``biocframe``, ``summarizedexperiment``, ``genomicranges``).</span>
+<span class="sd">    Install them with::</span>
+
+<span class="sd">        pip install summarizedexperiment</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.bundle</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceBundle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.search</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotation_ext</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_utils</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>  <span class="c1"># pragma: no cover</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">summarizedexperiment</span>  <span class="c1"># type: ignore[import-not-found]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_expand_sra_attributes_df</span><span class="p">(</span>
+    <span class="n">col_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">sra_attributes_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;sra.sample_attributes&quot;</span><span class="p">,</span>
+    <span class="n">attribute_column_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;sra_attribute.&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a copy of column metadata with SRA attributes expanded.</span>
+
+<span class="sd">    recount3 stores SRA sample attributes in a single string column such</span>
+<span class="sd">    as ``&#39;sra.sample_attributes&#39;`` using the encoding::</span>
+
+<span class="sd">        &quot;age;;67.78|biomaterial_provider;;LIBD|disease;;Control|...&quot;</span>
+
+<span class="sd">    This helper mirrors the behavior of the recount3 R function</span>
+<span class="sd">    ``expand_sra_attributes()``: each entry is split on ``&#39;|&#39;`` into</span>
+<span class="sd">    individual attributes, then on ``&#39;;;&#39;`` into ``key`` and ``value``</span>
+<span class="sd">    pairs. New columns named ``{attribute_column_prefix}{key}`` (with spaces in ``key``</span>
+<span class="sd">    replaced by ``&#39;_&#39;``) are appended to the metadata.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      col_df: Column metadata DataFrame.</span>
+<span class="sd">      sra_attributes_column: Name of the column carrying the raw SRA attribute strings.</span>
+<span class="sd">        If this column is missing, ``col_df`` is returned unchanged.</span>
+<span class="sd">      attribute_column_prefix: Prefix to prepend to attribute names when forming new</span>
+<span class="sd">        columns.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A new DataFrame with the same index as ``col_df`` and additional</span>
+<span class="sd">      columns containing one parsed SRA attribute per column.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">sra_attributes_column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">col_df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">col_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">ser</span> <span class="o">=</span> <span class="n">col_df</span><span class="p">[</span><span class="n">sra_attributes_column</span><span class="p">]</span>
+    <span class="n">rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">ser</span><span class="p">:</span>
+        <span class="n">row_map</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">value</span><span class="p">:</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;|&quot;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">entry</span> <span class="ow">or</span> <span class="s2">&quot;;;&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entry</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="o">=</span> <span class="n">entry</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;;;&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">key_clean</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">key_clean</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="n">key_slug</span> <span class="o">=</span> <span class="n">key_clean</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span>
+                <span class="n">col_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">attribute_column_prefix</span><span class="si">}{</span><span class="n">key_slug</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">row_map</span><span class="p">[</span><span class="n">col_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row_map</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">col_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">attrs_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">col_df</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="n">merged</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">col_df</span><span class="p">,</span> <span class="n">attrs_df</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">merged</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_annotation_extension</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">annotation_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve a single annotation extension for create_rse-style helpers.</span>
+
+<span class="sd">    For gene and exon assays, this helper maps a human-readable</span>
+<span class="sd">    annotation name (for example, ``&quot;gencode_v26&quot;``) or an explicit</span>
+<span class="sd">    extension (for example, ``&quot;G026&quot;``) to the underlying recount3</span>
+<span class="sd">    extension. When both ``annotation_label`` and</span>
+<span class="sd">    ``annotation_extension`` are provided, the explicit extension</span>
+<span class="sd">    wins.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      organism: Organism identifier (``&quot;human&quot;`` or ``&quot;mouse&quot;``).</span>
+<span class="sd">      genomic_unit: Normalized genomic unit (``&quot;gene&quot;``, ``&quot;exon&quot;``, or</span>
+<span class="sd">        ``&quot;junction&quot;``).</span>
+<span class="sd">      annotation_label: Optional human-readable annotation label.</span>
+<span class="sd">      annotation_extension: Optional explicit annotation extension.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A single annotation extension string for gene/exon assays, or</span>
+<span class="sd">      :data:`None` when no annotation is required (for example,</span>
+<span class="sd">      junction-level assays).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">genomic_unit</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span> <span class="s2">&quot;exon&quot;</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">annotation_extension</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">annotation_extension</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">annotation_label</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">annotation_ext</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span> <span class="n">annotation</span><span class="o">=</span><span class="n">annotation_label</span><span class="p">)</span>
+
+    <span class="n">org</span> <span class="o">=</span> <span class="n">organism</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">org</span> <span class="o">==</span> <span class="s2">&quot;human&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;G026&quot;</span>
+    <span class="k">if</span> <span class="n">org</span> <span class="o">==</span> <span class="s2">&quot;mouse&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;M023&quot;</span>
+
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Unsupported organism </span><span class="si">{</span><span class="n">organism</span><span class="si">!r}</span><span class="s2">; expected &#39;human&#39; or &#39;mouse&#39;.&quot;</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="build_summarized_experiment">
+<a class="viewcode-back" href="../../api.html#recount3.se.build_summarized_experiment">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_summarized_experiment</span><span class="p">(</span>
+    <span class="n">bundle</span><span class="p">:</span> <span class="n">R3ResourceBundle</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">assay_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;raw_counts&quot;</span><span class="p">,</span>
+    <span class="n">join_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;inner&quot;</span><span class="p">,</span>
+    <span class="n">autoload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a SummarizedExperiment from a resource bundle.</span>
+
+<span class="sd">    This is a convenience wrapper around</span>
+<span class="sd">    :meth:`recount3.bundle.R3ResourceBundle.to_summarized_experiment`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      bundle: Resource bundle containing counts and metadata.</span>
+<span class="sd">      genomic_unit: One of ``&quot;gene&quot;``, ``&quot;exon&quot;``, or ``&quot;junction&quot;``.</span>
+<span class="sd">      annotation_extension: Optional annotation code for gene/exon</span>
+<span class="sd">        assays (for example, ``&quot;G026&quot;``).</span>
+<span class="sd">      assay_name: Name for the count assay in the SE.</span>
+<span class="sd">      join_policy: Join policy across projects (pandas concatenation join).</span>
+<span class="sd">      autoload: If :data:`True`, load resources transparently.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A :class:`summarizedexperiment.SummarizedExperiment` instance.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_normalize_genomic_unit</span><span class="p">(</span><span class="n">genomic_unit</span><span class="p">)</span>  <span class="c1"># pylint: disable=protected-access</span>
+    <span class="k">return</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_summarized_experiment</span><span class="p">(</span>
+        <span class="n">genomic_unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span>
+        <span class="n">annotation_extension</span><span class="o">=</span><span class="n">annotation_extension</span><span class="p">,</span>
+        <span class="n">assay_name</span><span class="o">=</span><span class="n">assay_name</span><span class="p">,</span>
+        <span class="n">join_policy</span><span class="o">=</span><span class="n">join_policy</span><span class="p">,</span>
+        <span class="n">autoload</span><span class="o">=</span><span class="n">autoload</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="build_ranged_summarized_experiment">
+<a class="viewcode-back" href="../../api.html#recount3.se.build_ranged_summarized_experiment">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_ranged_summarized_experiment</span><span class="p">(</span>
+    <span class="n">bundle</span><span class="p">:</span> <span class="n">R3ResourceBundle</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">prefer_rr_junction_coordinates</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">assay_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;raw_counts&quot;</span><span class="p">,</span>
+    <span class="n">join_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;inner&quot;</span><span class="p">,</span>
+    <span class="n">autoload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">allow_fallback_to_se</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span>
+    <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span>
+    <span class="o">|</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create a RangedSummarizedExperiment when ranges can be resolved.</span>
+
+<span class="sd">    This is a convenience wrapper around</span>
+<span class="sd">    :meth:`recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      bundle: Resources for counts, metadata, and (optionally)</span>
+<span class="sd">        annotations.</span>
+<span class="sd">      genomic_unit: One of ``&quot;gene&quot;``, ``&quot;exon&quot;``, or ``&quot;junction&quot;``.</span>
+<span class="sd">      annotation_extension: Annotation code for gene/exon, if</span>
+<span class="sd">        desired.</span>
+<span class="sd">      prefer_rr_junction_coordinates: Prefer RR for junction coordinates when</span>
+<span class="sd">        present.</span>
+<span class="sd">      assay_name: Name for the count assay in the output.</span>
+<span class="sd">      join_policy: Join policy across projects when stacking.</span>
+<span class="sd">      autoload: If :data:`True`, load resources transparently.</span>
+<span class="sd">      allow_fallback_to_se: If :data:`True`, return a plain SE when</span>
+<span class="sd">        ranges are unavailable.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A :class:`summarizedexperiment.RangedSummarizedExperiment` object,</span>
+<span class="sd">      or a plain :class:`summarizedexperiment.SummarizedExperiment` when</span>
+<span class="sd">      ``allow_fallback_to_se`` is :data:`True` and ranges cannot be</span>
+<span class="sd">      resolved.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_normalize_genomic_unit</span><span class="p">(</span><span class="n">genomic_unit</span><span class="p">)</span>  <span class="c1"># pylint: disable=protected-access</span>
+    <span class="k">return</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span>
+        <span class="n">genomic_unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span>
+        <span class="n">annotation_extension</span><span class="o">=</span><span class="n">annotation_extension</span><span class="p">,</span>
+        <span class="n">prefer_rr_junction_coordinates</span><span class="o">=</span><span class="n">prefer_rr_junction_coordinates</span><span class="p">,</span>
+        <span class="n">assay_name</span><span class="o">=</span><span class="n">assay_name</span><span class="p">,</span>
+        <span class="n">join_policy</span><span class="o">=</span><span class="n">join_policy</span><span class="p">,</span>
+        <span class="n">autoload</span><span class="o">=</span><span class="n">autoload</span><span class="p">,</span>
+        <span class="n">allow_fallback_to_se</span><span class="o">=</span><span class="n">allow_fallback_to_se</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="create_ranged_summarized_experiment">
+<a class="viewcode-back" href="../../api.html#recount3.se.create_ranged_summarized_experiment">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_ranged_summarized_experiment</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gene&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">annotation_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">junction_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ALL&quot;</span><span class="p">,</span>
+    <span class="n">junction_extensions</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">include_metadata</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_bigwig</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">assay_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;raw_counts&quot;</span><span class="p">,</span>
+    <span class="n">join_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;inner&quot;</span><span class="p">,</span>
+    <span class="n">autoload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">allow_fallback_to_se</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span>
+    <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span>
+    <span class="o">|</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;High-level helper that mirrors recount3&#39;s ``create_rse()`` in R.</span>
+
+<span class="sd">    This function hides the intermediate bundle construction step by:</span>
+
+<span class="sd">      1. Discovering all resources for a project via</span>
+<span class="sd">         :meth:`recount3.bundle.R3ResourceBundle.discover`.</span>
+<span class="sd">      2. Stacking expression matrices across projects and samples.</span>
+<span class="sd">      3. Resolving genomic ranges (GTF for gene/exon; RR for junctions).</span>
+<span class="sd">      4. Building a BiocPy :class:`RangedSummarizedExperiment` (or SE</span>
+<span class="sd">         fallback) using the bundle methods.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      project: Study or project identifier (for example, ``&quot;SRP009615&quot;``).</span>
+<span class="sd">      genomic_unit: One of ``{&quot;gene&quot;, &quot;exon&quot;, &quot;junction&quot;}``.</span>
+<span class="sd">      organism: Organism identifier (``&quot;human&quot;`` or ``&quot;mouse&quot;``).</span>
+<span class="sd">      data_source: Data source (``&quot;sra&quot;``, ``&quot;gtex&quot;``, or ``&quot;tcga&quot;``).</span>
+<span class="sd">      annotation_label: Optional human-readable annotation label for gene/exon</span>
+<span class="sd">        assays, such as ``&quot;gencode_v26&quot;`` or ``&quot;gencode_v29&quot;``. Ignored</span>
+<span class="sd">        for junction-level assays.</span>
+<span class="sd">      annotation_extension: Optional explicit annotation extension</span>
+<span class="sd">        (for example, ``&quot;G026&quot;``). When provided, this takes precedence</span>
+<span class="sd">        over ``annotation_label``. Ignored for junction-level assays.</span>
+<span class="sd">      junction_type: Junction type; typically ``&quot;ALL&quot;``.</span>
+<span class="sd">      junction_extensions: Iterable of junction artifact extensions</span>
+<span class="sd">        to include (for example, ``(&quot;MM&quot;,)`` or ``(&quot;MM&quot;, &quot;RR&quot;)``). If</span>
+<span class="sd">        :data:`None`, the default ``(&quot;MM&quot;,)`` is used.</span>
+<span class="sd">      include_metadata: Whether to include the five project metadata</span>
+<span class="sd">        tables in the underlying bundle (recommended).</span>
+<span class="sd">      include_bigwig: Whether to include per-sample BigWig coverage</span>
+<span class="sd">        resources in the bundle. These can be large.</span>
+<span class="sd">      join_policy: Join policy across projects when stacking count matrices</span>
+<span class="sd">        (passed to :func:`build_ranged_summarized_experiment`).</span>
+<span class="sd">      autoload: If :data:`True`, load resources transparently.</span>
+<span class="sd">      allow_fallback_to_se: If :data:`True`, construct a plain SE when</span>
+<span class="sd">        genomic ranges cannot be derived for the requested combination.</span>
+<span class="sd">      strict: If :data:`True`, propagate validation errors from the</span>
+<span class="sd">        search layer (for example, missing projects or incompatible</span>
+<span class="sd">        combinations).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A :class:`summarizedexperiment.RangedSummarizedExperiment` object,</span>
+<span class="sd">      or a plain :class:`summarizedexperiment.SummarizedExperiment` when</span>
+<span class="sd">      ``allow_fallback_to_se`` is :data:`True` and ranges cannot be</span>
+<span class="sd">      resolved.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      ImportError: If BiocPy packages are not installed.</span>
+<span class="sd">      ValueError: If inputs are invalid or no counts are found.</span>
+<span class="sd">      TypeError: If the underlying</span>
+<span class="sd">        :class:`RangedSummarizedExperiment` constructor rejects all</span>
+<span class="sd">        compatibility variants.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Build an RSE for a human SRA gene-count project (GENCODE 26)::</span>
+
+<span class="sd">            rse = create_ranged_summarized_experiment(</span>
+<span class="sd">                project=&quot;SRP009615&quot;,</span>
+<span class="sd">                organism=&quot;human&quot;,</span>
+<span class="sd">                annotation_label=&quot;gencode_v26&quot;,</span>
+<span class="sd">            )</span>
+
+<span class="sd">        Use the raw annotation extension instead of a label::</span>
+
+<span class="sd">            rse = create_ranged_summarized_experiment(</span>
+<span class="sd">                project=&quot;SRP009615&quot;,</span>
+<span class="sd">                organism=&quot;human&quot;,</span>
+<span class="sd">                annotation_extension=&quot;G026&quot;,</span>
+<span class="sd">            )</span>
+
+<span class="sd">        Build a junction-level RSE::</span>
+
+<span class="sd">            rse = create_ranged_summarized_experiment(</span>
+<span class="sd">                project=&quot;SRP009615&quot;,</span>
+<span class="sd">                organism=&quot;human&quot;,</span>
+<span class="sd">                genomic_unit=&quot;junction&quot;,</span>
+<span class="sd">            )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_normalize_genomic_unit</span><span class="p">(</span><span class="n">genomic_unit</span><span class="p">)</span>  <span class="c1"># pylint: disable=protected-access</span>
+    <span class="n">ann_ext</span> <span class="o">=</span> <span class="n">_resolve_annotation_extension</span><span class="p">(</span>
+        <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
+        <span class="n">genomic_unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span>
+        <span class="n">annotation_label</span><span class="o">=</span><span class="n">annotation_label</span><span class="p">,</span>
+        <span class="n">annotation_extension</span><span class="o">=</span><span class="n">annotation_extension</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">junction_extensions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">junction_exts</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;MM&quot;</span><span class="p">,)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">junction_exts</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">ext</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">ext</span> <span class="ow">in</span> <span class="n">junction_extensions</span><span class="p">)</span>
+
+    <span class="n">project_bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
+        <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
+        <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+        <span class="n">genomic_units</span><span class="o">=</span><span class="p">(</span><span class="n">unit</span><span class="p">,),</span>
+        <span class="n">annotations</span><span class="o">=</span><span class="s2">&quot;default&quot;</span> <span class="k">if</span> <span class="n">ann_ext</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="n">ann_ext</span><span class="p">,),</span>
+        <span class="n">junction_exts</span><span class="o">=</span><span class="n">junction_exts</span><span class="p">,</span>
+        <span class="n">junction_type</span><span class="o">=</span><span class="n">junction_type</span><span class="p">,</span>
+        <span class="n">include_metadata</span><span class="o">=</span><span class="n">include_metadata</span><span class="p">,</span>
+        <span class="n">include_bigwig</span><span class="o">=</span><span class="n">include_bigwig</span><span class="p">,</span>
+        <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
+        <span class="n">deduplicate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">project_bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span>
+        <span class="n">genomic_unit</span><span class="o">=</span><span class="n">unit</span><span class="p">,</span>
+        <span class="n">annotation_extension</span><span class="o">=</span><span class="n">ann_ext</span><span class="p">,</span>
+        <span class="n">prefer_rr_junction_coordinates</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">assay_name</span><span class="o">=</span><span class="n">assay_name</span><span class="p">,</span>
+        <span class="n">join_policy</span><span class="o">=</span><span class="n">join_policy</span><span class="p">,</span>
+        <span class="n">autoload</span><span class="o">=</span><span class="n">autoload</span><span class="p">,</span>
+        <span class="n">allow_fallback_to_se</span><span class="o">=</span><span class="n">allow_fallback_to_se</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="create_rse">
+<a class="viewcode-back" href="../../api.html#recount3.se.create_rse">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">create_rse</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;gene&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">annotation_label</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">junction_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ALL&quot;</span><span class="p">,</span>
+    <span class="n">junction_extensions</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">include_metadata</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_bigwig</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">assay_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;raw_counts&quot;</span><span class="p">,</span>
+    <span class="n">join_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;inner&quot;</span><span class="p">,</span>
+    <span class="n">autoload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">allow_fallback_to_se</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span>
+    <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span>
+    <span class="o">|</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Alias for :func:`create_ranged_summarized_experiment`.</span>
+
+<span class="sd">    The parameters and behavior are identical; see that function for</span>
+<span class="sd">    full documentation.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Build an RSE for a human SRA gene-count project::</span>
+
+<span class="sd">            rse = create_rse(</span>
+<span class="sd">                project=&quot;SRP009615&quot;,</span>
+<span class="sd">                organism=&quot;human&quot;,</span>
+<span class="sd">                annotation_label=&quot;gencode_v26&quot;,</span>
+<span class="sd">            )</span>
+
+<span class="sd">        Use the raw extension string instead of a label::</span>
+
+<span class="sd">            rse = create_rse(</span>
+<span class="sd">                project=&quot;SRP009615&quot;,</span>
+<span class="sd">                organism=&quot;human&quot;,</span>
+<span class="sd">                annotation_extension=&quot;G026&quot;,</span>
+<span class="sd">            )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">create_ranged_summarized_experiment</span><span class="p">(</span>
+        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+        <span class="n">genomic_unit</span><span class="o">=</span><span class="n">genomic_unit</span><span class="p">,</span>
+        <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
+        <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
+        <span class="n">annotation_label</span><span class="o">=</span><span class="n">annotation_label</span><span class="p">,</span>
+        <span class="n">annotation_extension</span><span class="o">=</span><span class="n">annotation_extension</span><span class="p">,</span>
+        <span class="n">junction_type</span><span class="o">=</span><span class="n">junction_type</span><span class="p">,</span>
+        <span class="n">junction_extensions</span><span class="o">=</span><span class="n">junction_extensions</span><span class="p">,</span>
+        <span class="n">include_metadata</span><span class="o">=</span><span class="n">include_metadata</span><span class="p">,</span>
+        <span class="n">include_bigwig</span><span class="o">=</span><span class="n">include_bigwig</span><span class="p">,</span>
+        <span class="n">assay_name</span><span class="o">=</span><span class="n">assay_name</span><span class="p">,</span>
+        <span class="n">join_policy</span><span class="o">=</span><span class="n">join_policy</span><span class="p">,</span>
+        <span class="n">autoload</span><span class="o">=</span><span class="n">autoload</span><span class="p">,</span>
+        <span class="n">allow_fallback_to_se</span><span class="o">=</span><span class="n">allow_fallback_to_se</span><span class="p">,</span>
+        <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="expand_sra_attributes">
+<a class="viewcode-back" href="../../api.html#recount3.se.expand_sra_attributes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">expand_sra_attributes</span><span class="p">(</span>
+    <span class="n">experiment_or_coldata</span><span class="p">:</span> <span class="p">(</span>
+        <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span>
+        <span class="o">|</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span>
+        <span class="o">|</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+    <span class="p">),</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">sra_attributes_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;sra.sample_attributes&quot;</span><span class="p">,</span>
+    <span class="n">attribute_column_prefix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;sra_attribute.&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span>
+    <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span>
+    <span class="o">|</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span>
+    <span class="o">|</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expand encoded SRA sample attributes into separate columns.</span>
+
+<span class="sd">    This function mirrors the recount3 R helper</span>
+<span class="sd">    ``expand_sra_attributes()``.</span>
+
+<span class="sd">    It understands the SRA encoding used by recount3, where a single</span>
+<span class="sd">    column (typically ``&#39;sra.sample_attributes&#39;``) contains strings of</span>
+<span class="sd">    the form::</span>
+
+<span class="sd">        &quot;age;;67.78|biomaterial_provider;;LIBD|disease;;Control|...&quot;</span>
+
+<span class="sd">    Each ``key;;value`` pair becomes a new column named</span>
+<span class="sd">    ``{attribute_column_prefix}{key}`` (with spaces in ``key`` replaced by ``&#39;_&#39;``), and</span>
+<span class="sd">    the parsed values are stored per sample. The original string column</span>
+<span class="sd">    is preserved.</span>
+
+<span class="sd">    The function supports two calling styles:</span>
+
+<span class="sd">    * Passing a :class:`pandas.DataFrame` of column metadata, in which</span>
+<span class="sd">      case a new DataFrame is returned with extra columns.</span>
+<span class="sd">    * Passing a BiocPy</span>
+<span class="sd">      :class:`summarizedexperiment.SummarizedExperiment` or</span>
+<span class="sd">      :class:`summarizedexperiment.RangedSummarizedExperiment`, in which</span>
+<span class="sd">      case a new object of the same class is returned with updated</span>
+<span class="sd">      ``column_data``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      experiment_or_coldata: Column metadata DataFrame or a BiocPy SE/RSE object.</span>
+<span class="sd">      sra_attributes_column: Name of the column that holds the raw SRA attribute</span>
+<span class="sd">        strings.</span>
+<span class="sd">      attribute_column_prefix: Prefix to prepend to the generated attribute column names.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A new object of the same type as ``experiment_or_coldata`` with additional columns</span>
+<span class="sd">      corresponding to parsed SRA attributes. If the requested column is</span>
+<span class="sd">      missing, ``experiment_or_coldata`` is returned unchanged.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      ImportError: If a SummarizedExperiment/RangedSummarizedExperiment</span>
+<span class="sd">        is supplied but BiocPy packages are not installed.</span>
+<span class="sd">      AttributeError: If the BiocPy object does not expose</span>
+<span class="sd">        ``column_data`` or ``set_column_data`` in the expected API.</span>
+<span class="sd">      TypeError: If ``experiment_or_coldata`` is neither a pandas DataFrame nor a</span>
+<span class="sd">        supported BiocPy experiment object.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Expand attributes on a metadata DataFrame::</span>
+
+<span class="sd">            expanded_df = expand_sra_attributes(col_data_df)</span>
+
+<span class="sd">        Expand attributes directly on an RSE (returns a new RSE)::</span>
+
+<span class="sd">            rse2 = expand_sra_attributes(rse)</span>
+
+<span class="sd">        Inspect the new attribute columns::</span>
+
+<span class="sd">            attr_cols = [c for c in rse2.column_data.column_names</span>
+<span class="sd">                         if c.startswith(&quot;sra_attribute.&quot;)]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># DataFrame mode: no BiocPy dependency.</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">experiment_or_coldata</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_expand_sra_attributes_df</span><span class="p">(</span>
+            <span class="n">experiment_or_coldata</span><span class="p">,</span>
+            <span class="n">sra_attributes_column</span><span class="o">=</span><span class="n">sra_attributes_column</span><span class="p">,</span>
+            <span class="n">attribute_column_prefix</span><span class="o">=</span><span class="n">attribute_column_prefix</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">bioc_frame_cls</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">get_biocframe_class</span><span class="p">()</span>
+    <span class="n">summarized_experiment_cls</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">get_summarizedexperiment_class</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">experiment_or_coldata</span><span class="p">,</span>
+        <span class="n">summarized_experiment_cls</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;expand_sra_attributes() expects a pandas DataFrame or a BiocPy &quot;</span>
+            <span class="s2">&quot;SummarizedExperiment/RangedSummarizedExperiment; got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">experiment_or_coldata</span><span class="p">)</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">col_bf</span> <span class="o">=</span> <span class="n">experiment_or_coldata</span><span class="o">.</span><span class="n">column_data</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">col_df</span> <span class="o">=</span> <span class="n">col_bf</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>  <span class="c1"># type: ignore</span>
+    <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">AttributeError</span><span class="p">(</span>
+            <span class="s2">&quot;Expected column_data to implement to_pandas(); got &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">col_bf</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> instead.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="k">if</span> <span class="n">sra_attributes_column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">col_df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;expand_sra_attributes: column </span><span class="si">%r</span><span class="s2"> not present in column_data; &quot;</span>
+            <span class="s2">&quot;returning object unchanged.&quot;</span><span class="p">,</span>
+            <span class="n">sra_attributes_column</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">experiment_or_coldata</span>
+
+    <span class="n">expanded_df</span> <span class="o">=</span> <span class="n">_expand_sra_attributes_df</span><span class="p">(</span>
+        <span class="n">col_df</span><span class="p">,</span>
+        <span class="n">sra_attributes_column</span><span class="o">=</span><span class="n">sra_attributes_column</span><span class="p">,</span>
+        <span class="n">attribute_column_prefix</span><span class="o">=</span><span class="n">attribute_column_prefix</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">expanded_bf</span> <span class="o">=</span> <span class="n">bioc_frame_cls</span><span class="o">.</span><span class="n">from_pandas</span><span class="p">(</span><span class="n">expanded_df</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">experiment_or_coldata</span><span class="o">.</span><span class="n">set_column_data</span><span class="p">(</span><span class="n">expanded_bf</span><span class="p">)</span>  <span class="c1"># type: ignore</span></div>
+
+
+
+<div class="viewcode-block" id="compute_read_counts">
+<a class="viewcode-back" href="../../api.html#recount3.se.compute_read_counts">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_read_counts</span><span class="p">(</span>
+    <span class="n">rse</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">round_to_integers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">avg_mapped_read_length_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;recount_qc.star.average_mapped_length&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Convert coverage-sum counts into approximate read/fragment counts.</span>
+
+<span class="sd">    The &quot;raw_counts&quot; assay used by recount3-style resources represents summed</span>
+<span class="sd">    per-base coverage over each feature (for example, total coverage across all</span>
+<span class="sd">    bases in a gene), not the number of reads/fragments overlapping the feature.</span>
+<span class="sd">    A common approximation for converting coverage-sum values into read/fragment</span>
+<span class="sd">    counts is to divide by the sample&#39;s average mapped read length.</span>
+
+<span class="sd">    For each feature i and sample j:</span>
+
+<span class="sd">      read_counts[i, j] = raw_counts[i, j] / avg_mapped_read_length_column[j]</span>
+
+<span class="sd">    This operation is performed column-wise: each sample column in the assay is</span>
+<span class="sd">    divided by a single scalar derived from that sample&#39;s metadata.</span>
+
+<span class="sd">    Rounding is optional. When enabled, values are rounded to 0 decimals to</span>
+<span class="sd">    produce integer-like counts, which is convenient for downstream methods that</span>
+<span class="sd">    assume counts are integer-valued.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      rse: A RangedSummarizedExperiment-like object containing a &quot;raw_counts&quot;</span>
+<span class="sd">        assay and sample metadata in `col_data`.</span>
+<span class="sd">      round_to_integers: If True, round the resulting values to 0 decimals.</span>
+<span class="sd">      avg_mapped_read_length_column: Name of the metadata column containing average</span>
+<span class="sd">        mapped read length per sample. The column must be present in `col_data`</span>
+<span class="sd">        and must contain numeric values.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A pandas DataFrame of approximate read counts with the same shape as the</span>
+<span class="sd">      &quot;raw_counts&quot; assay (features x samples). Row and column names are</span>
+<span class="sd">      preserved when available.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      ValueError: If `rse` is not a RangedSummarizedExperiment, if the</span>
+<span class="sd">        &quot;raw_counts&quot; assay is missing, if `avg_mapped_read_length_column` is missing</span>
+<span class="sd">        from `col_data`, or if the assay and metadata dimensions do not align.</span>
+<span class="sd">      TypeError: If `round_to_integers` is not a bool.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ranged_summarized_experiment_cls</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">get_ranged_summarizedexperiment_class</span><span class="p">()</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">ranged_summarized_experiment_cls</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;rse must be a RangedSummarizedExperiment to compute read counts.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">round_to_integers</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;round_to_integers must be a bool.&quot;</span><span class="p">)</span>
+
+    <span class="c1"># pylint: disable=protected-access  # _utils helpers are package-internal</span>
+    <span class="n">assay_name</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_counts_assay_name</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
+
+    <span class="n">col_data</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_column_data</span><span class="p">()</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">avg_len_series</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span>
+            <span class="n">col_data</span><span class="p">,</span> <span class="n">avg_mapped_read_length_column</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Required metadata column not found in col_data: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">avg_mapped_read_length_column</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="n">raw_counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">get_assay</span><span class="p">(</span><span class="n">assay_name</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">raw_counts</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">assay_name</span><span class="si">!r}</span><span class="s2"> assay must be a 2D matrix &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(got shape </span><span class="si">{</span><span class="n">raw_counts</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">).&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">avg_len_values</span> <span class="o">=</span> <span class="n">avg_len_series</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">avg_len_values</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Metadata column </span><span class="si">{</span><span class="n">avg_mapped_read_length_column</span><span class="si">!r}</span><span class="s2"> must be numeric; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;found </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> value </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Real</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Metadata column </span><span class="si">{</span><span class="n">avg_mapped_read_length_column</span><span class="si">!r}</span><span class="s2"> must be numeric; &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;found </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="n">avg_len</span> <span class="o">=</span> <span class="n">avg_len_values</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">raw_counts</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="n">avg_len</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Mismatch between number of samples in </span><span class="si">{</span><span class="n">assay_name</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">raw_counts</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">) and length of &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">avg_mapped_read_length_column</span><span class="si">!r}</span><span class="s2"> (</span><span class="si">{</span><span class="n">avg_len</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">).&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">read_counts</span> <span class="o">=</span> <span class="n">raw_counts</span> <span class="o">/</span> <span class="n">avg_len</span>
+
+    <span class="k">if</span> <span class="n">round_to_integers</span><span class="p">:</span>
+        <span class="n">read_counts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">read_counts</span><span class="p">)</span>
+
+    <span class="n">row_names</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_row_names</span><span class="p">()</span>
+    <span class="n">col_names</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_column_names</span><span class="p">()</span>
+
+    <span class="c1"># pylint: enable=protected-access</span>
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="n">read_counts</span><span class="p">,</span>
+        <span class="n">index</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">row_names</span><span class="p">)</span> <span class="k">if</span> <span class="n">row_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">col_names</span><span class="p">)</span> <span class="k">if</span> <span class="n">col_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="compute_tpm">
+<a class="viewcode-back" href="../../api.html#recount3.se.compute_tpm">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_tpm</span><span class="p">(</span>
+    <span class="n">rse</span><span class="p">:</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute Transcripts Per Million (TPM) from raw coverage sums.</span>
+
+<span class="sd">    TPM is calculated as:</span>
+<span class="sd">      1. Approximate Read Counts = Coverage AUC / Avg Read Length</span>
+<span class="sd">      2. RPK = Read Counts / (Feature Length / 1000)</span>
+<span class="sd">      3. Scale Factor = Sum(RPK) / 1,000,000</span>
+<span class="sd">      4. TPM = RPK / Scale Factor</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      rse: A RangedSummarizedExperiment object containing raw coverage sums.</span>
+<span class="sd">        Must have feature widths defined in rowRanges.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A pandas DataFrame of TPM values.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).</span>
+<span class="sd">      ValueError: If feature widths or read lengths are missing.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        Compute TPM from an RSE built with :func:`create_rse`::</span>
+
+<span class="sd">            rse = create_rse(project=&quot;SRP009615&quot;, organism=&quot;human&quot;,</span>
+<span class="sd">                             annotation_label=&quot;gencode_v26&quot;)</span>
+<span class="sd">            tpm_df = compute_tpm(rse)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ranged_summarized_experiment_cls</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">get_ranged_summarizedexperiment_class</span><span class="p">()</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">ranged_summarized_experiment_cls</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;compute_tpm requires a RangedSummarizedExperiment with &quot;</span>
+            <span class="s2">&quot;defined rowRanges to determine feature lengths.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">reads</span> <span class="o">=</span> <span class="n">compute_read_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">round_to_integers</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">widths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">width</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Could not determine feature widths from rowRanges.&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="n">kb_widths</span> <span class="o">=</span> <span class="n">widths</span> <span class="o">/</span> <span class="mf">1000.0</span>
+    <span class="n">rpk</span> <span class="o">=</span> <span class="n">reads</span><span class="o">.</span><span class="n">div</span><span class="p">(</span><span class="n">kb_widths</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">scale_factors</span> <span class="o">=</span> <span class="n">rpk</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="mf">1_000_000.0</span>
+
+    <span class="n">tpm</span> <span class="o">=</span> <span class="n">rpk</span><span class="o">.</span><span class="n">div</span><span class="p">(</span><span class="n">scale_factors</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">tpm</span></div>
+
+
+
+<div class="viewcode-block" id="is_paired_end">
+<a class="viewcode-back" href="../../api.html#recount3.se.is_paired_end">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">is_paired_end</span><span class="p">(</span>
+    <span class="n">sample_metadata_source</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">avg_mapped_read_length_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;recount_qc.star.average_mapped_length&quot;</span><span class="p">,</span>
+    <span class="n">avg_read_length_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;recount_seq_qc.avg_len&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Infer paired-end status, matching recount3::is_paired_end().</span>
+
+<span class="sd">    In recount3 (R), paired-end status is inferred via:</span>
+<span class="sd">      ratio &lt;- round(avg_mapped_read_length / avg_read_length, 0)</span>
+<span class="sd">      ratio must be 1 (single-end) or 2 (paired-end), otherwise NA with warning.</span>
+<span class="sd">      result &lt;- ratio == 2, with names(result) = external_id.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        sample_metadata_source: Sample metadata (DataFrame) or a (Ranged)SummarizedExperiment-like</span>
+<span class="sd">          object with `col_data.to_pandas()`.</span>
+<span class="sd">        avg_mapped_read_length_column: Metadata column containing average mapped length.</span>
+<span class="sd">        avg_read_length_column: Metadata column containing average read length.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A pandas Series of dtype &quot;boolean&quot; (True/False/pd.NA), indexed by</span>
+<span class="sd">        external_id.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If required metadata columns are missing or non-numeric.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># pylint: disable=protected-access  # _utils helpers are package-internal</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_col_data_to_pandas</span><span class="p">(</span><span class="n">sample_metadata_source</span><span class="p">)</span>
+
+    <span class="n">external_id</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span>
+        <span class="n">metadata</span><span class="p">,</span> <span class="s2">&quot;external_id&quot;</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">avg_mapped</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_numeric_column</span><span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span>
+            <span class="n">metadata</span><span class="p">,</span> <span class="n">avg_mapped_read_length_column</span>
+        <span class="p">),</span>
+        <span class="n">avg_mapped_read_length_column</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">avg_len</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_numeric_column</span><span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">avg_read_length_column</span><span class="p">),</span>
+        <span class="n">avg_read_length_column</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># pylint: enable=protected-access</span>
+
+    <span class="c1"># R uses round(..., 0). numpy.rint matches &quot;round to nearest, ties to even&quot;.</span>
+    <span class="n">ratio</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">avg_mapped</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">/</span> <span class="n">avg_len</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">())</span>
+    <span class="n">ratio</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">ratio</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">external_id</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="n">invalid</span> <span class="o">=</span> <span class="n">ratio</span><span class="o">.</span><span class="n">notna</span><span class="p">()</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">ratio</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">invalid</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;Unable to determine if samples are paired-end for </span><span class="si">%d</span><span class="s2"> sample(s). &quot;</span>
+            <span class="s2">&quot;Setting paired_end=NA for those.&quot;</span><span class="p">,</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">invalid</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
+        <span class="p">)</span>
+        <span class="n">ratio</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">invalid</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+
+    <span class="n">paired_end</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">NA</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">external_id</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;boolean&quot;</span><span class="p">)</span>
+    <span class="n">paired_end</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ratio</span> <span class="o">==</span> <span class="mf">2.0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">paired_end</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ratio</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">paired_end</span></div>
+
+
+
+<div class="viewcode-block" id="compute_scale_factors">
+<a class="viewcode-back" href="../../api.html#recount3.se.compute_scale_factors">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_scale_factors</span><span class="p">(</span>
+    <span class="n">sample_metadata_source</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">by</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auc&quot;</span><span class="p">,</span>
+    <span class="n">target_read_count</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4e7</span><span class="p">,</span>
+    <span class="n">target_read_length_bp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="n">auc_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;recount_qc.bc_auc.all_reads_all_bases&quot;</span><span class="p">,</span>
+    <span class="n">avg_mapped_read_length_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;recount_qc.star.average_mapped_length&quot;</span><span class="p">,</span>
+    <span class="n">mapped_reads_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;recount_qc.star.all_mapped_reads&quot;</span><span class="p">,</span>
+    <span class="n">paired_end_status</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute per-sample scaling factors for coverage-sum counts.</span>
+
+<span class="sd">    This function produces one scalar scale factor per sample. The intended use</span>
+<span class="sd">    is to multiply each sample column of a coverage-sum count matrix by the</span>
+<span class="sd">    corresponding factor to make samples comparable.</span>
+
+<span class="sd">    Let C[i, j] be the coverage-sum count for feature i in sample j. If s[j] is</span>
+<span class="sd">    the scale factor for sample j, scaled counts are computed as:</span>
+
+<span class="sd">      scaled[i, j] = C[i, j] * s[j]</span>
+
+<span class="sd">    Scale factors are derived from sample metadata. Samples are identified by</span>
+<span class="sd">    the `external_id` column, and the returned Series is indexed by external_id.</span>
+
+<span class="sd">    Two scaling methods are supported:</span>
+
+<span class="sd">    1) by=&quot;auc&quot;</span>
+<span class="sd">       Uses a per-sample total coverage metric (AUC) to scale each sample to a</span>
+<span class="sd">       common target_read_count:</span>
+
+<span class="sd">         s[j] = target_read_count / auc[j]</span>
+
+<span class="sd">       This method preserves relative feature coverage within each sample while</span>
+<span class="sd">       adjusting overall sample magnitude to be comparable across samples.</span>
+
+<span class="sd">    2) by=&quot;mapped_reads&quot;</span>
+<span class="sd">       Uses mapped read counts and read length to normalize samples to a common</span>
+<span class="sd">       target_read_count and a common target read length target_read_length_bp:</span>
+
+<span class="sd">         s[j] = target_read_count * target_read_length_bp * paired_multiplier[j] /</span>
+<span class="sd">                (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))</span>
+
+<span class="sd">       paired_multiplier is:</span>
+<span class="sd">         - 2 for paired-end samples</span>
+<span class="sd">         - 1 for single-end samples</span>
+<span class="sd">         - missing for samples whose paired-end status cannot be inferred</span>
+
+<span class="sd">       If `paired_end_status` is not provided, paired-end status is inferred from</span>
+<span class="sd">       metadata by comparing average mapped length to average read length:</span>
+
+<span class="sd">         ratio = round(avg_mapped_read_length / avg_read_length)</span>
+
+<span class="sd">       ratio==2 indicates paired-end, ratio==1 indicates single-end. Other</span>
+<span class="sd">       ratios are treated as unknown and produce missing paired multipliers.</span>
+
+<span class="sd">    Missing values in required metadata propagate to missing scale factors.</span>
+<span class="sd">    Non-numeric metadata values raise an error.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      sample_metadata_source: Sample metadata as a pandas DataFrame, or an object with</span>
+<span class="sd">        `col_data.to_pandas()` that yields sample metadata.</span>
+<span class="sd">      by: Scaling method: &quot;auc&quot; or &quot;mapped_reads&quot;.</span>
+<span class="sd">      target_read_count: Target library size used to compute scale factors. Interpreted</span>
+<span class="sd">        as the number of single-end reads to scale each sample to.</span>
+<span class="sd">      target_read_length_bp: Target read length used only when by=&quot;mapped_reads&quot;.</span>
+<span class="sd">      auc_column: Metadata column name for the per-sample AUC metric.</span>
+<span class="sd">      avg_mapped_read_length_column: Metadata column name for average mapped read length</span>
+<span class="sd">        per sample.</span>
+<span class="sd">      mapped_reads_column: Metadata column name for mapped read counts per sample.</span>
+<span class="sd">      paired_end_status: Optional paired-end indicator per sample. If provided, it must</span>
+<span class="sd">        align with the samples in `external_id`. If omitted, paired-end status</span>
+<span class="sd">        is inferred from metadata.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A pandas Series of scale factors indexed by `external_id`. The Series name</span>
+<span class="sd">      is &quot;scale_factor&quot;.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      ValueError: If `by` is invalid, required metadata columns are missing, or</span>
+<span class="sd">        non-numeric metadata values are present.</span>
+<span class="sd">      TypeError: If `target_read_count` or `target_read_length_bp` are not numeric scalars.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        AUC-based scaling (default)::</span>
+
+<span class="sd">            sf = compute_scale_factors(rse)</span>
+<span class="sd">            scaled = transform_counts(rse, scale_factors=sf)</span>
+
+<span class="sd">        Mapped-reads-based scaling::</span>
+
+<span class="sd">            sf = compute_scale_factors(rse, by=&quot;mapped_reads&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">by</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;auc&quot;</span><span class="p">,</span> <span class="s2">&quot;mapped_reads&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;&#39;by&#39; must be either &#39;auc&#39; or &#39;mapped_reads&#39;; got </span><span class="si">{</span><span class="n">by</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_read_count</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Real</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">target_read_count</span><span class="p">,</span> <span class="nb">bool</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;target_read_count must be a numeric scalar.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">target_read_length_bp</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Real</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span>
+        <span class="n">target_read_length_bp</span><span class="p">,</span> <span class="nb">bool</span>
+    <span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;target_read_length_bp must be a numeric scalar.&quot;</span><span class="p">)</span>
+
+    <span class="c1"># pylint: disable=protected-access  # _utils helpers are package-internal</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_col_data_to_pandas</span><span class="p">(</span>
+        <span class="n">sample_metadata_source</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Match recount3&#39;s stopifnot(): all of these must exist even if by=&quot;auc&quot;.</span>
+    <span class="n">external_id</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span>
+        <span class="n">metadata</span><span class="p">,</span> <span class="s2">&quot;external_id&quot;</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+
+    <span class="n">auc_values</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_numeric_column</span><span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">auc_column</span><span class="p">),</span>
+        <span class="n">auc_column</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">avg_mapped_values</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_numeric_column</span><span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span>
+            <span class="n">metadata</span><span class="p">,</span> <span class="n">avg_mapped_read_length_column</span>
+        <span class="p">),</span>
+        <span class="n">avg_mapped_read_length_column</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">mapped_reads_values</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_coerce_numeric_column</span><span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_metadata_column</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">mapped_reads_column</span><span class="p">),</span>
+        <span class="n">mapped_reads_column</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># pylint: enable=protected-access</span>
+
+    <span class="n">auc_values</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">external_id</span>
+    <span class="n">avg_mapped_values</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">external_id</span>
+    <span class="n">mapped_reads_values</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">external_id</span>
+
+    <span class="k">if</span> <span class="n">paired_end_status</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">paired_end_series</span> <span class="o">=</span> <span class="n">is_paired_end</span><span class="p">(</span>
+            <span class="n">metadata</span><span class="p">,</span>
+            <span class="n">avg_mapped_read_length_column</span><span class="o">=</span><span class="n">avg_mapped_read_length_column</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">paired_end_series</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span>
+            <span class="n">paired_end_status</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">external_id</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;boolean&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">by</span> <span class="o">==</span> <span class="s2">&quot;auc&quot;</span><span class="p">:</span>
+        <span class="n">scale_factor</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">target_read_count</span><span class="p">)</span> <span class="o">/</span> <span class="n">auc_values</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">pe_multiplier</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">external_id</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">pe_multiplier</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">paired_end_series</span> <span class="o">==</span> <span class="kc">True</span><span class="p">]</span> <span class="o">=</span> <span class="mf">2.0</span>  <span class="c1"># pylint: disable=singleton-comparison</span>
+        <span class="n">pe_multiplier</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">paired_end_series</span> <span class="o">==</span> <span class="kc">False</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># pylint: disable=singleton-comparison</span>
+
+        <span class="n">denom</span> <span class="o">=</span> <span class="n">mapped_reads_values</span> <span class="o">*</span> <span class="p">(</span><span class="n">avg_mapped_values</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">scale_factor</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">target_read_count</span><span class="p">)</span>
+            <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">target_read_length_bp</span><span class="p">)</span>
+            <span class="o">*</span> <span class="n">pe_multiplier</span>
+            <span class="o">/</span> <span class="n">denom</span>
+        <span class="p">)</span>
+
+    <span class="n">scale_factor</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;scale_factor&quot;</span>
+    <span class="k">return</span> <span class="n">scale_factor</span></div>
+
+
+
+<div class="viewcode-block" id="transform_counts">
+<a class="viewcode-back" href="../../api.html#recount3.se.transform_counts">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">transform_counts</span><span class="p">(</span>
+    <span class="n">rse</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">by</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auc&quot;</span><span class="p">,</span>
+    <span class="n">target_read_count</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4e7</span><span class="p">,</span>
+    <span class="n">target_read_length_bp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="n">round_to_integers</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scale coverage-sum counts to a common library size.</span>
+
+<span class="sd">    recount3 &quot;raw_counts&quot; represent summed per-base coverage over each feature,</span>
+<span class="sd">    not read/fragment counts. This function converts those coverage-sum values</span>
+<span class="sd">    into scaled counts that are comparable across samples by multiplying each</span>
+<span class="sd">    sample column by a sample-specific scale factor.</span>
+
+<span class="sd">    Scaling is applied independently per sample (per column). For feature i and</span>
+<span class="sd">    sample j, the returned matrix contains:</span>
+
+<span class="sd">      scaled[i, j] = raw_counts[i, j] * scale_factor[j]</span>
+
+<span class="sd">    The scale factors are computed from sample metadata (col_data) using one of</span>
+<span class="sd">    two methods:</span>
+
+<span class="sd">    - by=&quot;auc&quot;:</span>
+<span class="sd">        scale_factor[j] = target_read_count / auc[j]</span>
+
+<span class="sd">      where auc is a per-sample total coverage metric. This method scales each</span>
+<span class="sd">      sample to have total coverage approximately equal to target_read_count.</span>
+
+<span class="sd">    - by=&quot;mapped_reads&quot;:</span>
+<span class="sd">        scale_factor[j] = (</span>
+<span class="sd">            target_read_count * target_read_length_bp * paired_multiplier[j]</span>
+<span class="sd">            / (mapped_reads[j] * (avg_mapped_read_length[j] ** 2))</span>
+
+<span class="sd">        )</span>
+
+<span class="sd">      where paired_multiplier is 2 for paired-end samples, 1 for single-end</span>
+<span class="sd">      samples, and missing when paired-end status cannot be inferred. This</span>
+<span class="sd">      method incorporates mapped reads and read length so that samples with</span>
+<span class="sd">      different read lengths are normalized onto the same target read length</span>
+<span class="sd">      target_read_length_bp.</span>
+
+<span class="sd">    The returned values remain in the same feature-by-sample shape as the</span>
+<span class="sd">    input. If round_to_integers is True, values are rounded to integer-like counts.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      rse: A RangedSummarizedExperiment-like object containing a &quot;raw_counts&quot;</span>
+<span class="sd">        assay and sample metadata in `col_data`.</span>
+<span class="sd">      by: Scaling method: &quot;auc&quot; or &quot;mapped_reads&quot;.</span>
+<span class="sd">      target_read_count: Target library size used to compute scale factors. Interpreted</span>
+<span class="sd">        as the number of single-end reads to scale each sample to.</span>
+<span class="sd">      target_read_length_bp: Target read length used only when by=&quot;mapped_reads&quot;.</span>
+<span class="sd">      round_to_integers: If True, round scaled values to 0 decimals.</span>
+<span class="sd">      **kwargs: Additional parameters forwarded to compute_scale_factors(). Use</span>
+<span class="sd">        this to override metadata column names (for example, `auc_column=...`,</span>
+<span class="sd">        `mapped_reads_column=...`, `avg_mapped_read_length_column=...`) or to provide</span>
+<span class="sd">        `paired_end_status=...` when paired-end status should not be inferred.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A pandas DataFrame of scaled counts with the same dimensions as</span>
+<span class="sd">      `assay(&quot;raw_counts&quot;)`. Row and column names are preserved when available.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      ValueError: If `rse` is not a RangedSummarizedExperiment, if the required</span>
+<span class="sd">        assay or metadata columns are missing, if `by` is invalid, or if the</span>
+<span class="sd">        assay and metadata dimensions do not align.</span>
+<span class="sd">      TypeError: If `round_to_integers` is not a bool, or if numeric parameters are</span>
+<span class="sd">        not valid scalars.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ranged_summarized_experiment_cls</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">get_ranged_summarizedexperiment_class</span><span class="p">()</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">ranged_summarized_experiment_cls</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">&quot;rse must be a RangedSummarizedExperiment (BiocPy &quot;</span>
+            <span class="s2">&quot;summarizedexperiment).&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">assay_name</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_resolve_counts_assay_name</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>  <span class="c1"># pylint: disable=protected-access</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">round_to_integers</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;round_to_integers must be a bool.&quot;</span><span class="p">)</span>
+
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_assay</span><span class="p">(</span><span class="n">assay_name</span><span class="p">)</span>
+    <span class="n">counts_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="n">scale_factor</span> <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span>
+        <span class="n">rse</span><span class="p">,</span>
+        <span class="n">by</span><span class="o">=</span><span class="n">by</span><span class="p">,</span>
+        <span class="n">target_read_count</span><span class="o">=</span><span class="n">target_read_count</span><span class="p">,</span>
+        <span class="n">target_read_length_bp</span><span class="o">=</span><span class="n">target_read_length_bp</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">counts_array</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">assay_name</span><span class="si">!r}</span><span class="s2"> assay must be 2D (got shape </span><span class="si">{</span><span class="n">counts_array</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">).&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">counts_array</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">scale_factor</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Mismatch between number of samples in </span><span class="si">{</span><span class="n">assay_name</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">counts_array</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">) and number of scale factors &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">scale_factor</span><span class="p">)</span><span class="si">}</span><span class="s2">).&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">scaled</span> <span class="o">=</span> <span class="n">counts_array</span> <span class="o">*</span> <span class="n">scale_factor</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">round_to_integers</span><span class="p">:</span>
+        <span class="n">scaled</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">rint</span><span class="p">(</span><span class="n">scaled</span><span class="p">)</span>
+
+    <span class="n">row_names</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_row_names</span><span class="p">()</span>
+    <span class="n">col_names</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_column_names</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="n">scaled</span><span class="p">,</span>
+        <span class="n">index</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">row_names</span><span class="p">)</span> <span class="k">if</span> <span class="n">row_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">columns</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">col_names</span><span class="p">)</span> <span class="k">if</span> <span class="n">col_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

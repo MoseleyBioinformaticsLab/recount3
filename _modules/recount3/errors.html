@@ -1,0 +1,201 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>recount3.errors &mdash; recount3 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            recount3
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../license.html">License</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">recount3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">recount3.errors</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for recount3.errors</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2026, Alexander A. Alsalihi, Robert M. Flight,</span>
+<span class="c1"># Hunter N.B. Moseley. All rights reserved.</span>
+<span class="c1">#</span>
+<span class="c1"># Redistribution and use in source and binary forms, with or without</span>
+<span class="c1"># modification, are permitted provided that the following conditions are met:</span>
+<span class="c1">#</span>
+<span class="c1"># * Redistributions of source code must retain the above copyright notice, this</span>
+<span class="c1">#   list of conditions and the following disclaimer.</span>
+<span class="c1"># * Redistributions in binary form must reproduce the above copyright notice,</span>
+<span class="c1">#   this list of conditions and the following disclaimer in the documentation</span>
+<span class="c1">#   and/or other materials provided with the distribution.</span>
+<span class="c1"># * All advertising materials mentioning features or use of this software must</span>
+<span class="c1">#   display the following acknowledgement: This product includes software</span>
+<span class="c1">#   developed by the copyright holder.</span>
+<span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
+<span class="c1">#   specific prior written permission.</span>
+<span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
+<span class="c1">#   source code must be included with the published work.</span>
+<span class="c1">#</span>
+<span class="c1"># THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS AS IS AND</span>
+<span class="c1"># ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED</span>
+<span class="c1"># WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE</span>
+<span class="c1"># DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE</span>
+<span class="c1"># FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL</span>
+<span class="c1"># DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR</span>
+<span class="c1"># SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER</span>
+<span class="c1"># CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,</span>
+<span class="c1"># OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
+<span class="c1"># OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
+<span class="c1">#</span>
+<span class="sd">&quot;&quot;&quot;Domain-specific exceptions for recount3.</span>
+
+<span class="sd">All exceptions inherit from :class:`Recount3Error`, so callers can catch</span>
+<span class="sd">the base class to handle any recount3-specific failure, or catch a subclass</span>
+<span class="sd">to handle a specific failure mode:</span>
+
+<span class="sd">* :class:`Recount3Error`: base class for all recount3 exceptions.</span>
+<span class="sd">* :class:`ConfigurationError`: invalid or missing configuration (bad env</span>
+<span class="sd">  var values, inaccessible cache directory, unsupported option combinations).</span>
+<span class="sd">* :class:`DownloadError`: a network or I/O failure occurred while</span>
+<span class="sd">  downloading a resource.</span>
+<span class="sd">* :class:`LoadError`: a resource was downloaded but could not be parsed</span>
+<span class="sd">  (empty file, unexpected format, shape mismatch, missing columns).</span>
+<span class="sd">* :class:`CompatibilityError`: resources that are incompatible with each</span>
+<span class="sd">  other were combined in an operation such as</span>
+<span class="sd">  :meth:`~recount3.bundle.R3ResourceBundle.stack_count_matrices`.</span>
+
+<span class="sd">Example:</span>
+<span class="sd">    Catch all recount3 errors with the base class::</span>
+
+<span class="sd">        from recount3.errors import Recount3Error, DownloadError</span>
+
+<span class="sd">        try:</span>
+<span class="sd">            res.download(path=&quot;/data&quot;)</span>
+<span class="sd">        except DownloadError as exc:</span>
+<span class="sd">            print(f&quot;Network failure: {exc}&quot;)</span>
+<span class="sd">        except Recount3Error as exc:</span>
+<span class="sd">            print(f&quot;Unexpected recount3 error: {exc}&quot;)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+
+<div class="viewcode-block" id="Recount3Error">
+<a class="viewcode-back" href="../../api.html#recount3.errors.Recount3Error">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Recount3Error</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for recount3-related errors.&quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="ConfigurationError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.ConfigurationError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConfigurationError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when configuration is invalid or inconsistent.&quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="DownloadError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.DownloadError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DownloadError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when a resource fails to download.&quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="LoadError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.LoadError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LoadError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when a resource fails to load or parse.&quot;&quot;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="CompatibilityError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.CompatibilityError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CompatibilityError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when resources are incompatible for combined operations.&quot;&quot;&quot;</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

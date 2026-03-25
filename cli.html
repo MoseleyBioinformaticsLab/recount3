@@ -1,0 +1,447 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Reference &mdash; recount3 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Tutorial" href="tutorial.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            recount3
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">CLI Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#commands">Commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#input-and-output-formats">Input and output formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#logging">Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#exit-codes">Exit codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#security-and-safety">Security and safety</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#performance-tips">Performance tips</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-recipes">Example recipes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#import-safety">Import safety</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#full-usage">Full usage</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="license.html">License</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">recount3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">CLI Reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cli.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="cli-reference">
+<h1>CLI Reference<a class="headerlink" href="#cli-reference" title="Link to this heading"></a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">recount3</span></code> command-line tool implements a
+discover -&gt; manifest -&gt; materialize workflow.</p>
+<p>Command-line interface for recount3.</p>
+<p>A discover -&gt; manifest -&gt; materialize workflow for the recount3 data mirror.</p>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading"></a></h2>
+<p>Use <code class="docutils literal notranslate"><span class="pre">recount3</span></code> to:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>ids        - Emit unique sample and project IDs.</p></li>
+<li><dl class="simple">
+<dt>search     - Discover resources and print a machine-readable manifest</dt><dd><p>(JSONL or TSV).</p>
+</dd>
+</dl>
+</li>
+<li><p>download   - Materialize resources from a manifest (dir or .zip).</p></li>
+<li><p>bundle     - Operate on multiple resources (e.g., stack count matrices).</p></li>
+<li><p>smoke-test - Small connectivity test for CI / local validation.</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<p>Discover a handful of gene-level count files, save a manifest, and download:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>$ recount3 search gene-exon \</dt><dd><p>organism=human data_source=sra genomic_unit=gene project=SRP012345 \
+–format=jsonl &gt; manifest.jsonl</p>
+</dd>
+</dl>
+<p>$ recount3 download –from=manifest.jsonl –dest=./downloads –jobs=8</p>
+</div></blockquote>
+<p>Or stream directly, without an intermediate file:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>$ recount3 search annotations \</dt><dd><p>organism=human genomic_unit=gene annotation_extension=G026 \
+–format=jsonl | \
+recount3 download –from=- –dest=./annots</p>
+</dd>
+</dl>
+</div></blockquote>
+</section>
+<section id="commands">
+<h2>Commands<a class="headerlink" href="#commands" title="Link to this heading"></a></h2>
+<dl>
+<dt>ids</dt><dd><p>Emit unique ID lists. By default prints to stdout.</p>
+<dl class="simple">
+<dt>Flags:</dt><dd><p>–organism=human|mouse|””   Empty means all organisms.
+–samples-out=&lt;file&gt;        Write samples to plain text file (else stdout).
+–projects-out=&lt;file&gt;       Write projects to plain text file (else stdout).</p>
+</dd>
+</dl>
+</dd>
+<dt>search</dt><dd><p>Discover resources and print a manifest (JSONL or TSV). Filters are passed
+as space-separated key=value tokens.</p>
+<dl>
+<dt>Output:</dt><dd><p>By default results are written to stdout (pipe-friendly). Use
+<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">&lt;file&gt;</span></code> to write a specific file, or <code class="docutils literal notranslate"><span class="pre">--outdir</span> <span class="pre">&lt;dir&gt;</span></code> to
+create a timestamped filename in that directory.</p>
+</dd>
+<dt>Modes and required filters:</dt><dd><p>annotations   organism, genomic_unit, annotation_extension
+gene-exon     organism, data_source, genomic_unit, project</p>
+<blockquote>
+<div><p>(optional: annotation_extension; default G026)</p>
+</div></blockquote>
+<p>junctions     organism, data_source, project</p>
+<blockquote>
+<div><p>(optional: junction_type=ALL, junction_extension=MM)</p>
+</div></blockquote>
+<p>metadata      organism, data_source, table_name, project
+bigwig        organism, data_source, project, sample
+project       organism, data_source, project</p>
+<blockquote>
+<div><p>(optional: genomic_unit=gene,exon;
+annotation=default|all|gencode_v26,gencode_v29</p>
+<blockquote>
+<div><p>Human-readable name or convenience alias.
+‘default’ → primary annotation (G026 for
+human, M023 for mouse). ‘all’ → every
+available annotation. A comma list of
+names (e.g. gencode_v26) or raw extension
+codes (e.g. G026) also works.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>annotation_extension=G026,G029</dt><dd><p>Raw annotation file-extension codes. When
+set, overrides ‘annotation’ completely.
+Use this when you already know the exact
+code(s) you need.</p>
+</dd>
+</dl>
+<p>junction_type=ALL;
+junction_extension=MM,RR,ID;
+include_metadata=true|false;
+include_bigwig=true|false)</p>
+</div></blockquote>
+<p>sources       organism
+source-meta   organism, data_source</p>
+</dd>
+<dt>Example:</dt><dd><dl class="simple">
+<dt>$ recount3 search junctions \</dt><dd><p>organism=human data_source=sra project=SRP000000 \
+junction_type=ALL junction_extension=MM –format=tsv</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+<dt>download</dt><dd><p>Materialize resources from a manifest file or one inline JSON object.
+Writes one JSONL progress event per resource to stdout.</p>
+<dl>
+<dt>Source:</dt><dd><p>–from=&lt;path&gt;|-      Read JSONL manifest from file or stdin (‘-‘).
+–inline=’&lt;json&gt;’     One JSON object for a single resource.</p>
+</dd>
+<dt>Destination:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--dest=<var>&lt;dir-or-zip&gt;</var></span></kbd></dt>
+<dd><p>Directory or .zip file path.</p>
+</dd>
+<dt><kbd><span class="option">--overwrite</span></kbd></dt>
+<dd><p>Overwrite existing files (dir mode only).</p>
+</dd>
+</dl>
+</dd>
+<dt>Behavior:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--jobs=<var>&lt;n&gt;</var></span></kbd></dt>
+<dd><p>Max parallel downloads (default 4).</p>
+</dd>
+<dt><kbd><span class="option">--cache=<var>MODE</var></span></kbd></dt>
+<dd><p>Cache behavior (default: enable). MODE is one of:
+enable - use cache; disable - bypass cache;
+update - force re-download then cache.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+<dt>bundle stack-counts</dt><dd><p>Concatenate compatible count matrices (gene/exon or junctions).</p>
+<dl>
+<dt>Required:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--from=<var>&lt;manifest&gt;</var></span></kbd></dt>
+<dd><p>JSONL manifest (or ‘-’ for stdin).</p>
+</dd>
+<dt><kbd><span class="option">--out=<var>&lt;path&gt;</var></span></kbd></dt>
+<dd><p>Output file (.csv, .tsv, .tsv.gz, or .parquet).</p>
+</dd>
+</dl>
+</dd>
+<dt>Options:</dt><dd><p>–compat=family|feature    Compatibility mode (default: family).
+–join=inner|outer         Pandas join type (default: inner).
+–axis=0|1                 Concatenate rows (0) or columns (1).
+–verify-integrity         Fail on duplicate index after concat.</p>
+</dd>
+</dl>
+</dd>
+<dt>smoke-test</dt><dd><p>Download a few tiny files to verify connectivity and configuration.</p>
+<dl>
+<dt>Options:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--dest=<var>&lt;dir&gt;</var></span></kbd></dt>
+<dd><p>Destination directory (default ./recount3-smoke).</p>
+</dd>
+<dt><kbd><span class="option">--limit=<var>&lt;n&gt;</var></span></kbd></dt>
+<dd><p>Number of resources to attempt (default 1).</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+<section id="input-and-output-formats">
+<h2>Input and output formats<a class="headerlink" href="#input-and-output-formats" title="Link to this heading"></a></h2>
+<dl>
+<dt>JSONL (a.k.a. NDJSON)</dt><dd><p>One JSON object per line. Great for streaming, grepping, and piping.</p>
+<ul>
+<li><p>Search output / Download input (manifest):
+Each line contains all resource description fields plus two convenience
+keys:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">url</span></code>: the fully qualified HTTP URL.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">arcname</span></code>: the destination path inside a .zip archive.</p></li>
+</ul>
+</div></blockquote>
+<p>Example (one line, wrapped for readability):</p>
+<blockquote>
+<div><dl class="simple">
+<dt>{“resource_type”:”gene_exon_counts”,</dt><dd><p>“organism”:”human”,”data_source”:”sra”,”genomic_unit”:”gene”,
+“project”:”SRP012345”,”sample”:”SRR999000”,”table_name”:”gene”,
+“url”:”<a class="reference external" href="https://.../gene/SRR999000.gz">https://…/gene/SRR999000.gz</a>”,
+“arcname”:”gene/SRR999000.gz”}</p>
+</dd>
+</dl>
+</div></blockquote>
+</li>
+<li><p>Download progress events (stdout):
+One event per resource:</p>
+<blockquote>
+<div><p>{“url”:”…”,”status”:”ok”,”dest”:”/path/to/file”}
+{“url”:”…”,”status”:”skipped”,”dest”:”/existing/file”}
+{“url”:”…”,”status”:”error”,”dest”:null,”error”:”&lt;repr&gt;”}</p>
+</div></blockquote>
+</li>
+</ul>
+</dd>
+<dt>TSV</dt><dd><p>Tab-separated text for quick human scanning or spreadsheet import. TSV is
+available for <code class="docutils literal notranslate"><span class="pre">search</span> <span class="pre">--format=tsv</span></code> only; <code class="docutils literal notranslate"><span class="pre">download</span></code> expects JSONL.</p>
+</dd>
+</dl>
+</section>
+<section id="configuration">
+<h2>Configuration<a class="headerlink" href="#configuration" title="Link to this heading"></a></h2>
+<p>Configuration is centralized in <code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code>. Values come from:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>CLI flags (highest precedence)</p></li>
+<li><p>Environment variables</p></li>
+<li><p>Library defaults (lowest precedence)</p></li>
+</ol>
+</div></blockquote>
+<dl class="simple">
+<dt>Relevant environment variables (if set):</dt><dd><p>RECOUNT3_URL               Base URL (trailing slash added automatically)
+RECOUNT3_CACHE_DIR         Directory for on-disk cache
+RECOUNT3_CACHE_DISABLE     “1” disables cache, anything else enables
+RECOUNT3_HTTP_TIMEOUT      HTTP timeout in seconds (int)
+RECOUNT3_MAX_RETRIES       Max retry attempts for transient errors (int)
+RECOUNT3_INSECURE_SSL      “1” to disable TLS verification (unsafe)
+RECOUNT3_USER_AGENT        Custom HTTP User-Agent string</p>
+</dd>
+<dt>Global flags mirror these settings:</dt><dd><p>–base-url, –cache-dir, –timeout, –retries, –insecure-ssl,
+–user-agent, –chunk-size</p>
+</dd>
+</dl>
+</section>
+<section id="logging">
+<h2>Logging<a class="headerlink" href="#logging" title="Link to this heading"></a></h2>
+<p>Logging defaults to INFO. Use <code class="docutils literal notranslate"><span class="pre">--quiet</span></code> for WARNING or <code class="docutils literal notranslate"><span class="pre">--verbose</span></code> for
+DEBUG. Log messages follow pattern-string formatting (not f-strings), per the
+Google guide, and include greppable context (e.g., <code class="docutils literal notranslate"><span class="pre">url=...</span></code>, <code class="docutils literal notranslate"><span class="pre">dest=...</span></code>).</p>
+</section>
+<section id="exit-codes">
+<h2>Exit codes<a class="headerlink" href="#exit-codes" title="Link to this heading"></a></h2>
+<blockquote>
+<div><p>0  Success
+1  Malformed <code class="docutils literal notranslate"><span class="pre">--inline</span></code> JSON in <code class="docutils literal notranslate"><span class="pre">download</span></code>
+2  Fatal error (missing filters, I/O failures, bad configuration;</p>
+<blockquote>
+<div><p>also argparse validation errors such as unrecognized flags)</p>
+</div></blockquote>
+<p>3  Partial failure in <code class="docutils literal notranslate"><span class="pre">download</span></code> (some items failed)
+130  Interrupted (Ctrl-C)</p>
+</div></blockquote>
+</section>
+<section id="security-and-safety">
+<h2>Security and safety<a class="headerlink" href="#security-and-safety" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>TLS verification is on by default. <code class="docutils literal notranslate"><span class="pre">--insecure-ssl</span></code> disables it and
+should only be used to debug certificate issues.</p></li>
+<li><p>The cache reduces repeated downloads. Choose <code class="docutils literal notranslate"><span class="pre">--cache=disable</span></code> to bypass it
+when correctness requires a direct fetch.</p></li>
+</ul>
+</section>
+<section id="performance-tips">
+<h2>Performance tips<a class="headerlink" href="#performance-tips" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Increase <code class="docutils literal notranslate"><span class="pre">--jobs</span></code> to improve throughput when network-bound.</p></li>
+<li><p>Keep the cache enabled for repeated workflows.</p></li>
+<li><p>Use streaming pipelines with JSONL and standard tools (<code class="docutils literal notranslate"><span class="pre">jq</span></code>, <code class="docutils literal notranslate"><span class="pre">grep</span></code>,
+<code class="docutils literal notranslate"><span class="pre">head</span></code>/<code class="docutils literal notranslate"><span class="pre">tail</span></code>) to avoid loading everything into memory.</p></li>
+</ul>
+</section>
+<section id="example-recipes">
+<h2>Example recipes<a class="headerlink" href="#example-recipes" title="Link to this heading"></a></h2>
+<p>List human SRA data sources, then download their metadata:</p>
+<blockquote>
+<div><p>$ recount3 search sources organism=human –format=jsonl &gt; sources.jsonl
+$ recount3 search source-meta organism=human data_source=sra –format=jsonl \</p>
+<blockquote>
+<div><p>&gt; meta.jsonl</p>
+</div></blockquote>
+<p>$ recount3 download –from=meta.jsonl –dest=./meta</p>
+</div></blockquote>
+<p>Stack gene-level matrices across samples and write Parquet:</p>
+<blockquote>
+<div><dl class="simple">
+<dt>$ recount3 search gene-exon \</dt><dd><p>organism=human data_source=sra genomic_unit=gene project=SRP012345 \
+–format=jsonl &gt; counts.jsonl</p>
+</dd>
+<dt>$ recount3 bundle stack-counts –from=counts.jsonl –compat=family \</dt><dd><p>–join=inner –axis=1 –out=counts.parquet</p>
+</dd>
+</dl>
+</div></blockquote>
+</section>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>“Missing required filters”: Check the mode-specific filter list above.</p></li>
+<li><p>“json.JSONDecodeError”: Ensure your manifest is valid JSONL. Each line must
+be one JSON object.</p></li>
+<li><p>Permission/Path errors: Verify <code class="docutils literal notranslate"><span class="pre">--dest</span></code> exists (or its parent for .zip)
+and is writable; on shared filesystems, reduce <code class="docutils literal notranslate"><span class="pre">--jobs</span></code> to avoid pressure.</p></li>
+<li><p>TLS/SSL errors: Try updating CA certs, or as a last resort temporarily use
+<code class="docutils literal notranslate"><span class="pre">--insecure-ssl</span></code> to isolate the issue.</p></li>
+</ul>
+</section>
+<section id="import-safety">
+<h2>Import safety<a class="headerlink" href="#import-safety" title="Link to this heading"></a></h2>
+<p>Only defines functions and constants. Performs no I/O at import
+time so it is safe to run under pydoc and unit tests.</p>
+</section>
+<section id="full-usage">
+<h2>Full usage<a class="headerlink" href="#full-usage" title="Link to this heading"></a></h2>
+<p>Run any subcommand with <code class="docutils literal notranslate"><span class="pre">--help</span></code> for the full option list:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>recount3<span class="w"> </span>--help
+recount3<span class="w"> </span>search<span class="w"> </span>--help
+recount3<span class="w"> </span>download<span class="w"> </span>--help
+recount3<span class="w"> </span>bundle<span class="w"> </span>stack-counts<span class="w"> </span>--help
+recount3<span class="w"> </span>bundle<span class="w"> </span>se<span class="w"> </span>--help
+recount3<span class="w"> </span>bundle<span class="w"> </span>rse<span class="w"> </span>--help
+recount3<span class="w"> </span>smoke-test<span class="w"> </span>--help
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="tutorial.html" class="btn btn-neutral float-left" title="Tutorial" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

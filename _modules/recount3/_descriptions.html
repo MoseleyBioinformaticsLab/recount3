@@ -1,0 +1,727 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>recount3._descriptions &mdash; recount3 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            recount3
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../license.html">License</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">recount3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">recount3._descriptions</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for recount3._descriptions</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2026, Alexander A. Alsalihi, Robert M. Flight,</span>
+<span class="c1"># Hunter N.B. Moseley. All rights reserved.</span>
+<span class="c1">#</span>
+<span class="c1"># Redistribution and use in source and binary forms, with or without</span>
+<span class="c1"># modification, are permitted provided that the following conditions are met:</span>
+<span class="c1">#</span>
+<span class="c1"># * Redistributions of source code must retain the above copyright notice, this</span>
+<span class="c1">#   list of conditions and the following disclaimer.</span>
+<span class="c1"># * Redistributions in binary form must reproduce the above copyright notice,</span>
+<span class="c1">#   this list of conditions and the following disclaimer in the documentation</span>
+<span class="c1">#   and/or other materials provided with the distribution.</span>
+<span class="c1"># * All advertising materials mentioning features or use of this software must</span>
+<span class="c1">#   display the following acknowledgement: This product includes software</span>
+<span class="c1">#   developed by the copyright holder.</span>
+<span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
+<span class="c1">#   specific prior written permission.</span>
+<span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
+<span class="c1">#   source code must be included with the published work.</span>
+<span class="c1">#</span>
+<span class="c1"># THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS AS IS AND</span>
+<span class="c1"># ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED</span>
+<span class="c1"># WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE</span>
+<span class="c1"># DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE</span>
+<span class="c1"># FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL</span>
+<span class="c1"># DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR</span>
+<span class="c1"># SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER</span>
+<span class="c1"># CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,</span>
+<span class="c1"># OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
+<span class="c1"># OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
+<span class="c1">#</span>
+<span class="sd">&quot;&quot;&quot;Resource descriptions and duffel URL-path construction.</span>
+
+<span class="sd">This module defines a small set of resource description dataclasses for </span>
+<span class="sd">recount3. A description is a validated, immutable-ish bundle of parameters</span>
+<span class="sd">(organism, project, etc.) that can deterministically construct the relative</span>
+<span class="sd">path to a resource in the repository.</span>
+
+<span class="sd">The main entry point is :class:`R3ResourceDescription`, which acts as a</span>
+<span class="sd">multi-factory: instantiating ``R3ResourceDescription(resource_type=...)``</span>
+<span class="sd">returns an instance of the registered concrete subclass for that</span>
+<span class="sd">``resource_type``.</span>
+
+<span class="sd">Registered resource types</span>
+<span class="sd">  ==========================================  ============================</span>
+<span class="sd">  ``resource_type`` string                    Class</span>
+<span class="sd">  ==========================================  ============================</span>
+<span class="sd">  ``&quot;annotations&quot;``                           :class:`R3Annotations`</span>
+<span class="sd">  ``&quot;count_files_gene_or_exon&quot;``              :class:`R3GeneOrExonCounts`</span>
+<span class="sd">  ``&quot;count_files_junctions&quot;``                 :class:`R3JunctionCounts`</span>
+<span class="sd">  ``&quot;metadata_files&quot;``                        :class:`R3ProjectMetadata`</span>
+<span class="sd">  ``&quot;bigwig_files&quot;``                          :class:`R3BigWig`</span>
+<span class="sd">  ``&quot;data_sources&quot;``                          :class:`R3DataSources`</span>
+<span class="sd">  ``&quot;data_source_metadata&quot;``                  :class:`R3DataSourceMetadata`</span>
+<span class="sd">  ==========================================  ============================</span>
+
+<span class="sd">Valid values for the ``organism`` and ``data_source`` fields are exposed as</span>
+<span class="sd">the module-level constants :data:`VALID_ORGANISMS` and</span>
+<span class="sd">:data:`VALID_DATA_SOURCES`.</span>
+
+<span class="sd">Typical usage::</span>
+
+<span class="sd">  from recount3._descriptions import R3ResourceDescription</span>
+
+<span class="sd">  desc = R3ResourceDescription(</span>
+<span class="sd">      resource_type=&quot;count_files_gene_or_exon&quot;,</span>
+<span class="sd">      organism=&quot;human&quot;,</span>
+<span class="sd">      data_source=&quot;sra&quot;,</span>
+<span class="sd">      genomic_unit=&quot;gene&quot;,</span>
+<span class="sd">      project=&quot;SRP107565&quot;,</span>
+<span class="sd">      annotation_extension=&quot;G026&quot;,</span>
+<span class="sd">  )</span>
+<span class="sd">  path = desc.url_path()</span>
+
+<span class="sd">  # Resource type can also be passed as the first positional argument:</span>
+<span class="sd">  desc = R3ResourceDescription(&quot;data_sources&quot;, organism=&quot;human&quot;)</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cast</span>
+
+<span class="n">VALID_ORGANISMS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;mouse&quot;</span><span class="p">})</span>
+<span class="n">VALID_DATA_SOURCES</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span> <span class="s2">&quot;gtex&quot;</span><span class="p">,</span> <span class="s2">&quot;tcga&quot;</span><span class="p">})</span>
+<span class="n">_VALID_GENOMIC_UNITS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span> <span class="s2">&quot;exon&quot;</span><span class="p">})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_project_shard</span><span class="p">(</span><span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the 2-character directory shard for a project identifier.</span>
+
+<span class="sd">    Project-level URLs (counts, junctions, metadata, BigWig) include a</span>
+<span class="sd">    shard subdirectory derived from the last two characters of the project</span>
+<span class="sd">    ID to limit directory fanout. For example, project ``SRP009615``</span>
+<span class="sd">    produces the shard ``&quot;15&quot;``, yielding a path segment like</span>
+<span class="sd">    ``.../gene_sums/15/SRP009615/...``.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        project: Project identifier string (e.g., ``&quot;SRP107565&quot;``) or</span>
+<span class="sd">            ``None``.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The final two characters of ``project``. Returns the empty string</span>
+<span class="sd">        when ``project`` is ``None`` or empty.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">project</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">project</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sample_shard</span><span class="p">(</span><span class="n">sample</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">data_source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the 2-character directory shard for a BigWig sample identifier.</span>
+
+<span class="sd">    BigWig coverage file URLs include a shard subdirectory derived from the</span>
+<span class="sd">    sample identifier. The offset within the identifier depends on the data</span>
+<span class="sd">    source:</span>
+
+<span class="sd">    * GTEx: uses positions ``[-4:-2]`` (e.g., ``&quot;GTEX-11DXZ-0526-SM-5EQRP&quot;``</span>
+<span class="sd">      produces ``&quot;EQ&quot;``).</span>
+<span class="sd">    * SRA / TCGA: uses the final two characters ``[-2:]`` (e.g.,</span>
+<span class="sd">      ``&quot;SRR387777&quot;`` produces ``&quot;77&quot;``).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        sample: Sample identifier string (e.g., ``&quot;SRR387777&quot;`` or</span>
+<span class="sd">            ``&quot;GTEX-11DXZ-0526-SM-5EQRP&quot;``).</span>
+<span class="sd">        data_source: Data source identifier (e.g., ``&quot;sra&quot;``, ``&quot;gtex&quot;``).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A 2-character uppercase shard string, or the empty string if</span>
+<span class="sd">        ``sample`` is ``None`` or too short.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">sample</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">is_gtex</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data_source</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;gtex&quot;</span> <span class="ow">in</span> <span class="n">data_source</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">is_gtex</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">sample</span><span class="p">[</span><span class="o">-</span><span class="mi">4</span><span class="p">:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">sample</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+
+
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_R3CommonFields</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Shared field schema for all resource description subclasses.</span>
+
+<span class="sd">    Concrete resource description classes inherit from this dataclass to provide</span>
+<span class="sd">    a uniform attribute surface area across all resource types. This enables</span>
+<span class="sd">    generic code (e.g., serialization or filtering) to access common attributes</span>
+<span class="sd">    without special-casing individual description subclasses.</span>
+
+<span class="sd">    Only a subset of fields are required for a given resource type; each</span>
+<span class="sd">    concrete subclass enforces its own required fields in `__post_init__`.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        resource_type: The resource-type discriminator used by the factory.</span>
+<span class="sd">        organism: Organism identifier (e.g., &quot;human&quot;, &quot;mouse&quot;).</span>
+<span class="sd">        data_source: Source identifier (e.g., &quot;sra&quot;, &quot;gtex&quot;, &quot;tcga&quot;).</span>
+<span class="sd">        genomic_unit: Unit for feature-count matrices (e.g., &quot;gene&quot;, &quot;exon&quot;).</span>
+<span class="sd">        project: Project identifier (e.g., SRP/TCGA project).</span>
+<span class="sd">        sample: Sample/run identifier used by some resources (e.g., BigWig).</span>
+<span class="sd">        annotation_extension: Annotation build tag (e.g., &quot;G026&quot;).</span>
+<span class="sd">        junction_type: Junction category selector (e.g., &quot;ALL&quot;).</span>
+<span class="sd">        junction_extension: Junction file format tag (e.g., &quot;MM&quot;, &quot;ID&quot;, &quot;RR&quot;).</span>
+<span class="sd">        table_name: Metadata table name (e.g., &quot;recount_qc&quot;).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">resource_type</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">data_source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">genomic_unit</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">sample</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">annotation_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">junction_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">junction_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="R3ResourceDescription">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3ResourceDescription">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3ResourceDescription</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class and multi-factory for recount3 resource descriptors.</span>
+
+<span class="sd">    Instantiate this class with a `resource_type` to obtain an instance of the</span>
+<span class="sd">    registered concrete subclass.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; desc = R3ResourceDescription(</span>
+<span class="sd">        ...     resource_type=&quot;annotations&quot;,</span>
+<span class="sd">        ...     organism=&quot;human&quot;,</span>
+<span class="sd">        ...     genomic_unit=&quot;gene&quot;,</span>
+<span class="sd">        ...     annotation_extension=&quot;G026&quot;,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; isinstance(desc, R3Annotations)</span>
+<span class="sd">        True</span>
+
+<span class="sd">    Concrete subclasses should:</span>
+<span class="sd">    - Inherit from both `_R3CommonFields` and `R3ResourceDescription`.</span>
+<span class="sd">    - Validate required parameters in `__post_init__`.</span>
+<span class="sd">    - Implement `url_path()` to return the duffel-relative path.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        _TYPE_REGISTRY: Mapping from resource-type strings to concrete</span>
+<span class="sd">            classes. Mutable to allow dynamic registration.</span>
+<span class="sd">        _RESOURCE_TYPE: Registration string key. Injected into concrete</span>
+<span class="sd">            subclasses by the ``register_type()`` decorator.</span>
+<span class="sd">        resource_type: Resource-type discriminator. Declared here for</span>
+<span class="sd">            static typing; implemented by ``_R3CommonFields``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">_TYPE_REGISTRY</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_RESOURCE_TYPE</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">resource_type</span><span class="p">:</span> <span class="nb">str</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R3ResourceDescription</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Constructs and returns an instance of the appropriate subclass.</span>
+
+<span class="sd">        The factory accepts the resource type either as:</span>
+<span class="sd">        - keyword argument `resource_type=...`, or</span>
+<span class="sd">        - the first positional argument.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *args: Optional positional arguments; if present, `args[0]` may</span>
+<span class="sd">                supply the resource type.</span>
+<span class="sd">            **kwargs: Keyword arguments used to initialize the selected</span>
+<span class="sd">                dataclass subclass.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            An instance of the concrete subclass registered for the selected</span>
+<span class="sd">            resource type.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            KeyError: If `resource_type` is missing or empty.</span>
+<span class="sd">            ValueError: If `resource_type` is not registered.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">cls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">R3ResourceDescription</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+
+        <span class="n">resource_type</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;resource_type&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">resource_type</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">args</span><span class="p">:</span>
+            <span class="n">resource_type</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">resource_type</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="s2">&quot;resource_type is required to construct R3ResourceDescription.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">subcls</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_TYPE_REGISTRY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">resource_type</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">subcls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported resource_type: </span><span class="si">{</span><span class="n">resource_type</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span>
+            <span class="s2">&quot;R3ResourceDescription&quot;</span><span class="p">,</span>
+            <span class="nb">object</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">subcls</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="R3ResourceDescription.register_type">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3ResourceDescription.register_type">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">register_type</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">resource_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]],</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Registers a concrete subclass for a given `resource_type`.</span>
+
+<span class="sd">        This decorator binds `resource_type` to the provided subclass and also</span>
+<span class="sd">        sets an internal `_RESOURCE_TYPE` attribute on that subclass.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            resource_type: Resource-type string used as the factory key.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A decorator that registers the decorated subclass.</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; @R3ResourceDescription.register_type(&quot;annotations&quot;)</span>
+<span class="sd">            ... @dataclasses.dataclass(slots=True)</span>
+<span class="sd">            ... class R3Annotations(_R3CommonFields, R3ResourceDescription):</span>
+<span class="sd">            ...     ...</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">_decorator</span><span class="p">(</span>
+            <span class="n">subcls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">],</span>
+        <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]:</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">_TYPE_REGISTRY</span><span class="p">[</span><span class="n">resource_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">subcls</span>
+            <span class="n">subcls</span><span class="o">.</span><span class="n">_RESOURCE_TYPE</span> <span class="o">=</span> <span class="n">resource_type</span>  <span class="c1"># pylint: disable=protected-access</span>
+            <span class="k">return</span> <span class="n">subcls</span>
+
+        <span class="k">return</span> <span class="n">_decorator</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_require</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">names</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensures that the given attributes are present and non-empty.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            *names: Attribute names to validate.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            KeyError: If any named attribute is None or the empty string.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required field: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_organism</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validates that `organism` is one of the supported values.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If `organism` is not in `VALID_ORGANISMS`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">organism</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;organism&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">organism</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VALID_ORGANISMS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid organism: </span><span class="si">{</span><span class="n">organism</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_data_source</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validates that `data_source` is one of the supported values.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If `data_source` is not in `VALID_DATA_SOURCES`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data_source</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;data_source&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data_source</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">VALID_DATA_SOURCES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid data_source: </span><span class="si">{</span><span class="n">data_source</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_genomic_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validates that `genomic_unit` is one of the supported values.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If `genomic_unit` is not in `_VALID_GENOMIC_UNITS`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">genomic_unit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;genomic_unit&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">genomic_unit</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_VALID_GENOMIC_UNITS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid genomic_unit: </span><span class="si">{</span><span class="n">genomic_unit</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="R3ResourceDescription.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3ResourceDescription.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the duffel-relative URL path for this resource.</span>
+
+<span class="sd">        `R3ResourceDescription` is a multi-factory and abstract interface:</span>
+<span class="sd">        calling ``R3ResourceDescription(resource_type=...)`` returns an</span>
+<span class="sd">        instance of a concrete registered subclass (e.g. `R3Annotations`).</span>
+<span class="sd">        Those subclasses implement `url_path()` to construct a deterministic</span>
+<span class="sd">        path within the duffel repository layout.</span>
+
+<span class="sd">        This base-class method is not expected to be called directly; it</span>
+<span class="sd">        exists to document the interface and provide a consistent method name</span>
+<span class="sd">        across all description types.</span>
+
+<span class="sd">        Implementations must return a path without a leading slash. Callers</span>
+<span class="sd">        should join this value onto the configured base URL (and add any</span>
+<span class="sd">        separators as needed).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A duffel-relative path string, no leading slash.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            NotImplementedError: Always, in the base class. Concrete subclasses</span>
+<span class="sd">                override this method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3Annotations">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3Annotations">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;annotations&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3Annotations</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for annotation GTF files.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - genomic_unit</span>
+<span class="sd">      - annotation_extension</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/annotations/{genomic_unit}_sums/</span>
+<span class="sd">        {organism}.{genomic_unit}_sums.{annotation_extension}.gtf.gz</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span><span class="s2">&quot;organism&quot;</span><span class="p">,</span> <span class="s2">&quot;genomic_unit&quot;</span><span class="p">,</span> <span class="s2">&quot;annotation_extension&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_genomic_unit</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3Annotations.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3Annotations.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/annotations/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums.&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">annotation_extension</span><span class="si">}</span><span class="s2">.gtf.gz&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3GeneOrExonCounts">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3GeneOrExonCounts">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3GeneOrExonCounts</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for per-project gene/exon count matrices.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - data_source</span>
+<span class="sd">      - genomic_unit</span>
+<span class="sd">      - project</span>
+<span class="sd">      - annotation_extension</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/data_sources/{data_source}/{genomic_unit}_sums/</span>
+<span class="sd">        {p2(project)}/{project}/</span>
+<span class="sd">        {data_source}.{genomic_unit}_sums.{project}.{annotation_extension}.gz</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span>
+            <span class="s2">&quot;organism&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;data_source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;genomic_unit&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;project&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;annotation_extension&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_source</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_genomic_unit</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3GeneOrExonCounts.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3GeneOrExonCounts.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums/</span><span class="si">{</span><span class="n">_project_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">annotation_extension</span><span class="si">}</span><span class="s2">.gz&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3JunctionCounts">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3JunctionCounts">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;count_files_junctions&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3JunctionCounts</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for per-project junction count files.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - data_source</span>
+<span class="sd">      - project</span>
+<span class="sd">      - junction_type</span>
+<span class="sd">      - junction_extension</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/data_sources/{data_source}/junctions/</span>
+<span class="sd">        {p2(project)}/{project}/</span>
+<span class="sd">        {data_source}.junctions.{project}.{junction_type}.{junction_extension}.gz</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span>
+            <span class="s2">&quot;organism&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;data_source&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;project&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;junction_type&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;junction_extension&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_source</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3JunctionCounts.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3JunctionCounts.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/junctions/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_project_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.junctions.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">junction_type</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">junction_extension</span><span class="si">}</span><span class="s2">.gz&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3ProjectMetadata">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3ProjectMetadata">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;metadata_files&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3ProjectMetadata</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for per-project metadata tables.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - data_source</span>
+<span class="sd">      - project</span>
+<span class="sd">      - table_name</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/data_sources/{data_source}/metadata/</span>
+<span class="sd">        {p2(project)}/{project}/</span>
+<span class="sd">        {data_source}.{table_name}.{project}.MD.gz</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span><span class="s2">&quot;organism&quot;</span><span class="p">,</span> <span class="s2">&quot;data_source&quot;</span><span class="p">,</span> <span class="s2">&quot;project&quot;</span><span class="p">,</span> <span class="s2">&quot;table_name&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_source</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3ProjectMetadata.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3ProjectMetadata.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/metadata/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_project_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">.MD.gz&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3BigWig">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3BigWig">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;bigwig_files&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3BigWig</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for per-sample BigWig coverage files.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - data_source</span>
+<span class="sd">      - project</span>
+<span class="sd">      - sample</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/data_sources/{data_source}/base_sums/</span>
+<span class="sd">        {p2(project)}/{project}/{shard(sample, data_source)}/</span>
+<span class="sd">        {data_source}.base_sums.{project}_{sample}.ALL.bw</span>
+
+<span class="sd">    The sample shard subdirectory uses a different offset for GTEx samples</span>
+<span class="sd">    compared to SRA/TCGA samples; see :func:`_sample_shard`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span><span class="s2">&quot;organism&quot;</span><span class="p">,</span> <span class="s2">&quot;data_source&quot;</span><span class="p">,</span> <span class="s2">&quot;project&quot;</span><span class="p">,</span> <span class="s2">&quot;sample&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_source</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3BigWig.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3BigWig.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">shard</span> <span class="o">=</span> <span class="n">_sample_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/base_sums/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_project_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">shard</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.base_sums.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">sample</span><span class="si">}</span><span class="s2">.ALL.bw&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3DataSources">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3DataSources">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;data_sources&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3DataSources</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for the organism-level data-source index (homes_index).</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/homes_index</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span><span class="s2">&quot;organism&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3DataSources.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3DataSources.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/homes_index&quot;</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3DataSourceMetadata">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3DataSourceMetadata">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">&quot;data_source_metadata&quot;</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3DataSourceMetadata</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Descriptor for source-level metadata listings.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - data_source</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/data_sources/{data_source}/metadata/</span>
+<span class="sd">        {data_source}.recount_project.MD.gz</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span><span class="s2">&quot;organism&quot;</span><span class="p">,</span> <span class="s2">&quot;data_source&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_data_source</span><span class="p">()</span>
+
+<div class="viewcode-block" id="R3DataSourceMetadata.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3DataSourceMetadata.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/metadata/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.recount_project.MD.gz&quot;</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,785 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>recount3.resource &mdash; recount3 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            recount3
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorial.html">Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli.html">CLI Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../license.html">License</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">recount3</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">recount3.resource</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for recount3.resource</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) 2026, Alexander A. Alsalihi, Robert M. Flight,</span>
+<span class="c1"># Hunter N.B. Moseley. All rights reserved.</span>
+<span class="c1">#</span>
+<span class="c1"># Redistribution and use in source and binary forms, with or without</span>
+<span class="c1"># modification, are permitted provided that the following conditions are met:</span>
+<span class="c1">#</span>
+<span class="c1"># * Redistributions of source code must retain the above copyright notice, this</span>
+<span class="c1">#   list of conditions and the following disclaimer.</span>
+<span class="c1"># * Redistributions in binary form must reproduce the above copyright notice,</span>
+<span class="c1">#   this list of conditions and the following disclaimer in the documentation</span>
+<span class="c1">#   and/or other materials provided with the distribution.</span>
+<span class="c1"># * All advertising materials mentioning features or use of this software must</span>
+<span class="c1">#   display the following acknowledgement: This product includes software</span>
+<span class="c1">#   developed by the copyright holder.</span>
+<span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
+<span class="c1">#   specific prior written permission.</span>
+<span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
+<span class="c1">#   source code must be included with the published work.</span>
+<span class="c1">#</span>
+<span class="c1"># THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS AS IS AND</span>
+<span class="c1"># ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED</span>
+<span class="c1"># WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE</span>
+<span class="c1"># DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE</span>
+<span class="c1"># FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL</span>
+<span class="c1"># DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR</span>
+<span class="c1"># SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER</span>
+<span class="c1"># CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,</span>
+<span class="c1"># OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
+<span class="c1"># OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
+<span class="c1">#</span>
+<span class="sd">&quot;&quot;&quot;Resource orchestration: URL resolution, caching, downloading, and loading.</span>
+
+<span class="sd">This module defines :class:`R3Resource`, the central class of the recount3</span>
+<span class="sd">package. Every downloadable file (count matrices, metadata tables, annotation</span>
+<span class="sd">GTFs, BigWig coverage files, junction counts) is represented as an</span>
+<span class="sd">``R3Resource``. The class manages the full lifecycle of a resource:</span>
+
+<span class="sd">1. Description -&gt; URL: a :class:`~recount3._descriptions.R3ResourceDescription`</span>
+<span class="sd">   provides the structured parameters (organism, project, genomic unit, …) that</span>
+<span class="sd">   are used to construct the deterministic duffel-mirror URL.</span>
+<span class="sd">2. URL -&gt; cache: :meth:`~R3Resource.download` fetches the file over HTTP</span>
+<span class="sd">   and stores it in a persistent on-disk cache keyed by URL hash.</span>
+<span class="sd">3. Cache -&gt; materialization: the cached file can be hard-linked or copied</span>
+<span class="sd">   to a user-supplied directory, or appended to a ZIP archive.</span>
+<span class="sd">4. Cache -&gt; in-memory object: :meth:`~R3Resource.load` parses the cached</span>
+<span class="sd">   file into an appropriate Python object (see Notes below).</span>
+
+<span class="sd">Typical usage example::</span>
+
+<span class="sd">    from recount3 import R3Resource, R3GeneOrExonCounts</span>
+
+<span class="sd">    desc = R3GeneOrExonCounts(</span>
+<span class="sd">        organism=&quot;human&quot;,</span>
+<span class="sd">        data_source=&quot;sra&quot;,</span>
+<span class="sd">        genomic_unit=&quot;gene&quot;,</span>
+<span class="sd">        project=&quot;SRP009615&quot;,</span>
+<span class="sd">        annotation_extension=&quot;G026&quot;,</span>
+<span class="sd">    )</span>
+<span class="sd">    res = R3Resource(desc)</span>
+
+<span class="sd">    # Cache the file (no local copy):</span>
+<span class="sd">    res.download(path=None, cache_mode=&quot;enable&quot;)</span>
+
+<span class="sd">    # Or copy into a directory:</span>
+<span class="sd">    dest = res.download(path=&quot;/data/recount3&quot;)</span>
+
+<span class="sd">    # Parse into a DataFrame (for count resources):</span>
+<span class="sd">    df = res.load()</span>
+
+<span class="sd">Note:</span>
+<span class="sd">    Downloads are protected by a module-level :class:`threading.Lock`, so</span>
+<span class="sd">    multiple threads can safely call :meth:`~R3Resource.download` on</span>
+<span class="sd">    resources sharing a common cache path without corrupting the cache.</span>
+
+<span class="sd">Note:</span>
+<span class="sd">    :meth:`~R3Resource.load` returns different types depending on the</span>
+<span class="sd">    resource type:</span>
+
+<span class="sd">    * Gene/exon count resources -&gt; :class:`pandas.DataFrame` (features x samples).</span>
+<span class="sd">    * Junction MM resources -&gt; :class:`scipy.sparse.csr_matrix`.</span>
+<span class="sd">    * Junction ID/RR resources -&gt; :class:`pandas.DataFrame`.</span>
+<span class="sd">    * BigWig resources -&gt; :class:`~recount3._bigwig.BigWigFile`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._bigwig</span><span class="w"> </span><span class="kn">import</span> <span class="n">BigWigFile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._descriptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceDescription</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_cache_path</span><span class="p">,</span>
+    <span class="n">_derive_junction_sidecar_url</span><span class="p">,</span>
+    <span class="n">_ensure_dir</span><span class="p">,</span>
+    <span class="n">_hardlink_or_copy</span><span class="p">,</span>
+    <span class="n">download_stream_to_zip</span><span class="p">,</span>
+    <span class="n">download_to_file</span><span class="p">,</span>
+    <span class="n">write_cached_file_to_zip</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">default_config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">CacheMode</span>
+
+<span class="n">_FILE_LOCK</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ensure_cached_url</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">cache_root</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Ensure a given URL is downloaded and cached locally.</span>
+
+<span class="sd">    Checks the specified cache root directory for the presence of the file</span>
+<span class="sd">    corresponding to the provided URL. If the file is missing, it acquires a</span>
+<span class="sd">    thread lock and downloads the file in chunks.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        url: The full, absolute remote URL of the file to download.</span>
+<span class="sd">        cache_root: The file system directory path where cached data should</span>
+<span class="sd">            be persistently stored.</span>
+<span class="sd">        cfg: The global configuration object, which provides network parameters</span>
+<span class="sd">            such as connection timeouts, maximum retries, SSL verification</span>
+<span class="sd">            preferences, and the user agent string.</span>
+<span class="sd">        chunk_size: The specific number of bytes to read and write per chunk</span>
+<span class="sd">            during the download process.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        The absolute path pointing to the locally cached file.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cache_path</span> <span class="o">=</span> <span class="n">_cache_path</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_root</span><span class="p">)</span>
+    <span class="n">_ensure_dir</span><span class="p">(</span><span class="n">cache_path</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cache_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">return</span> <span class="n">cache_path</span>
+
+    <span class="k">with</span> <span class="n">_FILE_LOCK</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">cache_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">return</span> <span class="n">cache_path</span>
+        <span class="n">download_to_file</span><span class="p">(</span>
+            <span class="n">url</span><span class="p">,</span>
+            <span class="n">cache_path</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
+            <span class="n">insecure_ssl</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">insecure_ssl</span><span class="p">,</span>
+            <span class="n">user_agent</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">user_agent</span><span class="p">,</span>
+            <span class="n">attempts</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">cache_path</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read_id_rail_ids</span><span class="p">(</span><span class="n">id_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read a junction ``.ID`` or ``.ID.gz`` file and return rail IDs in order.</span>
+
+<span class="sd">    The file is a tab-separated table with a header row. The function looks for</span>
+<span class="sd">    a column named ``rail_id`` (case-insensitive); if absent, it falls back to</span>
+<span class="sd">    the first column. A second parse attempt with ``sep=None`` (Python engine)</span>
+<span class="sd">    is made if the initial tab-delimited parse fails.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        id_path: Path to the junction ID file (``.ID`` or ``.ID.gz``).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        An ordered list of rail ID strings, one per row.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        LoadError: If the file parses to an empty DataFrame or if the resulting</span>
+<span class="sd">            list of IDs is empty.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
+            <span class="n">id_path</span><span class="p">,</span>
+            <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">,</span>
+            <span class="n">sep</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">header</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">engine</span><span class="o">=</span><span class="s2">&quot;c&quot;</span><span class="p">,</span>
+            <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
+            <span class="n">id_path</span><span class="p">,</span>
+            <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">,</span>
+            <span class="n">sep</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">header</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">engine</span><span class="o">=</span><span class="s2">&quot;python&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Junction ID file </span><span class="si">{</span><span class="n">id_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> parsed empty.&quot;</span><span class="p">)</span>
+
+    <span class="n">cols_lower</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+    <span class="n">rail_col</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="s2">&quot;rail_id&quot;</span> <span class="ow">in</span> <span class="n">cols_lower</span><span class="p">:</span>
+        <span class="n">rail_col</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="n">cols_lower</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;rail_id&quot;</span><span class="p">)]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">rail_col</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">rail_ids</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">rail_col</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rail_ids</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Junction ID file </span><span class="si">{</span><span class="n">id_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> has no rail IDs.&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rail_ids</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_read_mm_matrix</span><span class="p">(</span><span class="n">mm_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">scipy</span><span class="o">.</span><span class="n">sparse</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Read a MatrixMarket file into a SciPy CSR sparse matrix.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        mm_path: The local file system path pointing to the MatrixMarket</span>
+<span class="sd">            file (typically ending in .MM or .MM.gz).</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A 2-dimensional sparse matrix accurately representing the data parsed</span>
+<span class="sd">        from the file, formatted as a SciPy CSR matrix.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        LoadError: If the file cannot be opened, fails to parse as a valid</span>
+<span class="sd">            MatrixMarket format, or if the resulting parsed matrix does not</span>
+<span class="sd">            contain exactly two dimensions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">mm_path</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;.gz&quot;</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">gzip</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">mm_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">fh</span><span class="p">:</span>
+                <span class="n">mat</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">mmread</span><span class="p">(</span><span class="n">fh</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mat</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">mmread</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">mm_path</span><span class="p">))</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to read MatrixMarket from </span><span class="si">{</span><span class="n">mm_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mat</span><span class="p">,</span> <span class="s2">&quot;ndim&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MatrixMarket </span><span class="si">{</span><span class="n">mm_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not 2-dimensional.&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">scipy</span><span class="o">.</span><span class="n">sparse</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">(</span><span class="n">mat</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="R3Resource">
+<a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3Resource</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resource that manages URL resolution, caching, materialization, and loading.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        description: An instance of `R3ResourceDescription` that specifies the</span>
+<span class="sd">            metadata and the hierarchical path used to correctly locate and</span>
+<span class="sd">            define the resource.</span>
+<span class="sd">        url: The full, absolute network URL pointing to the remote resource. If</span>
+<span class="sd">            not explicitly provided during initialization, it is derived by</span>
+<span class="sd">            joining the configured base URL with the description&#39;s relative URL.</span>
+<span class="sd">        filepath: An optional string representing the absolute local path where</span>
+<span class="sd">            the resource was successfully materialized (either copied or linked).</span>
+<span class="sd">        config: An optional `Config` instance dictating strict network and cache</span>
+<span class="sd">            behaviors. If omitted, the global default configuration is dynamically</span>
+<span class="sd">            applied.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">description</span><span class="p">:</span> <span class="n">R3ResourceDescription</span>
+    <span class="n">url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">filepath</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">_cached_data</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize derived fields after dataclass instantiation.&quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urljoin</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">base_url</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">url_path</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">arcname</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deterministic ZIP arcname derived from the URL path.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">url_path</span><span class="p">()</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cache_root</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the root directory path used for local file caching.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The absolute directory path where safely downloaded files are</span>
+<span class="sd">            globally cached, determined entirely by the active configuration.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cached_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the local cache file path for this specific resource.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The fully resolved absolute path indicating exactly where this</span>
+<span class="sd">            resource&#39;s data persistently resides within the local cache hierarchy.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">_cache_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">())</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_cached</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">CacheMode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure the resource data is available in the local cache.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            mode: The primary caching strategy to employ. Must be &#39;enable&#39; to</span>
+<span class="sd">                use pre-existing cached files (downloading only if absent),</span>
+<span class="sd">                or &#39;update&#39; to force a fresh network download, overriding </span>
+<span class="sd">                any previously existing files.</span>
+<span class="sd">            chunk_size: The fixed size in bytes utilized for reading and</span>
+<span class="sd">            writing active network streams.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The absolute path object directing to the successfully locally</span>
+<span class="sd">            cached file.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the caching mode is strictly set to &#39;disable&#39; (as</span>
+<span class="sd">                local caching operations are fundamentally invalid in this</span>
+<span class="sd">                mode), or if the universally provided mode string is completely</span>
+<span class="sd">                unrecognized.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="n">cache_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cache is not used in &#39;disable&#39; mode&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;enable&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_ensure_cached_url</span><span class="p">(</span>
+                <span class="n">url</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="n">cache_root</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">(),</span>
+                <span class="n">cfg</span><span class="o">=</span><span class="n">cfg</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">&quot;update&quot;</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">_FILE_LOCK</span><span class="p">:</span>
+                <span class="n">download_to_file</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                    <span class="n">cache_path</span><span class="p">,</span>
+                    <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+                    <span class="n">timeout</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
+                    <span class="n">insecure_ssl</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">insecure_ssl</span><span class="p">,</span>
+                    <span class="n">user_agent</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">user_agent</span><span class="p">,</span>
+                    <span class="n">attempts</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">cache_path</span>
+
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown cache mode: </span><span class="si">{</span><span class="n">mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="R3Resource.download">
+<a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource.download">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">cache_mode</span><span class="p">:</span> <span class="n">CacheMode</span> <span class="o">=</span> <span class="s2">&quot;enable&quot;</span><span class="p">,</span>
+        <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ensure resource availability and optionally materialize it.</span>
+
+<span class="sd">        Transitions the remote resource to the local system. Caches the file,</span>
+<span class="sd">        writes it to a specific directory, or appends it to a ZIP archive</span>
+<span class="sd">        depending on the arguments provided.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path: Target destination. If None, performs a cache-only download.</span>
+<span class="sd">                If a directory path, links or copies the file there. If a</span>
+<span class="sd">                &#39;.zip&#39; path, injects the file into the archive using `arcname`.</span>
+<span class="sd">            cache_mode: Caching behavior. &#39;enable&#39; uses existing cache, &#39;disable&#39;</span>
+<span class="sd">                streams directly to `path` without caching, &#39;update&#39; forces a</span>
+<span class="sd">                cache refresh before materialization.</span>
+<span class="sd">            overwrite: If True, replaces existing files at the destination.</span>
+<span class="sd">            chunk_size: Byte size for streaming operations. Defaults to the</span>
+<span class="sd">                configured chunk size.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The final file path if materialized to a directory. None if performing</span>
+<span class="sd">            a cache-only download or appending to a ZIP archive.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: Combinations are invalid (e.g., path=None with</span>
+<span class="sd">                cache_mode=&#39;disable&#39;) or path has an unsupported format.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            Cache the file without copying it anywhere::</span>
+
+<span class="sd">                res.download(path=None, cache_mode=&quot;enable&quot;)</span>
+
+<span class="sd">            Copy the cached file into a local directory::</span>
+
+<span class="sd">                dest = res.download(path=&quot;/data/recount3&quot;)</span>
+
+<span class="sd">            Append the file to a ZIP archive::</span>
+
+<span class="sd">                res.download(path=&quot;/data/recount3.zip&quot;)</span>
+
+<span class="sd">            Force a cache refresh before copying::</span>
+
+<span class="sd">                dest = res.download(path=&quot;/data/recount3&quot;, cache_mode=&quot;update&quot;)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_disabled</span><span class="p">:</span>
+            <span class="n">cache_mode</span> <span class="o">=</span> <span class="s2">&quot;disable&quot;</span>
+        <span class="n">cs</span> <span class="o">=</span> <span class="n">chunk_size</span> <span class="ow">or</span> <span class="n">cfg</span><span class="o">.</span><span class="n">chunk_size</span>
+
+        <span class="k">if</span> <span class="n">cache_mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;enable&quot;</span><span class="p">,</span> <span class="s2">&quot;disable&quot;</span><span class="p">,</span> <span class="s2">&quot;update&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid cache_mode: </span><span class="si">{</span><span class="n">cache_mode</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Case 1: cache-only</span>
+        <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">cache_mode</span> <span class="o">==</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;path=None with cache_mode=&#39;disable&#39; is invalid; &quot;</span>
+                    <span class="s2">&quot;cache-only requires cache enabled.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_cached</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="n">cache_mode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="n">path_p</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">is_zip</span> <span class="o">=</span> <span class="n">path_p</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;.zip&quot;</span>
+        <span class="n">is_dir</span> <span class="o">=</span> <span class="n">path_p</span><span class="o">.</span><span class="n">suffix</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span> <span class="ow">or</span> <span class="n">path_p</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_zip</span> <span class="ow">or</span> <span class="n">is_dir</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;path must be a directory or a .zip file, got: </span><span class="si">{</span><span class="n">path</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Case 2: .zip archive materialization</span>
+        <span class="k">if</span> <span class="n">is_zip</span><span class="p">:</span>
+            <span class="n">arcname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcname</span>
+            <span class="k">if</span> <span class="n">cache_mode</span> <span class="o">==</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span>
+                <span class="n">download_stream_to_zip</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                    <span class="n">path_p</span><span class="p">,</span>
+                    <span class="n">arcname</span><span class="p">,</span>
+                    <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">,</span>
+                    <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">,</span>
+                    <span class="n">timeout</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
+                    <span class="n">insecure_ssl</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">insecure_ssl</span><span class="p">,</span>
+                    <span class="n">user_agent</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">user_agent</span><span class="p">,</span>
+                    <span class="n">attempts</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="kc">None</span>
+            <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_cached</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="n">cache_mode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">)</span>
+            <span class="n">write_cached_file_to_zip</span><span class="p">(</span><span class="n">cached</span><span class="p">,</span> <span class="n">path_p</span><span class="p">,</span> <span class="n">arcname</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+        <span class="c1"># Case 3: directory materialization</span>
+        <span class="n">dest_filename</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">url_path</span><span class="p">())</span><span class="o">.</span><span class="n">name</span>
+        <span class="n">dest_path</span> <span class="o">=</span> <span class="n">path_p</span> <span class="o">/</span> <span class="n">dest_filename</span>
+        <span class="k">if</span> <span class="n">cache_mode</span> <span class="o">==</span> <span class="s2">&quot;disable&quot;</span><span class="p">:</span>
+            <span class="n">download_to_file</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="n">dest_path</span><span class="p">,</span>
+                <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">,</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">timeout</span><span class="p">,</span>
+                <span class="n">insecure_ssl</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">insecure_ssl</span><span class="p">,</span>
+                <span class="n">user_agent</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">user_agent</span><span class="p">,</span>
+                <span class="n">attempts</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
+
+        <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_cached</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="n">cache_mode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dest_path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
+                <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
+        <span class="n">_hardlink_or_copy</span><span class="p">(</span><span class="n">cached</span><span class="p">,</span> <span class="n">dest_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="R3Resource.load">
+<a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource.load">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse the resource into an appropriate in-memory Python object.</span>
+
+<span class="sd">        Downloads and caches the resource if missing. Uses the resource description</span>
+<span class="sd">        to determine the parsing strategy (e.g., BigWig, tabular counts, junctions).</span>
+<span class="sd">        Caches the resulting object internally to prevent redundant disk I/O.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            force: If True, bypasses the in-memory object cache and re-parses</span>
+<span class="sd">                data directly from disk.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The parsed object. Tabular and junction counts return a</span>
+<span class="sd">            `pandas.DataFrame`. BigWig files return a</span>
+<span class="sd">            `recount3._bigwig.BigWigFile` instance.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            FileNotFoundError: The file is missing from the cache post-download.</span>
+<span class="sd">            LoadError: Parsing fails, matrix shapes mismatch, or the resource</span>
+<span class="sd">                type is currently unsupported.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            Load a gene/exon count matrix as a DataFrame::</span>
+
+<span class="sd">                counts_df = gene_count_res.load()  # -&gt; pd.DataFrame</span>
+
+<span class="sd">            Load a BigWig coverage file (close it when done)::</span>
+
+<span class="sd">                bw = bigwig_res.load()  # -&gt; BigWigFile</span>
+<span class="sd">                vals = bw.values(&quot;chr1&quot;, 0, 1_000_000)</span>
+<span class="sd">                bw.close()</span>
+
+<span class="sd">            Re-parse from disk, bypassing the in-memory cache::</span>
+
+<span class="sd">                counts_df = res.load(force=True)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">force</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span>
+
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="s2">&quot;resource_type&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;bigwig_files&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>
+            <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">cached</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">cached</span><span class="p">))</span>
+            <span class="n">reader</span> <span class="o">=</span> <span class="n">BigWigFile</span><span class="p">(</span><span class="n">cached</span><span class="p">)</span>
+            <span class="n">reader</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">reader</span>
+            <span class="k">return</span> <span class="n">reader</span>
+
+        <span class="n">rtype</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="s2">&quot;resource_type&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rtype</span> <span class="o">==</span> <span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>
+            <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">cached</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">cached</span><span class="p">))</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
+                    <span class="n">cached</span><span class="p">,</span>
+                    <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">,</span>
+                    <span class="n">sep</span><span class="o">=</span><span class="s2">&quot;</span><span class="se">\t</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">header</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">comment</span><span class="o">=</span><span class="s2">&quot;#&quot;</span><span class="p">,</span>
+                    <span class="n">index_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">engine</span><span class="o">=</span><span class="s2">&quot;c&quot;</span><span class="p">,</span>
+                    <span class="n">low_memory</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span>
+                    <span class="n">cached</span><span class="p">,</span>
+                    <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">,</span>
+                    <span class="n">sep</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">header</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                    <span class="n">comment</span><span class="o">=</span><span class="s2">&quot;#&quot;</span><span class="p">,</span>
+                    <span class="n">index_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">engine</span><span class="o">=</span><span class="s2">&quot;python&quot;</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Parsed an empty or 1-column matrix from </span><span class="si">{</span><span class="n">cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">cols_lower</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+            <span class="n">try_index</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;gene_id&quot;</span><span class="p">,</span> <span class="s2">&quot;exon_id&quot;</span><span class="p">,</span> <span class="s2">&quot;feature_id&quot;</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">cols_lower</span><span class="p">:</span>
+                    <span class="n">try_index</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="n">cols_lower</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">candidate</span><span class="p">)]</span>
+                    <span class="k">break</span>
+            <span class="k">if</span> <span class="n">try_index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">try_index</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">try_index</span><span class="p">)</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">df</span>
+            <span class="k">return</span> <span class="n">df</span>
+
+        <span class="k">if</span> <span class="n">rtype</span> <span class="o">==</span> <span class="s2">&quot;count_files_junctions&quot;</span><span class="p">:</span>
+            <span class="n">jxn_ext</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="s2">&quot;junction_extension&quot;</span><span class="p">,</span> <span class="s2">&quot;MM&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+
+            <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>
+            <span class="n">mm_cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">mm_cached</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">mm_cached</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">jxn_ext</span> <span class="o">==</span> <span class="s2">&quot;MM&quot;</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">id_url</span> <span class="o">=</span> <span class="n">_derive_junction_sidecar_url</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;ID&quot;</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Cannot derive junction ID URL from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+                <span class="n">id_cached</span> <span class="o">=</span> <span class="n">_ensure_cached_url</span><span class="p">(</span>
+                    <span class="n">url</span><span class="o">=</span><span class="n">id_url</span><span class="p">,</span>
+                    <span class="n">cache_root</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">(),</span>
+                    <span class="n">cfg</span><span class="o">=</span><span class="n">cfg</span><span class="p">,</span>
+                    <span class="n">chunk_size</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">chunk_size</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="n">rail_ids</span> <span class="o">=</span> <span class="n">_read_id_rail_ids</span><span class="p">(</span><span class="n">id_cached</span><span class="p">)</span>
+                <span class="n">mat</span> <span class="o">=</span> <span class="n">_read_mm_matrix</span><span class="p">(</span><span class="n">mm_cached</span><span class="p">)</span>
+
+                <span class="n">mat_shape</span> <span class="o">=</span> <span class="n">mat</span><span class="o">.</span><span class="n">shape</span>
+                <span class="k">if</span> <span class="n">mat_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MatrixMarket </span><span class="si">{</span><span class="n">mm_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> has undefined shape.&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">mat_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rail_ids</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                        <span class="s2">&quot;Junction MM column count does not match ID length: &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">mat_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rail_ids</span><span class="p">)</span><span class="si">}</span><span class="s2"> &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">mm_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> vs </span><span class="si">{</span><span class="n">id_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">).&quot;</span>
+                    <span class="p">)</span>
+
+                <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="o">.</span><span class="n">sparse</span><span class="o">.</span><span class="n">from_spmatrix</span><span class="p">(</span><span class="n">mat</span><span class="p">)</span>
+                <span class="n">df</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">rail_ids</span><span class="p">]</span>
+                <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">df</span>
+                <span class="k">return</span> <span class="n">df</span>
+
+            <span class="k">if</span> <span class="n">jxn_ext</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;ID&quot;</span><span class="p">,</span> <span class="s2">&quot;RR&quot;</span><span class="p">}:</span>
+                <span class="n">obj</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="n">mm_cached</span><span class="p">,</span> <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">obj</span>
+                <span class="k">return</span> <span class="n">obj</span>
+
+            <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Unsupported junction_extension </span><span class="si">{</span><span class="n">jxn_ext</span><span class="si">!r}</span><span class="s2"> for </span><span class="si">{</span><span class="n">mm_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>
+        <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">cached</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">cached</span><span class="p">))</span>
+
+        <span class="n">name</span> <span class="o">=</span> <span class="n">cached</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.tsv&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.tsv.gz&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">name</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.md.gz&quot;</span><span class="p">):</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="n">cached</span><span class="p">,</span> <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;infer&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">obj</span>
+            <span class="k">return</span> <span class="n">obj</span>
+
+        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+            <span class="s2">&quot;Unsupported load() for resource type &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;resource_type&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">None</span><span class="p">)</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;with file </span><span class="si">{</span><span class="n">cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="R3Resource.is_loaded">
+<a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource.is_loaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_loaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the resource currently holds a parsed in-memory object.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            True if an object is cached in memory, False otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="R3Resource.get_loaded">
+<a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource.get_loaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_loaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retrieve the parsed in-memory object without triggering disk I/O.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The loaded object if present, otherwise None.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span></div>
+
+
+<div class="viewcode-block" id="R3Resource.clear_loaded">
+<a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource.clear_loaded">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear_loaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evict the in-memory object cache and close file handles if applicable.</span>
+
+<span class="sd">        Does not delete or modify the on-disk file cache.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">BigWigFile</span><span class="p">):</span>
+                <span class="n">obj</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a string representation of the instance.&quot;&quot;&quot;</span>
+        <span class="bp">cls</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="si">}</span><span class="s2">(url=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="si">!r}</span><span class="s2">, arcname=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">arcname</span><span class="si">!r}</span><span class="s2">, filepath=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">filepath</span><span class="si">!r}</span><span class="s2">)&quot;</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
