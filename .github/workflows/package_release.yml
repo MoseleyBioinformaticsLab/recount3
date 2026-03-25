@@ -32,7 +32,7 @@ jobs:
         python3 -m pip install
         -i https://test.pypi.org/simple/
         --extra-index-url https://pypi.org/simple
-        recount3[dev,biocpy]==${{ needs.release-version.outputs.version }}
+        recount3[dev,bigwig,biocpy]==${{ needs.release-version.outputs.version }}
 
   publish-pypi:
     needs: test-test-pypi
@@ -48,7 +48,7 @@ jobs:
     with:
       install_command: >-
         python3 -m pip install
-        recount3[dev,biocpy]==${{ needs.release-version.outputs.version }}
+        recount3[dev,bigwig,biocpy]==${{ needs.release-version.outputs.version }}
 
   publish-documentation:
     needs: test-pypi
