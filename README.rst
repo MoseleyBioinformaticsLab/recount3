@@ -13,6 +13,10 @@ recount3
    :target: https://pypi.org/project/recount3
    :alt: Supported Python versions
 
+.. image:: https://codecov.io/gh/MoseleyBioinformaticsLab/recount3/branch/main/graph/badge.svg
+   :target: https://codecov.io/gh/MoseleyBioinformaticsLab/recount3
+   :alt: CodeCov
+
 .. image:: https://img.shields.io/github/stars/MoseleyBioinformaticsLab/recount3.svg?style=social&label=Star
    :target: https://github.com/MoseleyBioinformaticsLab/recount3
    :alt: GitHub project
