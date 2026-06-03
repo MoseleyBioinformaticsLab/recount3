@@ -1357,6 +1357,23 @@ class TestCmdDownload:
         assert code == 0
         assert (tmp_path / "subdir").is_dir()
 
+    def test_directory_dest_is_created(self, tmp_path: Path) -> None:
+        """A non-existent directory --dest should be created before
+        per-resource writes run; otherwise every write races on
+        FileNotFoundError (see resource.py case-3 materialization)."""
+        cfg = _make_cfg(tmp_path)
+        res = _make_annotation_resource(cfg)
+        dir_dest = tmp_path / "fresh" / "downloads"
+        assert not dir_dest.exists()
+        args = self._make_args(manifest="m.jsonl", dest=str(dir_dest))
+        with mock.patch(
+            "recount3.cli._iter_manifest", return_value=[res]
+        ), mock.patch("recount3.cli._download_one") as m:
+            m.return_value = {"url": "http://x", "status": "ok", "dest": "/f"}
+            code = _cmd_download(args, cfg)
+        assert code == 0
+        assert dir_dest.is_dir()
+
     def test_all_errors_returns_2(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

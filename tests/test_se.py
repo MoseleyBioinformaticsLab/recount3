@@ -315,7 +315,6 @@ class TestExpandSraAttributesDf:
         result = _expand_sra_attributes_df(df)
         assert "sra_attribute.age" in result.columns
         assert "sra_attribute.disease" in result.columns
-        # Original column is preserved under its actual name.
         assert "sra__sample_attributes" in result.columns
 
     def test_explicit_namespaced_request_resolves_to_dotted(self) -> None:

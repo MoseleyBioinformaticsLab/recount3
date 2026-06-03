@@ -1536,9 +1536,10 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
     cache_mode: CacheMode = args.cache  # type: ignore[assignment]
     overwrite: bool = bool(args.overwrite)
 
-    # Ensure parent for .zip exists; directories will be created by the library.
     if dest.suffix.lower() == ".zip":
         dest.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        dest.mkdir(parents=True, exist_ok=True)
 
     total = len(resources)
     errors = 0
