@@ -472,8 +472,8 @@ class TestCreateRangedSummarizedExperiment:
         bundle.to_ranged_summarized_experiment.return_value = "RSE"
         return bundle
 
-    def test_default_junction_extensions(self) -> None:
-        """When junction_extensions is None, ('MM',) is used."""
+    def test_default_junction_extensions_for_gene(self) -> None:
+        """Gene/exon assemblies do not need RR; default stays ('MM',)."""
         bundle = self._make_bundle_mock()
         with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
@@ -484,6 +484,20 @@ class TestCreateRangedSummarizedExperiment:
             )
         call_kwargs = MockBundle.discover.call_args.kwargs
         assert call_kwargs["junction_exts"] == ("MM",)
+
+    def test_default_junction_extensions_for_junction(self) -> None:
+        """Junction-level RSEs need the RR sidecar for coordinates; the
+        default must include 'RR' so create_rse works out of the box."""
+        bundle = self._make_bundle_mock()
+        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+            MockBundle.discover.return_value = bundle
+            create_ranged_summarized_experiment(
+                project="SRP009615",
+                genomic_unit="junction",
+                organism="human",
+            )
+        call_kwargs = MockBundle.discover.call_args.kwargs
+        assert call_kwargs["junction_exts"] == ("MM", "RR")
 
     def test_explicit_junction_extensions(self) -> None:
         """Provided junction_extensions are tupled with strip()."""

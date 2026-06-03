@@ -337,7 +337,10 @@ def create_ranged_summarized_experiment(
       junction_type: Junction type; typically ``"ALL"``.
       junction_extensions: Iterable of junction artifact extensions
         to include (for example, ``("MM",)`` or ``("MM", "RR")``). If
-        :data:`None`, the default ``("MM",)`` is used.
+        :data:`None`, the default depends on ``genomic_unit``:
+        ``("MM", "RR")`` for ``"junction"`` (so genomic ranges can be
+        attached to each row), and ``("MM",)`` for ``"gene"`` / ``"exon"``
+        (the RR sidecar does not apply to those units).
       include_metadata: Whether to include the five project metadata
         tables in the underlying bundle (recommended).
       include_bigwig: Whether to include per-sample BigWig coverage
@@ -398,7 +401,9 @@ def create_ranged_summarized_experiment(
     )
 
     if junction_extensions is None:
-        junction_exts: tuple[str, ...] = ("MM",)
+        junction_exts: tuple[str, ...] = (
+            ("MM", "RR") if unit == "junction" else ("MM",)
+        )
     else:
         junction_exts = tuple(str(ext).strip() for ext in junction_extensions)
 
