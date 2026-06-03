@@ -96,6 +96,40 @@ if TYPE_CHECKING:  # pragma: no cover
     import summarizedexperiment  # type: ignore[import-not-found]
 
 
+def _resolve_sra_attributes_column(
+    columns: pd.Index | Sequence[str],
+    requested: str,
+) -> str | None:
+    """Pick which column actually holds the SRA attribute strings.
+
+    R-style metadata frames spell this column ``'sra.sample_attributes'``,
+    while the Python bundle layer namespaces metadata columns as
+    ``'{table}__{column}'`` and produces ``'sra__sample_attributes'`` for
+    the same field. Callers may pass either form; this helper tries the
+    requested name first, then the ``.`` <-> ``__`` variant.
+
+    Args:
+      columns: Available column names of the metadata frame.
+      requested: The user-supplied (or default) column name.
+
+    Returns:
+      The matching name from ``columns`` if either form is present, else
+      :data:`None`.
+    """
+    cols = set(columns)
+    if requested in cols:
+        return requested
+    if "." in requested:
+        candidate = requested.replace(".", "__", 1)
+        if candidate in cols:
+            return candidate
+    if "__" in requested:
+        candidate = requested.replace("__", ".", 1)
+        if candidate in cols:
+            return candidate
+    return None
+
+
 def _expand_sra_attributes_df(
     col_df: pd.DataFrame,
     *,
@@ -118,7 +152,11 @@ def _expand_sra_attributes_df(
     Args:
       col_df: Column metadata DataFrame.
       sra_attributes_column: Name of the column carrying the raw SRA attribute strings.
-        If this column is missing, ``col_df`` is returned unchanged.
+        If this exact name is absent, the helper also tries the
+        ``.`` <-> ``__`` variant so the same call works against both
+        R-style (``sra.sample_attributes``) and Python-namespaced
+        (``sra__sample_attributes``) metadata. If neither form is
+        present, ``col_df`` is returned unchanged.
       attribute_column_prefix: Prefix to prepend to attribute names when forming new
         columns.
 
@@ -126,10 +164,11 @@ def _expand_sra_attributes_df(
       A new DataFrame with the same index as ``col_df`` and additional
       columns containing one parsed SRA attribute per column.
     """
-    if sra_attributes_column not in col_df.columns:
+    resolved = _resolve_sra_attributes_column(col_df.columns, sra_attributes_column)
+    if resolved is None:
         return col_df.copy()
 
-    ser = col_df[sra_attributes_column]
+    ser = col_df[resolved]
     rows: list[dict[str, Any]] = []
 
     for value in ser:
@@ -597,17 +636,20 @@ def expand_sra_attributes(
             f"{type(col_bf)!r} instead."
         ) from exc
 
-    if sra_attributes_column not in col_df.columns:
+    resolved = _resolve_sra_attributes_column(
+        col_df.columns, sra_attributes_column
+    )
+    if resolved is None:
         logging.warning(
-            "expand_sra_attributes: column %r not present in column_data; "
-            "returning object unchanged.",
+            "expand_sra_attributes: column %r (and its ./__ variant) "
+            "not present in column_data; returning object unchanged.",
             sra_attributes_column,
         )
         return experiment_or_coldata
 
     expanded_df = _expand_sra_attributes_df(
         col_df,
-        sra_attributes_column=sra_attributes_column,
+        sra_attributes_column=resolved,
         attribute_column_prefix=attribute_column_prefix,
     )
     expanded_bf = bioc_frame_cls.from_pandas(expanded_df)

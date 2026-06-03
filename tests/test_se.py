@@ -308,6 +308,25 @@ class TestExpandSraAttributesDf:
         result = _expand_sra_attributes_df(df)
         assert list(result.index) == ["custom_idx"]
 
+    def test_namespaced_column_auto_detected(self) -> None:
+        """A frame using the Python-namespaced 'sra__sample_attributes'
+        column name is also expanded when the default dotted name is requested."""
+        df = pd.DataFrame({"sra__sample_attributes": ["age;;30|disease;;Cancer"]})
+        result = _expand_sra_attributes_df(df)
+        assert "sra_attribute.age" in result.columns
+        assert "sra_attribute.disease" in result.columns
+        # Original column is preserved under its actual name.
+        assert "sra__sample_attributes" in result.columns
+
+    def test_explicit_namespaced_request_resolves_to_dotted(self) -> None:
+        """The fallback works both directions: a caller passing the
+        namespaced name finds the dotted column too."""
+        df = pd.DataFrame({"sra.sample_attributes": ["age;;42"]})
+        result = _expand_sra_attributes_df(
+            df, sra_attributes_column="sra__sample_attributes"
+        )
+        assert result["sra_attribute.age"].iloc[0] == "42"
+
 
 class TestResolveAnnotationExtension:
     """Tests for the private _resolve_annotation_extension helper."""
