@@ -87,6 +87,7 @@ Note:
 
 from __future__ import annotations
 
+import concurrent.futures
 import dataclasses
 import functools
 import gzip
@@ -2626,14 +2627,22 @@ class R3ResourceBundle:
         dest: str = ".",
         overwrite: bool = False,
         cache: r3_types.CacheMode = "enable",
+        max_workers: int = 4,
     ) -> None:
         """Download all resources in the bundle to a local destination.
 
         This method is a convenience wrapper around
         :meth:`recount3.resource.R3Resource.download` for each contained
-        resource. For more advanced workflows (event logs, streaming to a
-        ZIP archive, and so on) prefer the command-line interface,
-        ``recount3 download``.
+        resource. Downloading is I/O-bound, so by default the resources are
+        fetched concurrently using a pool of worker threads (the same
+        mechanism the ``recount3 download`` CLI command uses). For more
+        advanced workflows (per-resource event logs, JSONL progress) prefer
+        the command-line interface, ``recount3 download``.
+
+        Concurrency is safe because per-resource downloads are coordinated by
+        a shared :class:`threading.Lock` over the on-disk cache and by
+        per-path locks for ``.zip`` archives, and files are materialized
+        atomically. See :mod:`recount3.resource` for details.
 
         Args:
           dest: Destination directory or ``.zip`` path. When a directory
@@ -2644,11 +2653,33 @@ class R3ResourceBundle:
             directory mode.
           cache: Cache behavior: ``"enable"``, ``"disable"``, or
             ``"update"`` as defined by :class:`recount3.types.CacheMode`.
+          max_workers: Maximum number of parallel download threads. Values
+            ``<= 1`` download sequentially. The effective worker count is
+            also capped at the number of resources in the bundle.
 
         Raises:
           ValueError: Propagated from underlying resource download
             failures, for example when an unsupported cache mode is
             selected.
         """
-        for res in self.resources:
-            res.download(path=dest, cache_mode=cache, overwrite=overwrite)
+        resources = self.resources
+        if max_workers <= 1 or len(resources) <= 1:
+            for res in resources:
+                res.download(path=dest, cache_mode=cache, overwrite=overwrite)
+            return
+
+        workers = min(max_workers, len(resources))
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=workers
+        ) as pool:
+            futures = [
+                pool.submit(
+                    res.download,
+                    path=dest,
+                    cache_mode=cache,
+                    overwrite=overwrite,
+                )
+                for res in resources
+            ]
+            for fut in concurrent.futures.as_completed(futures):
+                fut.result()  # re-raise the first download error, if any

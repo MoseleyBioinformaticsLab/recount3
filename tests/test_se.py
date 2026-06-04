@@ -42,6 +42,7 @@ import recount3._utils as _utils
 from recount3.se import (
     _expand_sra_attributes_df,
     _resolve_annotation_extension,
+    _resolve_sra_attributes_column,
     build_summarized_experiment,
     build_ranged_summarized_experiment,
     create_ranged_summarized_experiment,
@@ -203,6 +204,35 @@ def _make_rse(
         col_names=col_names,
         row_ranges_widths=widths,
     )
+
+
+class TestResolveSraAttributesColumn:
+    def test_exact_match(self) -> None:
+        cols = ["sra.sample_attributes", "other"]
+        assert (
+            _resolve_sra_attributes_column(cols, "sra.sample_attributes")
+            == "sra.sample_attributes"
+        )
+
+    def test_dot_to_underscore_variant(self) -> None:
+        cols = ["sra__sample_attributes"]
+        assert (
+            _resolve_sra_attributes_column(cols, "sra.sample_attributes")
+            == "sra__sample_attributes"
+        )
+
+    def test_underscore_to_dot_variant(self) -> None:
+        cols = ["sra.sample_attributes"]
+        assert (
+            _resolve_sra_attributes_column(cols, "sra__sample_attributes")
+            == "sra.sample_attributes"
+        )
+
+    def test_no_match_returns_none(self) -> None:
+        assert (
+            _resolve_sra_attributes_column(["unrelated"], "sra__sample_attributes")
+            is None
+        )
 
 
 class TestExpandSraAttributesDf:

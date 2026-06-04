@@ -2178,6 +2178,39 @@ class TestR3ResourceBundleDownload:
         b = R3ResourceBundle()
         b.download()
 
+    def test_parallel_calls_download_on_each_resource(self) -> None:
+        resources = [_mock_resource() for _ in range(5)]
+        b = R3ResourceBundle(resources=resources)
+        b.download(dest="/some/dir", max_workers=4)
+        for res in resources:
+            res.download.assert_called_once_with(
+                path="/some/dir", cache_mode="enable", overwrite=False
+            )
+
+    def test_max_workers_one_is_sequential(self) -> None:
+        res1 = _mock_resource()
+        res2 = _mock_resource()
+        b = R3ResourceBundle(resources=[res1, res2])
+        b.download(dest="/some/dir", max_workers=1)
+        res1.download.assert_called_once_with(
+            path="/some/dir", cache_mode="enable", overwrite=False
+        )
+        res2.download.assert_called_once_with(
+            path="/some/dir", cache_mode="enable", overwrite=False
+        )
+
+    def test_download_error_propagates(self) -> None:
+        good = _mock_resource()
+        bad = _mock_resource()
+        bad.download.side_effect = RuntimeError("boom")
+        b = R3ResourceBundle(resources=[good, bad])
+        with pytest.raises(RuntimeError, match="boom"):
+            b.download(max_workers=4)
+
+    def test_empty_bundle_parallel_noop(self) -> None:
+        b = R3ResourceBundle()
+        b.download(max_workers=4)
+
 
 class TestModuleConstants:
     def test_gtf_attr_pair_re_matches(self) -> None:
