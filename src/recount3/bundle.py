@@ -2093,9 +2093,6 @@ class R3ResourceBundle:
           the necessary resource attributes cannot be inferred, the column
           contains ``pd.NA``.
         """
-        from recount3._descriptions import R3BigWig
-        from recount3.config import default_config
-
         out = col_df.copy()
 
         if "external_id" not in out.columns:
@@ -2130,9 +2127,6 @@ class R3ResourceBundle:
                 if resolved:
                     data_source = resolved
 
-        cfg = default_config()
-        base_url = cfg.base_url.rstrip("/")
-
         urls: list[str | None] = []
         for ext_id in out["external_id"]:
             ext_id_str = str(ext_id).strip()
@@ -2140,14 +2134,13 @@ class R3ResourceBundle:
                 urls.append(None)
                 continue
             try:
-                bw_desc = R3BigWig(
-                    resource_type="bigwig_files",
+                urls.append(resource.build_url(
+                    "bigwig_files",
                     organism=organism,
                     data_source=data_source,
                     project=project,
                     sample=ext_id_str,
-                )
-                urls.append(f"{base_url}/{bw_desc.url_path()}")
+                ))
             except Exception:  # pylint: disable=broad-except
                 urls.append(None)
 

@@ -2981,13 +2981,7 @@ class TestAddBigwigUrls:
             "external_id": pd.array(["SRR001"], dtype="string"),
             "recount_seq_qc__file_source": ["some/path/sra"],
         })
-        mock_bw = MagicMock()
-        mock_bw.url_path.return_value = "human/data_sources/sra/base_sums/SRP001/SRR001.bw"
-        mock_cfg = MagicMock()
-        mock_cfg.base_url = "https://duffel.example.com/recount3"
-        with patch("recount3._descriptions.R3BigWig", return_value=mock_bw), \
-             patch("recount3.config.default_config", return_value=mock_cfg):
-            result = b._add_bigwig_urls(col_df)
+        result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
         assert result["BigWigURL"].iloc[0] is not None
 
@@ -3030,12 +3024,9 @@ class TestAddBigwigUrls:
         )
         b = R3ResourceBundle(resources=[res])
         col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
-        mock_bw = MagicMock()
-        mock_bw.url_path.return_value = "human/data_sources/sra/base_sums/SRP001/SRR001.bw"
         mock_cfg = MagicMock()
-        mock_cfg.base_url = "https://duffel.example.com/recount3"
-        with patch("recount3._descriptions.R3BigWig", return_value=mock_bw), \
-             patch("recount3.config.default_config", return_value=mock_cfg):
+        mock_cfg.base_url = "https://duffel.example.com/recount3/"
+        with patch("recount3.resource.default_config", return_value=mock_cfg):
             result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
         url = result["BigWigURL"].iloc[0]

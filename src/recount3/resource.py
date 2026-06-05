@@ -89,8 +89,10 @@ import dataclasses
 import gzip
 import threading
 import urllib.parse
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import scipy.io
@@ -242,6 +244,42 @@ def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_matrix:
     return scipy.sparse.csr_matrix(mat)
 
 
+def build_url(
+    resource_type: str,
+    *,
+    config: Config | None = None,
+    **fields: Any,
+) -> str:
+    """Build the absolute URL for a resource from its description fields.
+
+    Constructs the appropriate
+    :class:`~recount3._descriptions.R3ResourceDescription` subclass via the
+    type registry and joins its repository-relative path onto the configured
+    base URL. The per-resource-type path logic lives in each description's
+    ``url_path()``; this function only supplies the base URL and the join,
+    mirroring what :meth:`R3Resource.__post_init__` does. Useful when only a
+    URL is needed and a full :class:`R3Resource` would be overkill (e.g.
+    populating a ``BigWigURL`` metadata column).
+
+    Args:
+      resource_type: Registered resource-type key (e.g. ``"bigwig_files"``).
+      config: Optional :class:`~recount3.config.Config`; the global default is
+        used when omitted.
+      **fields: Description fields for the resource type (``organism``,
+        ``data_source``, ``project``, ``sample``, ...).
+
+    Returns:
+      The full, absolute network URL for the resource.
+
+    Raises:
+      KeyError, ValueError: If ``resource_type`` is unknown or the supplied
+        fields are invalid for it (propagated from the description factory).
+    """
+    cfg = config or default_config()
+    desc = R3ResourceDescription(resource_type=resource_type, **fields)
+    return urllib.parse.urljoin(cfg.base_url, desc.url_path())
+
+
 @dataclass(slots=True)
 class R3Resource:
     """Resource that manages URL resolution, caching, materialization, and loading.
@@ -272,6 +310,40 @@ class R3Resource:
         cfg = self.config or default_config()
         if self.url is None:
             self.url = urllib.parse.urljoin(cfg.base_url, self.description.url_path())
+
+    @classmethod
+    def from_mapping(
+        cls,
+        mapping: Mapping[str, Any],
+        *,
+        config: Config | None = None,
+    ) -> R3Resource:
+        """Rehydrate an :class:`R3Resource` from a serialized mapping.
+
+        Builds the resource's :class:`~recount3._descriptions.R3ResourceDescription`
+        from the mapping's description fields and returns a configured resource.
+        Derived convenience keys this class emits when serialized (``url``,
+        ``arcname``) are ignored; the canonical URL is recomputed from the
+        description and configuration.
+
+        Args:
+          mapping: JSON-like mapping for a single resource (e.g. a JSONL line),
+            containing ``resource_type`` and the fields for that type.
+          config: Optional :class:`~recount3.config.Config` for URL/cache
+            behavior; the global default is used when omitted.
+
+        Returns:
+          A configured :class:`R3Resource`.
+
+        Raises:
+          KeyError: If ``resource_type`` is missing.
+          ValueError: If the fields are invalid for that resource type.
+        """
+        fields = dict(mapping)
+        fields.pop("url", None)
+        fields.pop("arcname", None)
+        desc = R3ResourceDescription(**fields)
+        return cls(description=desc, config=config)
 
     @property
     def arcname(self) -> str:

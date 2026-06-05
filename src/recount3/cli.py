@@ -288,7 +288,6 @@ from pathlib import Path
 import sys
 from typing import Any, Iterable, Iterator, Mapping
 
-from recount3._descriptions import R3ResourceDescription
 from recount3.bundle import R3ResourceBundle
 from recount3.config import Config, default_config
 from recount3.errors import (
@@ -1081,12 +1080,7 @@ def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
       KeyError: If ``resource_type`` is missing.
       ValueError: If the resource fields are invalid for that type.
     """
-    clean = dict(mapping)
-    clean.pop("url", None)
-    clean.pop("arcname", None)
-
-    desc = R3ResourceDescription(**clean)
-    return R3Resource(description=desc, config=cfg)
+    return R3Resource.from_mapping(mapping, config=cfg)
 
 
 def _write_jsonl(

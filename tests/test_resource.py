@@ -1490,3 +1490,92 @@ def test_repr_reflects_filepath_after_set(cfg: Config) -> None:
     res = _make("data_sources", cfg, organism="human")
     res.filepath = "/some/path/homes_index"
     assert "/some/path/homes_index" in repr(res)
+
+
+# ===========================================================================
+# build_url
+# ===========================================================================
+
+
+def test_build_url_with_explicit_config(cfg: Config) -> None:
+    """Joins the description's url_path onto the supplied config's base_url."""
+    url = res_module.build_url(
+        "bigwig_files",
+        config=cfg,
+        organism="human",
+        data_source="sra",
+        project="SRP009615",
+        sample="SRR387777",
+    )
+    expected = R3ResourceDescription(
+        resource_type="bigwig_files",
+        organism="human",
+        data_source="sra",
+        project="SRP009615",
+        sample="SRR387777",
+    ).url_path()
+    assert url == cfg.base_url + expected
+    assert url.endswith("sra.base_sums.SRP009615_SRR387777.ALL.bw")
+
+
+def test_build_url_uses_default_config_when_omitted(tmp_path: Path) -> None:
+    """Falls back to default_config() when no config is given."""
+    fallback = _fake_cfg(tmp_path)
+    with mock.patch("recount3.resource.default_config", return_value=fallback):
+        url = res_module.build_url(
+            "bigwig_files",
+            organism="human",
+            data_source="sra",
+            project="SRP009615",
+            sample="SRR387777",
+        )
+    assert url.startswith("https://fallback.org/recount3/")
+
+
+def test_build_url_invalid_resource_type_raises(cfg: Config) -> None:
+    """Propagates the description factory's error for an unknown type."""
+    with pytest.raises((KeyError, ValueError)):
+        res_module.build_url("not_a_real_type", config=cfg, organism="human")
+
+
+# ===========================================================================
+# R3Resource.from_mapping
+# ===========================================================================
+
+
+def test_from_mapping_builds_configured_resource(cfg: Config) -> None:
+    """Rehydrates a resource with the right description, config, and url."""
+    res = R3Resource.from_mapping(
+        {"resource_type": "data_sources", "organism": "human"},
+        config=cfg,
+    )
+    assert isinstance(res, R3Resource)
+    assert res.config is cfg
+    assert res.description.organism == "human"
+    assert res.url == cfg.base_url + res.description.url_path()
+
+
+def test_from_mapping_ignores_derived_url_and_arcname_keys(cfg: Config) -> None:
+    """Stale serialized url/arcname keys are dropped; url is recomputed."""
+    res = R3Resource.from_mapping(
+        {
+            "resource_type": "data_sources",
+            "organism": "human",
+            "url": "STALE",
+            "arcname": "STALE",
+        },
+        config=cfg,
+    )
+    assert res.url != "STALE"
+    assert res.url == cfg.base_url + res.description.url_path()
+
+
+def test_from_mapping_defaults_config_when_omitted(tmp_path: Path) -> None:
+    """With no config, the url derives from default_config()'s base_url."""
+    fallback = _fake_cfg(tmp_path)
+    with mock.patch("recount3.resource.default_config", return_value=fallback):
+        res = R3Resource.from_mapping(
+            {"resource_type": "data_sources", "organism": "human"}
+        )
+    assert res.config is None
+    assert res.url.startswith("https://fallback.org/recount3/")
