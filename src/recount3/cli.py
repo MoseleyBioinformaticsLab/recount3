@@ -133,7 +133,7 @@ download
     --overwrite           Overwrite existing files (dir mode only).
 
   Behavior:
-    --jobs=<n>            Max parallel downloads (default 4).
+    --jobs=<n>            Max parallel downloads (default 8).
     --cache=MODE          Cache behavior (default: enable). MODE is one of:
                           enable - use cache; disable - bypass cache;
                           update - force re-download then cache.
@@ -669,7 +669,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_dl.add_argument(
         "--jobs",
         type=int,
-        default=4,
+        default=8,
         metavar="N",
         help=(
             "Number of parallel download threads. "

@@ -2620,7 +2620,7 @@ class R3ResourceBundle:
         dest: str = ".",
         overwrite: bool = False,
         cache: r3_types.CacheMode = "enable",
-        max_workers: int = 4,
+        max_workers: int = 8,
     ) -> None:
         """Download all resources in the bundle to a local destination.
 

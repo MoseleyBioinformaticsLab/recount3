@@ -156,7 +156,7 @@ class TestBuildParser:
         assert args.command == "download"
         assert args.manifest == "manifest.jsonl"
         assert args.dest == "/tmp"
-        assert args.jobs == 4
+        assert args.jobs == 8
         assert args.cache == "enable"
 
     def test_download_subcommand_inline(self) -> None:
