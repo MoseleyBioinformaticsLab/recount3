@@ -48,12 +48,16 @@ Tier 1: Type-specific search wrappers
     the above for a given project and returns a combined resource list
 
 Tier 2: Discovery helpers
-  These functions download and parse metadata to return structured results:
+  These functions download and parse metadata to return structured results.
+  All are part of the public top-level surface (re-exported from
+  :mod:`recount3`):
 
   * :func:`available_samples`: DataFrame of samples available across data sources
   * :func:`available_projects`: DataFrame of projects with sample counts
   * :func:`project_homes`: DataFrame mapping projects to their data-source home URLs
   * :func:`samples_for_project`: sample IDs for a specific project
+  * :func:`create_sample_project_lists`: build per-data-source sample/project
+    lists (backs the ``ids`` CLI command)
   * :func:`annotation_options`: mapping of annotation names to extension codes
   * :func:`annotation_ext`: resolve a name or code to a canonical extension string
 

@@ -114,7 +114,10 @@ from recount3.se import (
 from recount3.search import (
     annotation_ext,
     annotation_options,
+    available_projects,
+    available_samples,
     create_sample_project_lists,
+    project_homes,
     samples_for_project,
     search_annotations,
     search_bigwig_files,
@@ -171,6 +174,9 @@ __all__ = [
     "create_rse",
     # Search
     "samples_for_project",
+    "available_samples",
+    "available_projects",
+    "project_homes",
     "search_project_all",
     "search_annotations",
     "search_count_files_gene_or_exon",
