@@ -38,7 +38,7 @@ This is an internal module. For BigWig access via the public API, use
 The optional dependency is imported through
 :func:`~recount3._utils.get_pybigwig_module`.
 
-Typical usage::
+Typical usage example::
 
   >>> from pathlib import Path
   >>> from recount3._bigwig import BigWigFile

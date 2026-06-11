@@ -58,7 +58,7 @@ Valid values for the ``organism`` and ``data_source`` fields are exposed as
 the module-level constants :data:`VALID_ORGANISMS` and
 :data:`VALID_DATA_SOURCES`.
 
-Typical usage::
+Typical usage example::
 
   from recount3._descriptions import R3ResourceDescription
 
