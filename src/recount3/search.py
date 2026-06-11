@@ -66,7 +66,7 @@ StringOrIterable and the Cartesian product pattern
   each parameter: either a single string or an iterable of strings. When
   iterables are supplied, the function computes the Cartesian product across
   all parameters and returns one resource per unique combination. For example,
-  passing ``project=["SRP009615", "SRP012682"]`` and ``genomic_unit=["gene",
+  passing ``project=["SRP009615", "SRP001558"]`` and ``genomic_unit=["gene",
   "exon"]`` produces four resources.
 
 Annotation names and extension codes
@@ -345,7 +345,7 @@ def search_count_files_gene_or_exon(
                 organism="human",
                 data_source="sra",
                 genomic_unit="gene",
-                project=["SRP009615", "SRP012682"],
+                project=["SRP009615", "SRP001558"],
             )
     """
     grid = _build_param_grid(

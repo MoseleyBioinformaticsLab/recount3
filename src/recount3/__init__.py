@@ -57,7 +57,7 @@ Typical usage example: lower-level (multi-project or custom workflows)::
   bundle = R3ResourceBundle.discover(
       organism="human",
       data_source="sra",
-      project=["SRP009615", "SRP012682"],
+      project=["SRP009615", "SRP001558"],
   )
   counts = bundle.filter(
       resource_type="count_files_gene_or_exon",

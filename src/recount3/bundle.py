@@ -1348,7 +1348,7 @@ class R3ResourceBundle:
                 bundle = R3ResourceBundle.discover(
                     organism="human",
                     data_source="sra",
-                    project=["SRP009615", "SRP012682"],
+                    project=["SRP009615", "SRP001558"],
                     genomic_units=("gene",),
                 )
 
