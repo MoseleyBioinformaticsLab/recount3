@@ -926,6 +926,7 @@ class TestToGenomicRanges:
         mock_gr_cls.from_pandas.assert_called_once_with(ranges_df)
 
 
+@pytest.mark.requires_biocpy
 class TestConstructSummarizedExperiment:
     def test_raises_if_not_2d(self) -> None:
         counts = pd.DataFrame({"a": [1, 2]}).iloc[:, 0]
@@ -985,6 +986,7 @@ class TestConstructSummarizedExperiment:
         assert se is not None
 
 
+@pytest.mark.requires_biocpy
 class TestConstructRangedSummarizedExperiment:
     def _ranges(self, n: int) -> pd.DataFrame:
         return pd.DataFrame({
@@ -1752,6 +1754,7 @@ class TestNormalizeSampleMetadata:
         assert "recount3_metadata_provenance" in result.attrs
 
 
+@pytest.mark.requires_biocpy
 class TestToSummarizedExperiment:
     def _bundle_with_gene_counts(
         self,
@@ -1851,11 +1854,13 @@ class TestToRangedSummarizedExperiment:
 
         return R3ResourceBundle(resources=[res_count, res_ann])
 
+    @pytest.mark.requires_biocpy
     def test_gene_with_gtf_annotation(self, _synthetic_gtf_gz: Path) -> None:
         b = self._bundle_with_gene_gtf(_synthetic_gtf_gz)
         rse = b.to_ranged_summarized_experiment(genomic_unit="gene", autoload=False)
         assert rse is not None
 
+    @pytest.mark.requires_biocpy
     def test_fallback_to_se_when_no_ranges(self) -> None:
         df = _gene_df()
         res = _mock_resource(
@@ -1886,6 +1891,7 @@ class TestToRangedSummarizedExperiment:
                 allow_fallback_to_se=False,
             )
 
+    @pytest.mark.requires_biocpy
     def test_junction_with_rr_coordinates(self, tmp_path: Path) -> None:
         rr_content = "seqnames\tstarts\tends\tstrand\tjunction_id\nchr1\t1\t100\t+\tJX001\nchr1\t200\t300\t+\tJX002\n"
         rr_gz = tmp_path / "jxn.RR.gz"
@@ -1974,6 +1980,7 @@ class TestToRangedSummarizedExperiment:
                 allow_fallback_to_se=False,
             )
 
+    @pytest.mark.requires_biocpy
     def test_no_rr_fallback_to_se_allowed(self) -> None:
         mm_df = _gene_df()
         res_mm = _mock_resource(
@@ -2053,6 +2060,7 @@ class TestToRangedSummarizedExperiment:
                 allow_fallback_to_se=False,
             )
 
+    @pytest.mark.requires_biocpy
     def test_rr_duplicate_row_names_made_unique(self, tmp_path: Path) -> None:
         rr_content = (
             "seqnames\tstarts\tends\tstrand\tjunction_id\n"
@@ -2091,6 +2099,7 @@ class TestToRangedSummarizedExperiment:
         )
         assert rse is not None
 
+    @pytest.mark.requires_biocpy
     def test_rr_without_strand_column_defaults_to_star(self, tmp_path: Path) -> None:
         rr_content = "seqnames\tstarts\tends\nchr1\t1\t100\nchr1\t200\t300\n"
         rr_df = pd.read_csv(io.StringIO(rr_content), sep="\t")
@@ -2124,6 +2133,7 @@ class TestToRangedSummarizedExperiment:
         )
         assert rse is not None
 
+    @pytest.mark.requires_biocpy
     def test_duplicate_feature_ids_in_counts(self, caplog: pytest.LogCaptureFixture) -> None:
         df = pd.DataFrame(
             [[1.0], [2.0]],
@@ -2495,6 +2505,7 @@ class TestNormalizeSampleMetadataExternalIdFillback:
 
 
 class TestToRangedSEAutoload:
+    @pytest.mark.requires_biocpy
     def test_autoload_true_downloads_gtf(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "genes.gtf.gz"
         content = (
@@ -2535,6 +2546,7 @@ class TestToRangedSEAutoload:
         res_ann.download.assert_called()
         assert rse is not None
 
+    @pytest.mark.requires_biocpy
     def test_enrich_cols_joined_to_row_data(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "genes_with_name.gtf.gz"
         content = (
@@ -2588,6 +2600,7 @@ class TestToRangedSEAutoload:
                 allow_fallback_to_se=False,
             )
 
+    @pytest.mark.requires_biocpy
     def test_junction_autoload_downloads_rr(self) -> None:
         rr_content = (
             "seqnames\tstarts\tends\tstrand\tjunction_id\n"
@@ -2691,6 +2704,7 @@ class TestRealGtfFixtureIntegration:
         first_id = str(ranges["feature_id"].iloc[0])
         assert "|" in first_id
 
+    @pytest.mark.requires_biocpy
     def test_end_to_end_ranged_se_with_real_gene_gtf(self) -> None:
         """Count DataFrame + real GTF -> RangedSummarizedExperiment."""
         counts_df = pd.DataFrame(
@@ -2783,6 +2797,7 @@ class TestSelectGtfResourcePeekException:
         assert result is res
 
 
+@pytest.mark.requires_biocpy
 class TestConstructSELengthGuards:
     def test_raises_when_row_data_length_changed_by_unique_columns(self) -> None:
         counts = _gene_df()
@@ -2831,6 +2846,7 @@ class TestConstructSELengthGuards:
                 )
 
 
+@pytest.mark.requires_biocpy
 class TestConstructRSELengthGuards:
     def _ranges(self) -> pd.DataFrame:
         return pd.DataFrame({

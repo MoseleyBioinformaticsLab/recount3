@@ -867,9 +867,9 @@ def test_load_force_bypasses_in_memory_cache(cfg: Config) -> None:
 # ===========================================================================
 
 
+@pytest.mark.requires_pybigwig
 def test_load_bigwig_returns_open_bigwigfile(cfg: Config) -> None:
     """load() for bigwig_files returns an open BigWigFile instance."""
-    pytest.importorskip("pyBigWig")
     res = _make(
         "bigwig_files",
         cfg,
@@ -885,9 +885,9 @@ def test_load_bigwig_returns_open_bigwigfile(cfg: Config) -> None:
     res.clear_loaded()
 
 
+@pytest.mark.requires_pybigwig
 def test_load_bigwig_second_call_returns_cached(cfg: Config) -> None:
     """Second load() without force=True returns the same BigWigFile."""
-    pytest.importorskip("pyBigWig")
     res = _make(
         "bigwig_files",
         cfg,
@@ -1438,9 +1438,9 @@ def test_clear_loaded_evicts_dataframe(cfg: Config) -> None:
     assert not res.is_loaded()
 
 
+@pytest.mark.requires_pybigwig
 def test_clear_loaded_closes_bigwig(cfg: Config) -> None:
     """clear_loaded() calls close() on a cached BigWigFile."""
-    pytest.importorskip("pyBigWig")
     res = _make(
         "bigwig_files",
         cfg,

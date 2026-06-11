@@ -244,9 +244,9 @@ def test_exit_passes_exception_info_and_closes() -> None:
     assert not bw.is_open()
 
 
+@pytest.mark.requires_pybigwig
 def test_chroms_all_returns_full_mapping() -> None:
     """chroms() returns a dict mapping every chromosome to its length."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     result = bw.chroms()
     assert isinstance(result, dict)
@@ -254,18 +254,18 @@ def test_chroms_all_returns_full_mapping() -> None:
     bw.close()
 
 
+@pytest.mark.requires_pybigwig
 def test_chroms_single_returns_integer_length() -> None:
     """chroms(chrom) returns the integer length for the named chromosome."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     result = bw.chroms(_BW_CHROM)
     assert result == _BW_CHROM_LEN
     bw.close()
 
 
+@pytest.mark.requires_pybigwig
 def test_header_returns_dict_with_standard_fields() -> None:
     """header() returns a dict that includes standard BigWig header keys."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     h = bw.header()
     assert isinstance(h, dict)
@@ -274,9 +274,9 @@ def test_header_returns_dict_with_standard_fields() -> None:
     bw.close()
 
 
+@pytest.mark.requires_pybigwig
 def test_values_returns_list_of_per_base_values() -> None:
     """values() returns exactly one float per base in the requested interval."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     result = bw.values(_BW_CHROM, 0, 10)
     assert isinstance(result, list)
@@ -296,9 +296,9 @@ def test_values_numpy_flag_forwarded_verbatim() -> None:
     mock_handle.values.assert_called_once_with(_BW_CHROM, 0, 2, numpy=True)
 
 
+@pytest.mark.requires_pybigwig
 def test_stats_whole_chrom_no_coords() -> None:
     """stats(chrom) with no start/end summarises the whole chromosome."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     result = bw.stats(_BW_CHROM)
     assert isinstance(result, list)
@@ -306,9 +306,9 @@ def test_stats_whole_chrom_no_coords() -> None:
     bw.close()
 
 
+@pytest.mark.requires_pybigwig
 def test_stats_with_start_and_end_coords() -> None:
     """stats(chrom, start, end) returns stats for the given interval."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     result = bw.stats(_BW_CHROM, 0, 10_000)
     assert isinstance(result, list)
@@ -367,9 +367,9 @@ def test_intervals_whole_chrom_omits_coords_from_call() -> None:
     assert result == ((0, 1000, 0.0),)
 
 
+@pytest.mark.requires_pybigwig
 def test_intervals_with_coords_returns_region_tuples() -> None:
     """intervals(chrom, start, end) returns (start, end, value) tuples."""
-    pytest.importorskip("pyBigWig")
     bw = BigWigFile(path=_BW_PATH)
     result = bw.intervals(_BW_CHROM, 0, 1_000)
     assert result is not None

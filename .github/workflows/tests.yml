@@ -4,16 +4,24 @@ on:
   workflow_call:
     inputs:
       install_command:
-        description: The command for installing the package to test (Linux, full extras).
+        description: Install command for Linux (full extras, including bigwig and biocpy).
         required: true
         type: string
-      install_command_minimal:
+      install_command_macos:
         description: >-
-          Install command for platforms without pyBigWig support (Windows, macOS).
-          Defaults to installing without the bigwig extra.
+          Install command for macOS. Omits the bigwig extra (pyBigWig has no
+          reliable macOS wheel); the BiocPy stack builds from source there.
         required: false
         type: string
         default: 'python -m pip install -e ".[dev,biocpy]"'
+      install_command_windows:
+        description: >-
+          Install command for Windows. Core only: neither pyBigWig nor the BiocPy
+          ranged stack (iranges/genomicranges) provides Windows wheels, and the
+          latter fails to build from source. BiocPy-dependent tests skip there.
+        required: false
+        type: string
+        default: 'python -m pip install -e ".[dev]"'
 
 jobs:
   run-tests:
@@ -47,13 +55,22 @@ jobs:
             ${{ inputs.install_command }}
           attempt_limit: 5
           attempt_delay: 10000
-      - name: Install package (Windows/macOS, no bigwig)
-        if: runner.os != 'Linux'
+      - name: Install package (macOS, no bigwig)
+        if: runner.os == 'macOS'
         uses: Wandalen/wretry.action@master
         with:
           command: |
             python -m pip install --upgrade pip
-            ${{ inputs.install_command_minimal }}
+            ${{ inputs.install_command_macos }}
+          attempt_limit: 5
+          attempt_delay: 10000
+      - name: Install package (Windows, core only)
+        if: runner.os == 'Windows'
+        uses: Wandalen/wretry.action@master
+        with:
+          command: |
+            python -m pip install --upgrade pip
+            ${{ inputs.install_command_windows }}
           attempt_limit: 5
           attempt_delay: 10000
       - name: Run tests

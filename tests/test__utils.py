@@ -1499,6 +1499,9 @@ def test_get_biocframe_class_returns_biocframe() -> None:
 def test_get_biocframe_class_propagates_import_error() -> None:
     """ImportError from _get_module_attribute propagates unchanged."""
     with mock.patch(
+        "recount3._utils.import_optional_module",
+        return_value=types.ModuleType("biocframe"),
+    ), mock.patch(
         "recount3._utils._get_module_attribute",
         side_effect=ImportError("no BiocFrame"),
     ):
@@ -1516,6 +1519,9 @@ def test_get_genomicranges_class_returns_genomicranges() -> None:
 def test_get_genomicranges_class_propagates_import_error() -> None:
     """ImportError from _get_module_attribute propagates."""
     with mock.patch(
+        "recount3._utils.import_optional_module",
+        return_value=types.ModuleType("genomicranges"),
+    ), mock.patch(
         "recount3._utils._get_module_attribute",
         side_effect=ImportError("no GenomicRanges"),
     ):
@@ -1533,6 +1539,9 @@ def test_get_summarizedexperiment_class_returns_class() -> None:
 def test_get_summarizedexperiment_class_propagates_import_error() -> None:
     """ImportError from _get_module_attribute propagates."""
     with mock.patch(
+        "recount3._utils.import_optional_module",
+        return_value=types.ModuleType("summarizedexperiment"),
+    ), mock.patch(
         "recount3._utils._get_module_attribute",
         side_effect=ImportError("no SE"),
     ):
@@ -1550,6 +1559,9 @@ def test_get_ranged_summarizedexperiment_class_returns_class() -> None:
 def test_get_ranged_summarizedexperiment_class_propagates_error() -> None:
     """ImportError from _get_module_attribute propagates."""
     with mock.patch(
+        "recount3._utils.import_optional_module",
+        return_value=types.ModuleType("summarizedexperiment"),
+    ), mock.patch(
         "recount3._utils._get_module_attribute",
         side_effect=ImportError("no RSE"),
     ):
