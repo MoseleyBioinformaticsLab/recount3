@@ -506,8 +506,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "  organism:             human | mouse\n"
             "  data_source:          sra | gtex | tcga\n"
             "  genomic_unit:         gene | exon | junction\n"
-            "  annotation_extension: G026 | G029 | R109 | "
-            "F006 | V029 ...\n"
+            "  annotation_extension: G026 | G029 | F006 | "
+            "R109 | ERCC | SIRV\n"
             "  table_name:           recount_qc | "
             "recount_project_info | ...\n"
             "\nExamples:\n"
@@ -823,7 +823,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="KEY",
         help=(
             "Annotation extension to select for gene/exon "
-            "counts (e.g., 'G026', 'G029', 'V029'). "
+            "counts (e.g., 'G026', 'G029', 'R109'). "
             "If omitted, uses the first available."
         ),
     )
@@ -893,7 +893,7 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="KEY",
         help=(
             "Annotation extension to select for gene/exon "
-            "counts (e.g., 'G026', 'G029', 'V029'). "
+            "counts (e.g., 'G026', 'G029', 'R109'). "
             "If omitted, uses the first available."
         ),
     )
