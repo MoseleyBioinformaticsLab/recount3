@@ -49,7 +49,10 @@ Attributes:
         * ``"family"``: all count resources must belong to the same
           high-level family (gene/exon versus junctions).
         * ``"feature"``: stricter: all resources must additionally share
-          an identical feature space (same genomic unit and annotation).
+          an identical feature space: the same genomic unit for
+          gene/exon resources, or the same junction type and extension for
+          junction resources. (Note: this does not constrain the annotation
+          extension, so mixed-annotation gene/exon builds are not rejected.)
 
     StringOrIterable: ``str | Iterable[str]``. Most search functions accept
         either a single string or an iterable of strings for each parameter.

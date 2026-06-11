@@ -42,18 +42,37 @@ The module also exposes three cache utility functions:
 :func:`recount3_cache_rm`.
 
 Environment variables (all optional):
-  * ``RECOUNT3_URL``: base URL of the duffel mirror
-    (default: ``https://duffel.rail.bio/recount3/``).
+  * ``RECOUNT3_URL``: base URL of the recount3 mirror
+    (default: ``http://duffel.rail.bio/recount3/``).
   * ``RECOUNT3_CACHE_DIR``: directory for the on-disk file cache
-    (default: ``~/.cache/recount3``).
+    (default: ``~/.cache/recount3/files``).
   * ``RECOUNT3_CACHE_DISABLE``: set to ``"1"`` to disable caching entirely.
-  * ``RECOUNT3_HTTP_TIMEOUT``: HTTP request timeout in seconds (default: 30).
+  * ``RECOUNT3_HTTP_TIMEOUT``: HTTP request timeout in seconds (default: 60).
   * ``RECOUNT3_MAX_RETRIES``: maximum retry attempts for transient errors
     (default: 3).
-  * ``RECOUNT3_INSECURE_SSL``: set to ``"1"`` to skip TLS verification
-    (unsafe; use only for debugging certificate issues).
+  * ``RECOUNT3_INSECURE_SSL``: set to ``"1"`` to skip TLS certificate
+    verification. This only affects ``https://`` base URLs; it is a no-op for
+    the default ``http://`` Duffel mirror (see "Mirrors" below).
   * ``RECOUNT3_USER_AGENT``: custom ``User-Agent`` header string.
-  * ``RECOUNT3_CHUNK_SIZE``: streaming chunk size in bytes (default: 65536).
+  * ``RECOUNT3_CHUNK_SIZE``: streaming chunk size in bytes
+    (default: 1048576, i.e. 1 MiB).
+
+Mirrors:
+  recount3 publishes the same relative file layout on several
+  interchangeable public mirrors; ``RECOUNT3_URL`` / ``base_url`` works with
+  any of them unchanged:
+
+  * Duffel load balancer (default): ``http://duffel.rail.bio/recount3/``
+  * AWS Open Data: ``https://recount-opendata.s3.amazonaws.com/recount3/release/``
+  * JHU IDIES (Dataverse): ``https://data.idies.jhu.edu/recount3/data/``
+
+  The package is coupled to recount3's layout convention rather than to any one
+  host, so switching mirrors is purely a ``base_url`` change. TLS settings apply
+  only to ``https://`` endpoints: the default Duffel mirror is plain ``http``
+  (no TLS, so ``insecure_ssl`` is irrelevant), the AWS and JHU mirrors are
+  ``https`` with valid certificates (no flag needed), and
+  ``RECOUNT3_INSECURE_SSL`` / ``--insecure-ssl`` is meaningful only for an
+  ``https`` endpoint presenting an untrusted or self-signed certificate.
 
 Typical usage example::
 
@@ -90,9 +109,13 @@ class Config:
     """Immutable configuration bag.
 
     Attributes:
-      base_url: Base URL for the duffel mirror (ends with a trailing slash).
+      base_url: Base URL for the recount3 mirror (ends with a trailing slash).
+          Defaults to the Duffel load balancer; the AWS Open Data and JHU IDIES
+          mirrors serve the same layout (see the module docstring "Mirrors").
       timeout: Network timeout in seconds.
-      insecure_ssl: True to disable TLS verification (not recommended).
+      insecure_ssl: True to disable TLS certificate verification (not
+          recommended). Only affects ``https://`` base URLs; a no-op for the
+          default ``http://`` Duffel mirror.
       max_retries: Max HTTP retry attempts for transient errors.
       user_agent: Custom HTTP User-Agent.
       cache_dir: Cache directory for downloaded files.

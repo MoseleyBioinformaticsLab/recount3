@@ -203,7 +203,8 @@ Relevant environment variables (if set):
   RECOUNT3_CACHE_DISABLE     "1" disables cache, anything else enables
   RECOUNT3_HTTP_TIMEOUT      HTTP timeout in seconds (int)
   RECOUNT3_MAX_RETRIES       Max retry attempts for transient errors (int)
-  RECOUNT3_INSECURE_SSL      "1" to disable TLS verification (unsafe)
+  RECOUNT3_INSECURE_SSL      "1" to disable TLS verification (unsafe; https
+                             base URLs only, no-op for the default http mirror)
   RECOUNT3_USER_AGENT        Custom HTTP User-Agent string
 
 Global flags mirror these settings:
@@ -227,8 +228,11 @@ Exit codes
 
 Security and safety
 -------------------
-* TLS verification is on by default. ``--insecure-ssl`` disables it and
-  should only be used to debug certificate issues.
+* TLS verification is on by default for ``https://`` mirrors.
+  ``--insecure-ssl`` disables it and should only be used to debug certificate
+  issues. It applies only to ``https://`` base URLs and is a no-op for the
+  default ``http://`` Duffel mirror; the AWS Open Data and JHU IDIES https
+  mirrors have valid certificates and need no flag.
 * The cache reduces repeated downloads. Choose ``--cache=disable`` to bypass it
   when correctness requires a direct fetch.
 
@@ -378,7 +382,8 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Disable TLS certificate verification. "
-            "NOT recommended outside debugging. "
+            "Applies only to https base URLs (no-op for the default http "
+            "Duffel mirror). NOT recommended outside debugging. "
             "Env: RECOUNT3_INSECURE_SSL=1."
         ),
     )

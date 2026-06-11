@@ -78,7 +78,8 @@ Note:
     resource type:
 
     * Gene/exon count resources -> :class:`pandas.DataFrame` (features x samples).
-    * Junction MM resources -> :class:`scipy.sparse.csr_matrix`.
+    * Junction MM resources -> a sparse-backed :class:`pandas.DataFrame`
+      (built via :meth:`pandas.DataFrame.sparse.from_spmatrix`).
     * Junction ID/RR resources -> :class:`pandas.DataFrame`.
     * BigWig resources -> :class:`~recount3._bigwig.BigWigFile`.
 """

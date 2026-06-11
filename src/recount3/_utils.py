@@ -309,7 +309,10 @@ def http_open(
         url: Absolute URL to open.
         timeout: Socket timeout in seconds.
         headers: Optional extra headers to send. None values are dropped.
-        insecure_ssl: If True, disable TLS verification.
+        insecure_ssl: If True, disable TLS certificate verification. This adds
+            an unverified ``HTTPSHandler``, which urllib uses only for
+            ``https://`` URLs; it has no effect on plain ``http://`` URLs
+            (e.g. the default Duffel mirror).
         user_agent: User-Agent header override.
 
     Returns:

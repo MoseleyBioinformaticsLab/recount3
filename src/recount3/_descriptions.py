@@ -399,7 +399,7 @@ class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
 
     Duffel layout:
       {organism}/data_sources/{data_source}/{genomic_unit}_sums/
-        {p2(project)}/{project}/
+        {_project_shard(project)}/{project}/
         {data_source}.{genomic_unit}_sums.{project}.{annotation_extension}.gz
     """
 
@@ -438,7 +438,7 @@ class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
 
     Duffel layout:
       {organism}/data_sources/{data_source}/junctions/
-        {p2(project)}/{project}/
+        {_project_shard(project)}/{project}/
         {data_source}.junctions.{project}.{junction_type}.{junction_extension}.gz
     """
 
@@ -475,7 +475,7 @@ class R3ProjectMetadata(_R3CommonFields, R3ResourceDescription):
 
     Duffel layout:
       {organism}/data_sources/{data_source}/metadata/
-        {p2(project)}/{project}/
+        {_project_shard(project)}/{project}/
         {data_source}.{table_name}.{project}.MD.gz
     """
 
@@ -505,7 +505,7 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
 
     Duffel layout:
       {organism}/data_sources/{data_source}/base_sums/
-        {p2(project)}/{project}/{shard(sample, data_source)}/
+        {_project_shard(project)}/{project}/{_sample_shard(sample, data_source)}/
         {data_source}.base_sums.{project}_{sample}.ALL.bw
 
     The sample shard subdirectory uses a different offset for GTEx samples
