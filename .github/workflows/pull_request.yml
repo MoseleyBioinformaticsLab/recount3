@@ -11,7 +11,7 @@ jobs:
   test:
     uses: ./.github/workflows/tests.yml
     with:
-      install_command: "python3 -m pip install -e .[dev,bigwig,biocpy]"
+      install_command: 'python -m pip install -e ".[dev,bigwig,biocpy]"'
 
   coverage:
     uses: ./.github/workflows/codecov.yml

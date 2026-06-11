@@ -4,16 +4,33 @@ on:
   workflow_call:
     inputs:
       install_command:
-        description: The command for installing the package to test.
+        description: The command for installing the package to test (Linux, full extras).
         required: true
         type: string
+      install_command_minimal:
+        description: >-
+          Install command for platforms without pyBigWig support (Windows, macOS).
+          Defaults to installing without the bigwig extra.
+        required: false
+        type: string
+        default: 'python -m pip install -e ".[dev,biocpy]"'
 
 jobs:
   run-tests:
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest]
+        include:
+          - os: windows-latest
+            python-version: "3.10"
+          - os: windows-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.10"
+          - os: macos-latest
+            python-version: "3.14"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -21,13 +38,23 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install package
+      - name: Install package (Linux, full extras)
+        if: runner.os == 'Linux'
         uses: Wandalen/wretry.action@master
         with:
           command: |
-            python3 -m pip install --upgrade pip
+            python -m pip install --upgrade pip
             ${{ inputs.install_command }}
           attempt_limit: 5
           attempt_delay: 10000
+      - name: Install package (Windows/macOS, no bigwig)
+        if: runner.os != 'Linux'
+        uses: Wandalen/wretry.action@master
+        with:
+          command: |
+            python -m pip install --upgrade pip
+            ${{ inputs.install_command_minimal }}
+          attempt_limit: 5
+          attempt_delay: 10000
       - name: Run tests
-        run: python3 -m pytest
+        run: python -m pytest
