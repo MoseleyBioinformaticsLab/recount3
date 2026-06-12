@@ -1102,6 +1102,32 @@ def test_download_stream_to_zip_tmp_cleaned_up_on_failure(
     assert list(tmp_path.glob(".r3_dl_*.tmp")) == []
 
 
+def test_download_stream_to_zip_no_tmp_when_failure_before_creation(
+    tmp_path: Path,
+) -> None:
+    """Cleanup is a no-op when the download fails before the temp file exists."""
+    zip_path = tmp_path / "out.zip"
+
+    with mock.patch(
+        "recount3._utils.with_retries",
+        side_effect=urllib.error.URLError("refused"),
+    ):
+        with pytest.raises(urllib.error.URLError):
+            _utils.download_stream_to_zip(
+                "http://example.com/f.gz",
+                zip_path,
+                "member.gz",
+                chunk_size=512,
+                overwrite=False,
+                timeout=30,
+                insecure_ssl=False,
+                user_agent="test",
+                attempts=1,
+            )
+
+    assert list(tmp_path.glob(".r3_dl_*.tmp")) == []
+
+
 def test_download_stream_to_zip_tmp_unlink_error_swallowed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
