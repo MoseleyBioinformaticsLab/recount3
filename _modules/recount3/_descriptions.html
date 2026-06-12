@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3._descriptions &mdash; recount3 1.0.0 documentation</title>
+  <title>recount3._descriptions &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -87,8 +87,8 @@
 <span class="c1">#   display the following acknowledgement: This product includes software</span>
 <span class="c1">#   developed by the copyright holder.</span>
 <span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
-<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
-<span class="c1">#   specific prior written permission.</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software</span>
+<span class="c1">#   without specific prior written permission.</span>
 <span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
 <span class="c1">#   source code must be included with the published work.</span>
 <span class="c1">#</span>
@@ -105,7 +105,7 @@
 <span class="c1">#</span>
 <span class="sd">&quot;&quot;&quot;Resource descriptions and duffel URL-path construction.</span>
 
-<span class="sd">This module defines a small set of resource description dataclasses for </span>
+<span class="sd">This module defines a small set of resource description dataclasses for</span>
 <span class="sd">recount3. A description is a validated, immutable-ish bundle of parameters</span>
 <span class="sd">(organism, project, etc.) that can deterministically construct the relative</span>
 <span class="sd">path to a resource in the repository.</span>
@@ -132,7 +132,7 @@
 <span class="sd">the module-level constants :data:`VALID_ORGANISMS` and</span>
 <span class="sd">:data:`VALID_DATA_SOURCES`.</span>
 
-<span class="sd">Typical usage::</span>
+<span class="sd">Typical usage example::</span>
 
 <span class="sd">  from recount3._descriptions import R3ResourceDescription</span>
 
@@ -360,7 +360,7 @@
             <span class="n">subcls</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">],</span>
         <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]:</span>
             <span class="bp">cls</span><span class="o">.</span><span class="n">_TYPE_REGISTRY</span><span class="p">[</span><span class="n">resource_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">subcls</span>
-            <span class="n">subcls</span><span class="o">.</span><span class="n">_RESOURCE_TYPE</span> <span class="o">=</span> <span class="n">resource_type</span>  <span class="c1"># pylint: disable=protected-access</span>
+            <span class="n">subcls</span><span class="o">.</span><span class="n">_RESOURCE_TYPE</span> <span class="o">=</span> <span class="n">resource_type</span>
             <span class="k">return</span> <span class="n">subcls</span>
 
         <span class="k">return</span> <span class="n">_decorator</span></div>
@@ -490,7 +490,7 @@
 
 <span class="sd">    Duffel layout:</span>
 <span class="sd">      {organism}/data_sources/{data_source}/{genomic_unit}_sums/</span>
-<span class="sd">        {p2(project)}/{project}/</span>
+<span class="sd">        {_project_shard(project)}/{project}/</span>
 <span class="sd">        {data_source}.{genomic_unit}_sums.{project}.{annotation_extension}.gz</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -511,7 +511,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/&quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums/</span><span class="si">{</span><span class="n">_project_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums/&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">_project_shard</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="p">)</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">/&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">genomic_unit</span><span class="si">}</span><span class="s2">_sums.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project</span><span class="si">}</span><span class="s2">.&quot;</span>
             <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">annotation_extension</span><span class="si">}</span><span class="s2">.gz&quot;</span>
         <span class="p">)</span></div>
@@ -535,8 +536,9 @@
 
 <span class="sd">    Duffel layout:</span>
 <span class="sd">      {organism}/data_sources/{data_source}/junctions/</span>
-<span class="sd">        {p2(project)}/{project}/</span>
-<span class="sd">        {data_source}.junctions.{project}.{junction_type}.{junction_extension}.gz</span>
+<span class="sd">        {_project_shard(project)}/{project}/</span>
+<span class="sd">        {data_source}.junctions.{project}.{junction_type}.</span>
+<span class="sd">        {junction_extension}.gz</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -578,7 +580,7 @@
 
 <span class="sd">    Duffel layout:</span>
 <span class="sd">      {organism}/data_sources/{data_source}/metadata/</span>
-<span class="sd">        {p2(project)}/{project}/</span>
+<span class="sd">        {_project_shard(project)}/{project}/</span>
 <span class="sd">        {data_source}.{table_name}.{project}.MD.gz</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -614,7 +616,8 @@
 
 <span class="sd">    Duffel layout:</span>
 <span class="sd">      {organism}/data_sources/{data_source}/base_sums/</span>
-<span class="sd">        {p2(project)}/{project}/{shard(sample, data_source)}/</span>
+<span class="sd">        {_project_shard(project)}/{project}/</span>
+<span class="sd">        {_sample_shard(sample, data_source)}/</span>
 <span class="sd">        {data_source}.base_sums.{project}_{sample}.ALL.bw</span>
 
 <span class="sd">    The sample shard subdirectory uses a different offset for GTEx samples</span>

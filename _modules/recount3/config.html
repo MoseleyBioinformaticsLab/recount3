@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.config &mdash; recount3 1.0.0 documentation</title>
+  <title>recount3.config &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -87,8 +87,8 @@
 <span class="c1">#   display the following acknowledgement: This product includes software</span>
 <span class="c1">#   developed by the copyright holder.</span>
 <span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
-<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
-<span class="c1">#   specific prior written permission.</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software</span>
+<span class="c1">#   without specific prior written permission.</span>
 <span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
 <span class="c1">#   source code must be included with the published work.</span>
 <span class="c1">#</span>
@@ -116,29 +116,54 @@
 <span class="sd">:func:`recount3_cache_rm`.</span>
 
 <span class="sd">Environment variables (all optional):</span>
-<span class="sd">  * ``RECOUNT3_URL``: base URL of the duffel mirror</span>
-<span class="sd">    (default: ``https://duffel.rail.bio/recount3/``).</span>
+<span class="sd">  * ``RECOUNT3_URL``: base URL of the recount3 mirror</span>
+<span class="sd">    (default: ``http://duffel.rail.bio/recount3/``).</span>
 <span class="sd">  * ``RECOUNT3_CACHE_DIR``: directory for the on-disk file cache</span>
-<span class="sd">    (default: ``~/.cache/recount3``).</span>
+<span class="sd">    (default: ``~/.cache/recount3/files``).</span>
 <span class="sd">  * ``RECOUNT3_CACHE_DISABLE``: set to ``&quot;1&quot;`` to disable caching entirely.</span>
-<span class="sd">  * ``RECOUNT3_HTTP_TIMEOUT``: HTTP request timeout in seconds (default: 30).</span>
+<span class="sd">  * ``RECOUNT3_HTTP_TIMEOUT``: HTTP request timeout in seconds (default: 60).</span>
 <span class="sd">  * ``RECOUNT3_MAX_RETRIES``: maximum retry attempts for transient errors</span>
 <span class="sd">    (default: 3).</span>
-<span class="sd">  * ``RECOUNT3_INSECURE_SSL``: set to ``&quot;1&quot;`` to skip TLS verification</span>
-<span class="sd">    (unsafe; use only for debugging certificate issues).</span>
+<span class="sd">  * ``RECOUNT3_INSECURE_SSL``: set to ``&quot;1&quot;`` to skip TLS certificate</span>
+<span class="sd">    verification. This only affects ``https://`` base URLs; it is a no-op for</span>
+<span class="sd">    the default ``http://`` Duffel mirror (see &quot;Mirrors&quot; below).</span>
 <span class="sd">  * ``RECOUNT3_USER_AGENT``: custom ``User-Agent`` header string.</span>
-<span class="sd">  * ``RECOUNT3_CHUNK_SIZE``: streaming chunk size in bytes (default: 65536).</span>
+<span class="sd">  * ``RECOUNT3_CHUNK_SIZE``: streaming chunk size in bytes</span>
+<span class="sd">    (default: 1048576, i.e. 1 MiB).</span>
+
+<span class="sd">Mirrors:</span>
+<span class="sd">  recount3 publishes the **same relative file layout** on several</span>
+<span class="sd">  interchangeable public mirrors; ``RECOUNT3_URL`` / ``base_url`` works with</span>
+<span class="sd">  any of them unchanged:</span>
+
+<span class="sd">  * Duffel load balancer (default): ``http://duffel.rail.bio/recount3/``</span>
+<span class="sd">  * AWS Open Data:</span>
+<span class="sd">    ``https://recount-opendata.s3.amazonaws.com/recount3/release/``</span>
+<span class="sd">  * JHU IDIES (Dataverse): ``https://data.idies.jhu.edu/recount3/data/``</span>
+
+<span class="sd">  The package is coupled to recount3&#39;s layout convention rather than to any one</span>
+<span class="sd">  host, so switching mirrors is purely a ``base_url`` change. TLS settings apply</span>
+<span class="sd">  only to ``https://`` endpoints: the default Duffel mirror is plain ``http``</span>
+<span class="sd">  (no TLS, so ``insecure_ssl`` is irrelevant), the AWS and JHU mirrors are</span>
+<span class="sd">  ``https`` with valid certificates (no flag needed), and</span>
+<span class="sd">  ``RECOUNT3_INSECURE_SSL`` / ``--insecure-ssl`` is meaningful only for an</span>
+<span class="sd">  ``https`` endpoint presenting an untrusted or self-signed certificate.</span>
 
 <span class="sd">Typical usage example::</span>
 
+<span class="sd">    import dataclasses</span>
 <span class="sd">    from pathlib import Path</span>
-<span class="sd">    from recount3.config import Config, recount3_cache, recount3_cache_rm</span>
+<span class="sd">    from recount3.config import default_config, recount3_cache, recount3_cache_rm</span>
 
 <span class="sd">    # Read the current cache directory (creates it if absent):</span>
 <span class="sd">    cache_dir = recount3_cache()</span>
 
-<span class="sd">    # Use a custom cache location for this session:</span>
-<span class="sd">    cfg = Config(cache_dir=Path(&quot;/scratch/recount3_cache&quot;))</span>
+<span class="sd">    # Use a custom cache location for this session (override one field of</span>
+<span class="sd">    # the environment-derived defaults; Config is immutable):</span>
+<span class="sd">    cfg = dataclasses.replace(</span>
+<span class="sd">        default_config(), cache_dir=Path(&quot;/scratch/recount3_cache&quot;)</span>
+<span class="sd">    )</span>
+<span class="sd">    custom_cache_dir = recount3_cache(cfg)</span>
 
 <span class="sd">    # Remove cached files matching a pattern (dry run first):</span>
 <span class="sd">    to_delete = recount3_cache_rm(dry_run=True)</span>
@@ -166,9 +191,13 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Immutable configuration bag.</span>
 
 <span class="sd">    Attributes:</span>
-<span class="sd">      base_url: Base URL for the duffel mirror (ends with a trailing slash).</span>
+<span class="sd">      base_url: Base URL for the recount3 mirror (ends with a trailing slash).</span>
+<span class="sd">          Defaults to the Duffel load balancer; the AWS Open Data and JHU IDIES</span>
+<span class="sd">          mirrors serve the same layout (see the module docstring &quot;Mirrors&quot;).</span>
 <span class="sd">      timeout: Network timeout in seconds.</span>
-<span class="sd">      insecure_ssl: True to disable TLS verification (not recommended).</span>
+<span class="sd">      insecure_ssl: True to disable TLS certificate verification (not</span>
+<span class="sd">          recommended). Only affects ``https://`` base URLs; a no-op for the</span>
+<span class="sd">          default ``http://`` Duffel mirror.</span>
 <span class="sd">      max_retries: Max HTTP retry attempts for transient errors.</span>
 <span class="sd">      user_agent: Custom HTTP User-Agent.</span>
 <span class="sd">      cache_dir: Cache directory for downloaded files.</span>

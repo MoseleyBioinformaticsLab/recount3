@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3._bigwig &mdash; recount3 1.0.0 documentation</title>
+  <title>recount3._bigwig &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -87,8 +87,8 @@
 <span class="c1">#   display the following acknowledgement: This product includes software</span>
 <span class="c1">#   developed by the copyright holder.</span>
 <span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
-<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
-<span class="c1">#   specific prior written permission.</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software</span>
+<span class="c1">#   without specific prior written permission.</span>
 <span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
 <span class="c1">#   source code must be included with the published work.</span>
 <span class="c1">#</span>
@@ -112,7 +112,7 @@
 <span class="sd">The optional dependency is imported through</span>
 <span class="sd">:func:`~recount3._utils.get_pybigwig_module`.</span>
 
-<span class="sd">Typical usage::</span>
+<span class="sd">Typical usage example::</span>
 
 <span class="sd">  &gt;&gt;&gt; from pathlib import Path</span>
 <span class="sd">  &gt;&gt;&gt; from recount3._bigwig import BigWigFile</span>
@@ -122,9 +122,9 @@
 
 <span class="sd">Note:</span>
 <span class="sd">    Requires the optional ``pyBigWig`` package. Install with</span>
-<span class="sd">    ``pip install pyBigWig``. An :exc:`ImportError` is raised on first use</span>
-<span class="sd">    if the package is not available. ``pyBigWig`` can be difficult to</span>
-<span class="sd">    install on non-Linux systems.</span>
+<span class="sd">    ``pip install &quot;recount3[bigwig]&quot;``. An :exc:`ImportError` is raised on</span>
+<span class="sd">    first use if the package is not available. ``pyBigWig`` can be difficult</span>
+<span class="sd">    to install on non-Linux systems.</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -151,8 +151,8 @@
 <span class="sd">    for subsequent calls and can be explicitly released with :meth:`close`.</span>
 
 <span class="sd">    Attributes:</span>
-<span class="sd">        path: Filesystem path to a BigWig file (typically ``.bw``). The file must</span>
-<span class="sd">          exist when the handle is opened.</span>
+<span class="sd">        path: Filesystem path to a BigWig file (typically ``.bw``). The</span>
+<span class="sd">          file must exist when the handle is opened.</span>
 <span class="sd">        mode: File mode passed to ``pyBigWig.open``. Reading is the default</span>
 <span class="sd">          (``&quot;r&quot;``).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
@@ -274,9 +274,10 @@
 <span class="sd">              return a NumPy array depending on its configuration.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            Values returned by ``pyBigWig.values``. When ``numpy`` is not True, this is</span>
-<span class="sd">            typically a ``list[float]``. When ``numpy`` is True, ``pyBigWig`` may</span>
-<span class="sd">            return a NumPy array depending on its configuration.</span>
+<span class="sd">            Values returned by ``pyBigWig.values``. When ``numpy`` is not</span>
+<span class="sd">            True, this is typically a ``list[float]``. When ``numpy`` is</span>
+<span class="sd">            True, ``pyBigWig`` may return a NumPy array depending on its</span>
+<span class="sd">            configuration.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">end</span><span class="p">),</span> <span class="n">numpy</span><span class="o">=</span><span class="n">numpy</span><span class="p">)</span></div>
@@ -304,7 +305,8 @@
 <span class="sd">              computed over the whole chromosome.</span>
 <span class="sd">            type: Statistic name understood by ``pyBigWig.stats`` (for example,</span>
 <span class="sd">              ``&quot;mean&quot;``, ``&quot;min&quot;``, ``&quot;max&quot;``, ``&quot;coverage&quot;``).</span>
-<span class="sd">            n_bins: If provided, request binned stats via the ``nBins`` argument.</span>
+<span class="sd">            n_bins: If provided, request binned stats via the ``nBins``</span>
+<span class="sd">              argument.</span>
 <span class="sd">            exact: If provided, forward to the ``exact`` argument.</span>
 
 <span class="sd">        Returns:</span>
@@ -342,9 +344,9 @@
 <span class="sd">              the entire chromosome may be returned.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            Intervals returned by ``pyBigWig.intervals``. This is often a list of</span>
-<span class="sd">            ``(start, end, value)`` tuples. ``None`` may be returned when no intervals</span>
-<span class="sd">            overlap the requested region.</span>
+<span class="sd">            Intervals returned by ``pyBigWig.intervals``. This is often a</span>
+<span class="sd">            list of ``(start, end, value)`` tuples. ``None`` may be returned</span>
+<span class="sd">            when no intervals overlap the requested region.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>

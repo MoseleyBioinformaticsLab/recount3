@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3 &mdash; recount3 1.0.0 documentation</title>
+  <title>recount3 &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/documentation_options.js?v=fc837d61"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -78,38 +78,37 @@
 </section>
 <section id="id1">
 <h1>recount3<a class="headerlink" href="#id1" title="Link to this heading"></a></h1>
-<a class="reference external image-reference" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE"><img alt="Clear BSD License with extra clauses" src="https://img.shields.io/pypi/l/recount3.svg" />
+<a class="reference external image-reference" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE"><img alt="The Clear BSD License with Extra Clause" src="https://img.shields.io/pypi/l/recount3.svg" />
 </a>
 <a class="reference external image-reference" href="https://pypi.org/project/recount3"><img alt="Current library version" src="https://img.shields.io/pypi/v/recount3.svg" />
 </a>
 <a class="reference external image-reference" href="https://pypi.org/project/recount3"><img alt="Supported Python versions" src="https://img.shields.io/pypi/pyversions/recount3.svg" />
+</a>
+<a class="reference external image-reference" href="https://codecov.io/gh/MoseleyBioinformaticsLab/recount3"><img alt="CodeCov" src="https://codecov.io/gh/MoseleyBioinformaticsLab/recount3/branch/main/graph/badge.svg" />
 </a>
 <a class="reference external image-reference" href="https://github.com/MoseleyBioinformaticsLab/recount3"><img alt="GitHub project" src="https://img.shields.io/github/stars/MoseleyBioinformaticsLab/recount3.svg?style=social&amp;label=Star" />
 </a>
 <div class="line-block">
 <div class="line"><br /></div>
 </div>
-<p>The <code class="docutils literal notranslate"><span class="pre">recount3</span></code> package is a Python library and command-line tool for
-interacting with the <a class="reference external" href="https://rna.recount.bio">recount3</a> data repository, a uniformly processed
-collection of RNA-seq studies covering human and mouse samples from SRA,
-GTEx, and TCGA.</p>
-<p>The package provides a typed API for discovering, downloading, and assembling
-recount3 resources into analysis-ready objects.  A companion CLI implements a
-discover -&gt; manifest -&gt; materialize workflow suitable for use in scripts and
-pipelines.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">recount3</span></code> package can be used in two ways:</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>As a Python library for searching, downloading, and assembling
-recount3 gene/exon/junction count matrices, sample metadata, genome
-annotations, and BigWig coverage files into
-<code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> / <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> objects via
-the BiocPy stack.</p></li>
-<li><p>As a command-line tool (<code class="docutils literal notranslate"><span class="pre">recount3</span></code>) to search the mirror, produce
-JSONL manifests, and materialize resources to disk or into a <code class="docutils literal notranslate"><span class="pre">.zip</span></code>
-archive.</p></li>
+<p><code class="docutils literal notranslate"><span class="pre">recount3</span></code> is a typed Python library and command-line tool for the <a class="reference external" href="https://rna.recount.bio">recount3</a>
+data repository, a uniformly processed collection of RNA-seq studies spanning
+tens of thousands of human and mouse samples from SRA, GTEx, and TCGA. It
+discovers, downloads, and assembles recount3 resources into analysis-ready
+objects. These resources include gene, exon, and junction count matrices,
+sample metadata, genome annotations, and BigWig coverage files.</p>
+<p>The package provides two interfaces:</p>
+<ul class="simple">
+<li><p>A Python library that assembles count matrices, sample metadata, and
+genomic coordinates into BiocPy <code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> and
+<code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> objects, with recount3-compatible scaling and
+normalization utilities (approximate read counts, AUC- and
+mapped-reads-based scaling, and TPM).</p></li>
+<li><p>A command-line tool (<code class="docutils literal notranslate"><span class="pre">recount3</span></code>) that implements a
+discover -&gt; manifest -&gt; materialize workflow for scripts and pipelines. It
+emits JSONL/TSV manifests and materializes resources to a directory or a
+<code class="docutils literal notranslate"><span class="pre">.zip</span></code> archive with parallel downloads.</p></li>
 </ul>
-</div></blockquote>
 <section id="links">
 <h2>Links<a class="headerlink" href="#links" title="Link to this heading"></a></h2>
 <blockquote>
@@ -124,74 +123,84 @@ archive.</p></li>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
 <p>The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy.  Optional extras unlock BiocPy integration and BigWig support.</p>
-<section id="install-on-linux-mac-os-x">
-<h3>Install on Linux, Mac OS X<a class="headerlink" href="#install-on-linux-mac-os-x" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3
+and SciPy. Two optional extras enable additional features:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">                   </span><span class="c1"># core</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy]&quot;</span><span class="w">         </span><span class="c1"># + SummarizedExperiment builders</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[bigwig]&quot;</span><span class="w">         </span><span class="c1"># + BigWig coverage access</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy,bigwig]&quot;</span><span class="w">  </span><span class="c1"># everything</span>
 </pre></div>
 </div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">biocpy</span></code> (<code class="docutils literal notranslate"><span class="pre">biocframe</span></code>, <code class="docutils literal notranslate"><span class="pre">genomicranges</span></code>, <code class="docutils literal notranslate"><span class="pre">summarizedexperiment</span></code>) is
+required for <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> and every helper that returns or operates on a
+BiocPy object.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bigwig</span></code> (<code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code>) is required only for BigWig coverage access.</p></li>
+</ul>
+<p>On Windows, substitute <code class="docutils literal notranslate"><span class="pre">py</span> <span class="pre">-3</span> <span class="pre">-m</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">...</span></code>. Upgrade an existing
+installation with <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">-m</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--upgrade</span> <span class="pre">recount3</span></code>.</p>
+<p><strong>Note:</strong> The optional extras have platform constraints. The <code class="docutils literal notranslate"><span class="pre">bigwig</span></code> extra
+can be difficult or impossible to install on Windows and macOS. The <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>
+extra can be difficult or impossible to install on Windows. The core package and
+the command-line workflow do not depend on either extra and work on all
+supported platforms.</p>
 </section>
-<section id="install-on-windows">
-<h3>Install on Windows<a class="headerlink" href="#install-on-windows" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>py<span class="w"> </span>-3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3
-</pre></div>
-</div>
-</section>
-<section id="optional-extras">
-<h3>Optional extras<a class="headerlink" href="#optional-extras" title="Link to this heading"></a></h3>
-<p>Install with BiocPy support (<code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code>, <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>,
-<code class="docutils literal notranslate"><span class="pre">GenomicRanges</span></code>):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy]&quot;</span>
-</pre></div>
-</div>
-<p>Install with BigWig support (<code class="docutils literal notranslate"><span class="pre">pybigwig</span></code>):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[bigwig]&quot;</span>
-</pre></div>
-</div>
-<p>Install all optional extras:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy,bigwig]&quot;</span>
-</pre></div>
-</div>
-</section>
-<section id="upgrade-on-linux-mac-os-x">
-<h3>Upgrade on Linux, Mac OS X<a class="headerlink" href="#upgrade-on-linux-mac-os-x" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w"> </span>--upgrade
-</pre></div>
-</div>
-</section>
-<section id="upgrade-on-windows">
-<h3>Upgrade on Windows<a class="headerlink" href="#upgrade-on-windows" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>py<span class="w"> </span>-3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w"> </span>--upgrade
-</pre></div>
-</div>
-</section>
+<section id="the-three-layer-api">
+<h2>The three-layer API<a class="headerlink" href="#the-three-layer-api" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">recount3</span></code> exposes the same workflow at three levels of abstraction, so a
+single project can be assembled in one call while multi-project or custom
+workflows retain full control:</p>
+<ul class="simple">
+<li><p><strong>High level.</strong> <code class="docutils literal notranslate"><span class="pre">create_rse()</span></code> builds one project into a
+<code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> and performs discovery, downloading, metadata
+merging, and range assembly in a single call.</p></li>
+<li><p><strong>Mid level.</strong> <code class="docutils literal notranslate"><span class="pre">R3ResourceBundle</span></code> is a filterable container of resources
+for combining multiple projects, selecting subsets, and stacking matrices.</p></li>
+<li><p><strong>Low level.</strong> <code class="docutils literal notranslate"><span class="pre">R3Resource</span></code> represents a single file and manages its URL,
+cache entry, and parser.</p></li>
+</ul>
+<p>See the <a class="reference external" href="https://moseleybioinformaticslab.github.io/recount3/tutorial.html">Tutorial</a> for a complete walkthrough.</p>
 </section>
 <section id="quickstart">
 <h2>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading"></a></h2>
 <section id="python-api">
 <h3>Python API<a class="headerlink" href="#python-api" title="Link to this heading"></a></h3>
-<p>Discover all resources for a project, stack the gene-level count matrices
-across samples, and build a <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>:</p>
+<p>Assemble a project into a <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> (requires the
+<code class="docutils literal notranslate"><span class="pre">recount3[biocpy]</span></code> extra):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_rse</span>
+<span class="gp">&gt;&gt;&gt;</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">annotation_label</span><span class="o">=</span><span class="s2">&quot;gencode_v26&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(63856, 12)</span>
+</pre></div>
+</div>
+<p>For multi-project or custom workflows, use the bundle layer to filter
+resources and stack matrices directly:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceBundle</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Discover every resource for a human SRA project.</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
 <span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bundle</span><span class="o">.</span><span class="n">resources</span><span class="p">)</span><span class="si">}</span><span class="s2"> resources.&quot;</span><span class="p">)</span>
+<span class="go">Found 10 resources.</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Stack raw gene-count matrices across all samples.</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">only_counts</span><span class="p">()</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Build a RangedSummarizedExperiment (requires recount3[biocpy]).</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gene_counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">compat</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gene_counts</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">(63856, 12)</span>
 </pre></div>
 </div>
 </section>
 <section id="command-line-tool">
 <h3>Command-line tool<a class="headerlink" href="#command-line-tool" title="Link to this heading"></a></h3>
-<p>Discover resources, save a JSONL manifest, and download in parallel:</p>
+<p>Discover resources, write a JSONL manifest, and download in parallel:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Search for gene-level count files and write a manifest.</span>
 recount3<span class="w"> </span>search<span class="w"> </span>gene-exon<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">data_source</span><span class="o">=</span>sra<span class="w"> </span><span class="nv">genomic_unit</span><span class="o">=</span>gene<span class="w"> </span><span class="nv">project</span><span class="o">=</span>SRP009615<span class="w"> </span><span class="se">\</span>
@@ -201,19 +210,50 @@ recount3<span class="w"> </span>search<span class="w"> </span>gene-exon<span cla
 recount3<span class="w"> </span>download<span class="w"> </span>--from<span class="o">=</span>manifest.jsonl<span class="w"> </span>--dest<span class="o">=</span>./downloads<span class="w"> </span>--jobs<span class="o">=</span><span class="m">8</span>
 </pre></div>
 </div>
-<p>Stream search output directly into download without an intermediate file:</p>
+<p>Because both subcommands operate on JSONL via standard streams, search and
+download compose into a single pipeline without an intermediate file:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>recount3<span class="w"> </span>search<span class="w"> </span>annotations<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">genomic_unit</span><span class="o">=</span>gene<span class="w"> </span><span class="nv">annotation_extension</span><span class="o">=</span>G026<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span>--format<span class="o">=</span>jsonl<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
 recount3<span class="w"> </span>download<span class="w"> </span>--from<span class="o">=</span>-<span class="w"> </span>--dest<span class="o">=</span>./annotations
 </pre></div>
 </div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Read the full documentation on <a class="reference external" href="https://moseleybioinformaticslab.github.io/recount3/">Pages</a> for the complete API reference,
-CLI guide, and worked examples.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">bundle</span></code> subcommands assemble analysis-ready outputs without a Python
+session. Supported outputs are a stacked count matrix (TSV, gzip-compressed
+TSV, or Parquet) and a pickled <code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> or
+<code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>recount3<span class="w"> </span>bundle<span class="w"> </span>rse<span class="w"> </span>--from<span class="o">=</span>manifest.jsonl<span class="w"> </span>--genomic-unit<span class="o">=</span>gene<span class="w"> </span>--out<span class="o">=</span>rse.pkl
+</pre></div>
 </div>
+<p><strong>Note:</strong> Read the full documentation on <a class="reference external" href="https://moseleybioinformaticslab.github.io/recount3/">Pages</a> for the complete API reference,
+the CLI guide, and worked examples.</p>
 </section>
+</section>
+<section id="data-mirrors">
+<h2>Data mirrors<a class="headerlink" href="#data-mirrors" title="Link to this heading"></a></h2>
+<p>recount3 publishes the same relative file layout on several interchangeable
+public mirrors. <code class="docutils literal notranslate"><span class="pre">recount3</span></code> targets this layout rather than any single host, so
+selecting a different mirror requires only a change to the base URL (the
+<code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code> environment variable, the <code class="docutils literal notranslate"><span class="pre">--base-url</span></code> CLI flag, or the
+<code class="docutils literal notranslate"><span class="pre">base_url</span></code> field of <code class="docutils literal notranslate"><span class="pre">recount3.config.Config</span></code>):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Mirror</p></th>
+<th class="head"><p>Base URL</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Duffel load balancer (default)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://duffel.rail.bio/recount3/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>AWS Open Data</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">https://recount-opendata.s3.amazonaws.com/recount3/release/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>JHU IDIES (Dataverse)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">https://data.idies.jhu.edu/recount3/data/</span></code></p></td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="dependencies">
 <h2>Dependencies<a class="headerlink" href="#dependencies" title="Link to this heading"></a></h2>
@@ -240,21 +280,23 @@ summarizedexperiment&gt;=0.6
 </section>
 <section id="license">
 <h2>License<a class="headerlink" href="#license" title="Link to this heading"></a></h2>
-<p>This package is distributed under the <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE">BSD</a> license.</p>
+<p>This package is distributed under <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE">The Clear BSD License with Extra Clause</a>.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#discovering-resources-for-a-project">Discovering Resources for a Project</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#stacking-count-matrices">Stacking Count Matrices</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#building-a-summarizedexperiment">Building a SummarizedExperiment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#building-a-rangedsummarizedexperiment">Building a RangedSummarizedExperiment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#accessing-metadata">Accessing Metadata</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#filtering-bundles">Filtering Bundles</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#working-with-individual-resources">Working with Individual Resources</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#searching-without-a-bundle">Searching Without a Bundle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#cache-management">Cache Management</a></li>
-<li class="toctree-l2"><a class="reference internal" href="tutorial.html#sra-attribute-expansion">SRA Attribute Expansion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#the-three-layers-of-the-api">The three layers of the API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#layer-1-building-experiments-with-create-rse">Layer 1: Building experiments with <code class="docutils literal notranslate"><span class="pre">create_rse</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#layer-2-resource-bundles">Layer 2: Resource bundles</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#layer-3-individual-resources">Layer 3: Individual resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#working-with-sample-metadata">Working with sample metadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#normalization-and-scaling">Normalization and scaling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#bigwig-coverage">BigWig coverage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#cache-and-configuration">Cache and configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#errors-and-troubleshooting">Errors and troubleshooting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#where-to-go-next">Where to go next</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a><ul>

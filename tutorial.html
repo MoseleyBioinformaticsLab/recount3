@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tutorial &mdash; recount3 1.0.0 documentation</title>
+  <title>Tutorial &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/documentation_options.js?v=fc837d61"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -45,16 +45,48 @@
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorial</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#discovering-resources-for-a-project">Discovering Resources for a Project</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#stacking-count-matrices">Stacking Count Matrices</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-a-summarizedexperiment">Building a SummarizedExperiment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-a-rangedsummarizedexperiment">Building a RangedSummarizedExperiment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#accessing-metadata">Accessing Metadata</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#filtering-bundles">Filtering Bundles</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#working-with-individual-resources">Working with Individual Resources</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#searching-without-a-bundle">Searching Without a Bundle</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#cache-management">Cache Management</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#sra-attribute-expansion">SRA Attribute Expansion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-three-layers-of-the-api">The three layers of the API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#layer-1-building-experiments-with-create-rse">Layer 1: Building experiments with <code class="docutils literal notranslate"><span class="pre">create_rse</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gene-level-rse-default">Gene-level RSE (default)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#exon-level-and-junction-level">Exon-level and junction-level</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#falling-back-to-a-plain-summarizedexperiment">Falling back to a plain <code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#operations-performed-by-create-rse">Operations performed by <code class="docutils literal notranslate"><span class="pre">create_rse</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#layer-2-resource-bundles">Layer 2: Resource bundles</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#discovering-resources-for-one-or-more-projects">Discovering resources for one or more projects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#multi-project-bundles">Multi-project bundles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#filtering-bundles">Filtering bundles</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stacking-count-matrices">Stacking count matrices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#building-summarizedexperiment-rangedsummarizedexperiment-from-a-bundle">Building SummarizedExperiment / RangedSummarizedExperiment from a bundle</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#downloading-a-bundle-s-files-in-parallel">Downloading a bundle’s files in parallel</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#layer-3-individual-resources">Layer 3: Individual resources</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#downloading">Downloading</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#loading">Loading</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#searching-without-a-bundle">Searching without a bundle</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#working-with-sample-metadata">Working with sample metadata</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#expanding-sra-sample-attributes">Expanding SRA sample attributes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#normalization-and-scaling">Normalization and scaling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#approximate-read-counts">Approximate read counts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#per-sample-scale-factors">Per-sample scale factors</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tpm-gene-exon-only-needs-feature-widths">TPM (gene/exon only, needs feature widths)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#bigwig-coverage">BigWig coverage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cache-and-configuration">Cache and configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#errors-and-troubleshooting">Errors and troubleshooting</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#common-pitfalls">Common pitfalls</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#where-to-go-next">Where to go next</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cli.html">CLI Reference</a></li>
@@ -88,20 +120,202 @@
              
   <section id="tutorial">
 <h1>Tutorial<a class="headerlink" href="#tutorial" title="Link to this heading"></a></h1>
-<p>This tutorial walks through common workflows using the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> Python
-package.  All examples assume the package is installed:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="s2">&quot;recount3[biocpy]&quot;</span>
+<p>This tutorial walks through the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> Python API end-to-end: resource
+discovery, downloading, assembly of
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> /
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> objects, sample
+metadata merging, count normalization and scaling, BigWig coverage access, and
+management of the on-disk cache.</p>
+<p>For the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> command-line tool, see <a class="reference internal" href="cli.html"><span class="doc">CLI Reference</span></a>. For full per-symbol
+documentation, see <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a>.</p>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>The core package depends only on NumPy, pandas, and SciPy. The two optional
+extras enable features used throughout this tutorial:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">               </span><span class="c1"># core only</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy]&quot;</span><span class="w">     </span><span class="c1"># + SummarizedExperiment</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[bigwig]&quot;</span><span class="w">     </span><span class="c1"># + pyBigWig</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy,bigwig]&quot;</span>
 </pre></div>
 </div>
-<p>For BigWig support add the <code class="docutils literal notranslate"><span class="pre">bigwig</span></code> extra as well:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="s2">&quot;recount3[biocpy,bigwig]&quot;</span>
+<p>What each extra enables:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">biocpy</span></code> is required for <code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code>,
+<a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.to_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_summarized_experiment()</span></code></a>,
+<a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_ranged_summarized_experiment()</span></code></a>,
+and every helper in <a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> that returns or operates on a
+BiocPy object.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bigwig</span></code> is required only when you call
+<a class="reference internal" href="api.html#recount3.resource.R3Resource.load" title="recount3.resource.R3Resource.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code></a> on a BigWig resource or use the
+<a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a> reader directly.</p></li>
+</ul>
+<p>If an optional dependency is missing, the affected function raises
+<a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ImportError</span></code></a> on first use; the remainder of the package stays importable
+and functional.</p>
+</section>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading"></a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Every example in this tutorial retrieves data from a live recount3 mirror
+and therefore requires network access. Downloaded files are cached under
+<code class="docutils literal notranslate"><span class="pre">~/.cache/recount3/files</span></code> (see <a class="reference internal" href="#cache-and-configuration"><span class="std std-ref">Cache and configuration</span></a>), so
+re-running an example reuses the local copy rather than downloading again.</p>
+</div>
+<p>The most direct path from a project identifier to an analysis-ready BiocPy
+object is <code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code>. It requires the <code class="docutils literal notranslate"><span class="pre">biocpy</span></code> extra and
+performs discovery, downloads, metadata merging, and range assembly in a single
+call:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_rse</span>
+
+<span class="n">rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">annotation_label</span><span class="o">=</span><span class="s2">&quot;gencode_v26&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>             <span class="c1"># (n_features, n_samples)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">get_column_names</span><span class="p">()[:</span><span class="mi">5</span><span class="p">])</span>
 </pre></div>
 </div>
-<section id="discovering-resources-for-a-project">
-<h2>Discovering Resources for a Project<a class="headerlink" href="#discovering-resources-for-a-project" title="Link to this heading"></a></h2>
-<p><a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceBundle</span></code></a> is the main entry point.
-Call <a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.discover" title="recount3.bundle.R3ResourceBundle.discover"><code class="xref py py-meth docutils literal notranslate"><span class="pre">discover()</span></code></a> to fetch every
-resource associated with a project:</p>
+<p>This single call is sufficient for the most common workflow; it is expanded in
+<a class="reference internal" href="#layer-1"><span class="std std-ref">Layer 1: Building experiments with create_rse</span></a> below. The remainder of this tutorial describes the steps that
+<code class="docutils literal notranslate"><span class="pre">create_rse</span></code> performs internally and the lower-level components to use when
+finer control is required.</p>
+</section>
+<section id="the-three-layers-of-the-api">
+<h2>The three layers of the API<a class="headerlink" href="#the-three-layers-of-the-api" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">recount3</span></code> exposes the same workflow at three levels of abstraction:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 26.0%" />
+<col style="width: 52.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Layer</p></th>
+<th class="head"><p>Primary entry point</p></th>
+<th class="head"><p>Recommended when</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>High-level: BiocPy builders</p></td>
+<td><p><code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code></p></td>
+<td><p>You want one project as a <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p>Mid-level: bundles</p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceBundle</span></code></p></td>
+<td><p>You combine multiple projects, filter resources, or stack matrices yourself.</p></td>
+</tr>
+<tr class="row-even"><td><p>Low-level: resources</p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></p></td>
+<td><p>You want fine-grained control over a single file’s URL, download, or parser.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Each layer is a thin wrapper around the next. <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> calls
+<code class="docutils literal notranslate"><span class="pre">R3ResourceBundle.discover</span></code> internally; <code class="docutils literal notranslate"><span class="pre">R3ResourceBundle</span></code> aggregates
+<code class="docutils literal notranslate"><span class="pre">R3Resource</span></code> objects. Because the layers share a common set of types, they
+interoperate freely: a bundle obtained from <code class="docutils literal notranslate"><span class="pre">discover</span></code> can be filtered at
+Layer 2 and then handed to the same builders that <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> invokes.</p>
+</section>
+<section id="layer-1-building-experiments-with-create-rse">
+<span id="layer-1"></span><h2>Layer 1: Building experiments with <code class="docutils literal notranslate"><span class="pre">create_rse</span></code><a class="headerlink" href="#layer-1-building-experiments-with-create-rse" title="Link to this heading"></a></h2>
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code> is the recommended entry point for the most
+common workflow: one project, one organism, one annotation, one assembled
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>. Requires the
+<code class="docutils literal notranslate"><span class="pre">biocpy</span></code> extra.</p>
+<section id="gene-level-rse-default">
+<h3>Gene-level RSE (default)<a class="headerlink" href="#gene-level-rse-default" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_rse</span>
+
+<span class="n">rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">annotation_label</span><span class="o">=</span><span class="s2">&quot;gencode_v26&quot;</span><span class="p">,</span>   <span class="c1"># or &quot;gencode_v29&quot;, &quot;fantom6_cat&quot;, &quot;refseq&quot;, &quot;ercc&quot;, &quot;sirv&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>You may pass the raw extension code instead of a label:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="o">=</span><span class="s2">&quot;G026&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>When both are supplied, <code class="docutils literal notranslate"><span class="pre">annotation_extension</span></code> takes precedence. Discover the
+available labels with <code class="xref py py-func docutils literal notranslate"><span class="pre">annotation_options()</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotation_options</span>
+
+<span class="n">annotation_options</span><span class="p">(</span><span class="s2">&quot;human&quot;</span><span class="p">)</span>
+<span class="c1"># {&#39;gencode_v26&#39;: &#39;G026&#39;, &#39;gencode_v29&#39;: &#39;G029&#39;, &#39;fantom6_cat&#39;: &#39;F006&#39;,</span>
+<span class="c1">#  &#39;refseq&#39;: &#39;R109&#39;, &#39;ercc&#39;: &#39;ERCC&#39;, &#39;sirv&#39;: &#39;SIRV&#39;}</span>
+
+<span class="n">annotation_options</span><span class="p">(</span><span class="s2">&quot;mouse&quot;</span><span class="p">)</span>
+<span class="c1"># {&#39;gencode_v23&#39;: &#39;M023&#39;}</span>
+</pre></div>
+</div>
+</section>
+<section id="exon-level-and-junction-level">
+<h3>Exon-level and junction-level<a class="headerlink" href="#exon-level-and-junction-level" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">exon_rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;exon&quot;</span><span class="p">,</span>
+    <span class="n">annotation_label</span><span class="o">=</span><span class="s2">&quot;gencode_v26&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">junction_rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;junction&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>For junctions, <code class="docutils literal notranslate"><span class="pre">recount3</span></code> prefers the RR sidecar for genomic
+coordinates; pass <code class="docutils literal notranslate"><span class="pre">prefer_rr_junction_coordinates=False</span></code> to disable
+this.</p>
+</section>
+<section id="falling-back-to-a-plain-summarizedexperiment">
+<h3>Falling back to a plain <code class="docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code><a class="headerlink" href="#falling-back-to-a-plain-summarizedexperiment" title="Link to this heading"></a></h3>
+<p>If genomic ranges cannot be derived (for example, the GTF is missing or an
+RR file is unavailable), <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> raises <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code></a> by
+default. Pass <code class="docutils literal notranslate"><span class="pre">allow_fallback_to_se=True</span></code> to receive a plain
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> in that case:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">experiment</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">allow_fallback_to_se</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="operations-performed-by-create-rse">
+<h3>Operations performed by <code class="docutils literal notranslate"><span class="pre">create_rse</span></code><a class="headerlink" href="#operations-performed-by-create-rse" title="Link to this heading"></a></h3>
+<p>For one <code class="docutils literal notranslate"><span class="pre">(organism,</span> <span class="pre">data_source,</span> <span class="pre">project)</span></code> triple, it:</p>
+<ol class="arabic simple">
+<li><p>discovers gene/exon/junction counts, the matching annotation GTF, and
+the five project metadata tables;</p></li>
+<li><p>downloads everything into the on-disk cache;</p></li>
+<li><p>stacks the count matrix into a feature × sample DataFrame;</p></li>
+<li><p>merges, namespaces, and aligns the metadata tables to the count columns
+(including a <code class="docutils literal notranslate"><span class="pre">BigWigURL</span></code> column constructed per sample);</p></li>
+<li><p>parses the GTF (or RR file, for junctions) to attach genomic ranges;</p></li>
+<li><p>constructs the BiocPy object.</p></li>
+</ol>
+<p>To deviate from any of those steps (multiple projects, custom metadata
+filtering, stacking only some matrices, or a different join policy), use
+Layer 2.</p>
+</section>
+</section>
+<section id="layer-2-resource-bundles">
+<h2>Layer 2: Resource bundles<a class="headerlink" href="#layer-2-resource-bundles" title="Link to this heading"></a></h2>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceBundle</span></code> is a container of
+<code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects with helpers for filtering,
+loading, stacking, and converting to BiocPy objects.</p>
+<section id="discovering-resources-for-one-or-more-projects">
+<h3>Discovering resources for one or more projects<a class="headerlink" href="#discovering-resources-for-one-or-more-projects" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceBundle</span>
 
 <span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
@@ -110,132 +324,560 @@ resource associated with a project:</p>
     <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bundle</span><span class="o">.</span><span class="n">resources</span><span class="p">)</span><span class="si">}</span><span class="s2"> resources.&quot;</span><span class="p">)</span>
+<span class="c1"># Found 10 resources.</span>
 </pre></div>
 </div>
-<p>Supported organisms are <code class="docutils literal notranslate"><span class="pre">&quot;human&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;mouse&quot;</span></code>.  Supported data sources
-are <code class="docutils literal notranslate"><span class="pre">&quot;sra&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;gtex&quot;</span></code>, and <code class="docutils literal notranslate"><span class="pre">&quot;tcga&quot;</span></code>.</p>
-</section>
-<section id="stacking-count-matrices">
-<h2>Stacking Count Matrices<a class="headerlink" href="#stacking-count-matrices" title="Link to this heading"></a></h2>
-<p>Use <a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.stack_count_matrices" title="recount3.bundle.R3ResourceBundle.stack_count_matrices"><code class="xref py py-meth docutils literal notranslate"><span class="pre">stack_count_matrices()</span></code></a> to
-concatenate all gene-level (or exon-level, junction-level) count files
-from a bundle into a single <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">only_counts</span><span class="p">()</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>   <span class="c1"># (n_genes, n_samples)</span>
-</pre></div>
-</div>
-</section>
-<section id="building-a-summarizedexperiment">
-<h2>Building a SummarizedExperiment<a class="headerlink" href="#building-a-summarizedexperiment" title="Link to this heading"></a></h2>
-<p>Requires the <code class="docutils literal notranslate"><span class="pre">biocpy</span></code> extra (<code class="docutils literal notranslate"><span class="pre">biocframe</span></code>, <code class="docutils literal notranslate"><span class="pre">summarizedexperiment</span></code>).</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">se</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_summarized_experiment</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">se</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
-<section id="building-a-rangedsummarizedexperiment">
-<h2>Building a RangedSummarizedExperiment<a class="headerlink" href="#building-a-rangedsummarizedexperiment" title="Link to this heading"></a></h2>
-<p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> attaches
-genomic coordinate ranges to each feature row.  A GTF annotation file is
-required; include it in the bundle via <code class="docutils literal notranslate"><span class="pre">search_project_all</span></code> (done
-automatically by <a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.discover" title="recount3.bundle.R3ResourceBundle.discover"><code class="xref py py-meth docutils literal notranslate"><span class="pre">discover()</span></code></a>) or
-add an annotation resource manually.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rse</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>          <span class="c1"># (n_genes, n_samples)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">colnames</span><span class="p">[:</span><span class="mi">5</span><span class="p">])</span>   <span class="c1"># first five sample IDs</span>
+<p>By default, <code class="docutils literal notranslate"><span class="pre">discover</span></code> returns gene + exon counts, the default annotation
+GTF for each of those units (gene and exon), the five metadata tables, and the
+default junction artifact (<code class="docutils literal notranslate"><span class="pre">MM</span></code>). For <code class="docutils literal notranslate"><span class="pre">SRP009615</span></code> this is the ten resources
+counted above: 2 counts + 2 annotation GTFs + 5 metadata tables + 1 junction
+file. Override with:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">genomic_units</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;gene&quot;</span><span class="p">,),</span>
+    <span class="n">annotations</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;G026&quot;</span><span class="p">,</span> <span class="s2">&quot;G029&quot;</span><span class="p">),</span>       <span class="c1"># or &quot;default&quot; / &quot;all&quot;</span>
+    <span class="n">junction_exts</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;MM&quot;</span><span class="p">,</span> <span class="s2">&quot;RR&quot;</span><span class="p">),</span>
+    <span class="n">include_metadata</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_bigwig</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="accessing-metadata">
-<h2>Accessing Metadata<a class="headerlink" href="#accessing-metadata" title="Link to this heading"></a></h2>
-<p>Column metadata (sample annotations) is merged from every available
-metadata table and aligned to the count columns automatically:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">col_data</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">coldata</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">col_data</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+<section id="multi-project-bundles">
+<h3>Multi-project bundles<a class="headerlink" href="#multi-project-bundles" title="Link to this heading"></a></h3>
+<p>Pass an iterable for any of <code class="docutils literal notranslate"><span class="pre">organism</span></code>, <code class="docutils literal notranslate"><span class="pre">data_source</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">project</span></code>. <code class="docutils literal notranslate"><span class="pre">discover</span></code> computes the Cartesian product and produces a
+single combined bundle:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">multi</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP001558&quot;</span><span class="p">],</span>
+    <span class="n">genomic_units</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;gene&quot;</span><span class="p">,),</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Combined: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">multi</span><span class="o">.</span><span class="n">resources</span><span class="p">)</span><span class="si">}</span><span class="s2"> resources, 2 projects.&quot;</span><span class="p">)</span>
+<span class="c1"># Combined: 15 resources, 2 projects.</span>
 </pre></div>
 </div>
+<p>The count is 15, not 14: each project contributes 7 project-specific resources
+(1 gene count + 1 junction file + 5 metadata tables), and the gene annotation
+GTF is shared across both projects, so it is deduplicated to a single resource
+(7 × 2 + 1 = 15). Note that the junction artifact is included by default
+regardless of <code class="docutils literal notranslate"><span class="pre">genomic_units</span></code>; pass <code class="docutils literal notranslate"><span class="pre">junction_exts=()</span></code> to omit it.</p>
+<p>When a bundle spans more than one <code class="docutils literal notranslate"><span class="pre">(organism,</span> <span class="pre">data_source,</span> <span class="pre">project)</span></code>
+triple, its <code class="docutils literal notranslate"><span class="pre">organism</span></code>/<code class="docutils literal notranslate"><span class="pre">data_source</span></code>/<code class="docutils literal notranslate"><span class="pre">project</span></code> attributes are left
+as <code class="docutils literal notranslate"><span class="pre">None</span></code> to avoid misrepresenting its identity; per-resource fields
+remain authoritative.</p>
+<p>Supported values:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">organism</span></code>: <code class="docutils literal notranslate"><span class="pre">&quot;human&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;mouse&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">data_source</span></code>: <code class="docutils literal notranslate"><span class="pre">&quot;sra&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;gtex&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;tcga&quot;</span></code></p></li>
+</ul>
 </section>
 <section id="filtering-bundles">
-<h2>Filtering Bundles<a class="headerlink" href="#filtering-bundles" title="Link to this heading"></a></h2>
-<p>Bundles are immutable snapshots.  Use <a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.filter" title="recount3.bundle.R3ResourceBundle.filter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">filter()</span></code></a>
-to narrow down by any description field:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gene_only</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
-<span class="n">annots</span>    <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;annotations&quot;</span><span class="p">)</span>
-<span class="n">metadata</span>  <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">only_metadata</span><span class="p">()</span>
+<h3>Filtering bundles<a class="headerlink" href="#filtering-bundles" title="Link to this heading"></a></h3>
+<p>Bundles are returned by-value from <code class="xref py py-meth docutils literal notranslate"><span class="pre">filter()</span></code>;
+the original is not mutated. Each keyword maps to a field on the
+underlying <a class="reference internal" href="api.html#recount3._descriptions.R3ResourceDescription" title="recount3._descriptions.R3ResourceDescription"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceDescription</span></code></a>, and
+accepts any <a class="reference internal" href="api.html#recount3.types.FieldSpec" title="recount3.types.FieldSpec"><code class="xref py py-data docutils literal notranslate"><span class="pre">FieldSpec</span></code></a>:</p>
+<ul class="simple">
+<li><p>a single string: exact match</p></li>
+<li><p>an iterable of strings: membership test</p></li>
+<li><p>a callable <code class="docutils literal notranslate"><span class="pre">(value)</span> <span class="pre">-&gt;</span> <span class="pre">bool</span></code>: predicate</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gene_counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+    <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">,</span>
+    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">gene_or_exon</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span> <span class="s2">&quot;exon&quot;</span><span class="p">])</span>
+
+<span class="n">gencode_only</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+    <span class="n">annotation_extension</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ext</span><span class="p">:</span> <span class="n">ext</span> <span class="ow">and</span> <span class="n">ext</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;G&quot;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">no_metadata</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;metadata_files&quot;</span><span class="p">,</span> <span class="n">invert</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>Convenience aliases provide shortcuts for the most common filters:
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">only_counts()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">only_metadata()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">bigwigs()</span></code>,
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">exclude_metadata()</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Filtering on a field that a resource does not have (for example,
+filtering on <code class="docutils literal notranslate"><span class="pre">genomic_unit</span></code> when metadata files have no genomic unit)
+excludes those resources from the result. Combine filters explicitly
+when this matters: <code class="docutils literal notranslate"><span class="pre">bundle.filter(resource_type=...,</span> <span class="pre">genomic_unit=...)</span></code>.</p>
+</div>
 </section>
-<section id="working-with-individual-resources">
-<h2>Working with Individual Resources<a class="headerlink" href="#working-with-individual-resources" title="Link to this heading"></a></h2>
-<p>Each <a class="reference internal" href="api.html#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> knows its URL and can be
-downloaded and loaded independently:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3GeneOrExonCounts</span><span class="p">,</span> <span class="n">R3Resource</span>
+<section id="stacking-count-matrices">
+<h3>Stacking count matrices<a class="headerlink" href="#stacking-count-matrices" title="Link to this heading"></a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">stack_count_matrices()</span></code> concatenates count
+DataFrames. It does not take a <code class="docutils literal notranslate"><span class="pre">genomic_unit</span></code> argument, so filter the
+bundle first to choose which family you want:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">gene_counts_df</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">bundle</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">,</span> <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">compat</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">gene_counts_df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>                        <span class="c1"># (n_features, n_samples)</span>
+<span class="c1"># (63856, 12)</span>
 
-<span class="n">desc</span> <span class="o">=</span> <span class="n">R3GeneOrExonCounts</span><span class="p">(</span>
+<span class="n">junction_counts_df</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="n">bundle</span>
+    <span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_junctions&quot;</span><span class="p">,</span> <span class="n">junction_extension</span><span class="o">=</span><span class="s2">&quot;MM&quot;</span><span class="p">)</span>
+    <span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">()</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Compatibility checking is controlled by <code class="docutils literal notranslate"><span class="pre">compat</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">compat=&quot;family&quot;</span></code> (default): gene/exon may mix with gene/exon;
+junctions stay with junctions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">compat=&quot;feature&quot;</span></code>: stricter; the feature space must match exactly: the
+same genomic unit (gene versus exon) for gene/exon counts, or the same
+junction subtype for junctions. (The annotation build is not constrained.)</p></li>
+</ul>
+<p>Mixing incompatible resources raises
+<a class="reference internal" href="api.html#recount3.errors.CompatibilityError" title="recount3.errors.CompatibilityError"><code class="xref py py-exc docutils literal notranslate"><span class="pre">CompatibilityError</span></code></a>.</p>
+</section>
+<section id="building-summarizedexperiment-rangedsummarizedexperiment-from-a-bundle">
+<h3>Building SummarizedExperiment / RangedSummarizedExperiment from a bundle<a class="headerlink" href="#building-summarizedexperiment-rangedsummarizedexperiment-from-a-bundle" title="Link to this heading"></a></h3>
+<p>The bundle methods below are what <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> calls internally:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">se</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_summarized_experiment</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">)</span>
+
+<span class="n">rse</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span>
+    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="o">=</span><span class="s2">&quot;G026&quot;</span><span class="p">,</span>
+    <span class="n">allow_fallback_to_se</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The same functions are available as standalone wrappers in
+<a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> (<code class="xref py py-func docutils literal notranslate"><span class="pre">build_summarized_experiment()</span></code>,
+<code class="xref py py-func docutils literal notranslate"><span class="pre">build_ranged_summarized_experiment()</span></code>) for symmetry with
+<code class="docutils literal notranslate"><span class="pre">create_rse</span></code>.</p>
+</section>
+<section id="downloading-a-bundle-s-files-in-parallel">
+<h3>Downloading a bundle’s files in parallel<a class="headerlink" href="#downloading-a-bundle-s-files-in-parallel" title="Link to this heading"></a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">download()</span></code> materializes every resource in a
+bundle to a local destination. Because retrieval is I/O-bound, resources are
+fetched concurrently by a pool of worker threads sized by <code class="docutils literal notranslate"><span class="pre">max_workers</span></code>
+(default 8). This is the same mechanism used by the <code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">download</span></code>
+command-line tool:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bundle</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">dest</span><span class="o">=</span><span class="s2">&quot;./downloads&quot;</span><span class="p">,</span> <span class="n">max_workers</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">dest</span></code> may be a directory (each resource written as a separate file) or a
+path ending in <code class="docutils literal notranslate"><span class="pre">.zip</span></code> (resources written into a single archive). The
+<code class="docutils literal notranslate"><span class="pre">cache</span></code> keyword (named <code class="docutils literal notranslate"><span class="pre">cache_mode</span></code> on
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">download()</span></code>) accepts the same values: <code class="docutils literal notranslate"><span class="pre">&quot;enable&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;update&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;disable&quot;</span></code>.</p>
+</section>
+</section>
+<section id="layer-3-individual-resources">
+<h2>Layer 3: Individual resources<a class="headerlink" href="#layer-3-individual-resources" title="Link to this heading"></a></h2>
+<p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> is the lowest level: one file, one URL, one
+cache entry, one parser. Use it when you want to download or load a
+specific file without going through the bundle machinery.</p>
+<p>A resource is built from a description. Descriptions are typed
+dataclasses with field validation; the recommended constructor is the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceDescription</span></code> factory, which routes to the
+appropriate subclass based on <code class="docutils literal notranslate"><span class="pre">resource_type</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3Resource</span><span class="p">,</span> <span class="n">R3ResourceDescription</span>
+
+<span class="n">desc</span> <span class="o">=</span> <span class="n">R3ResourceDescription</span><span class="p">(</span>
+    <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">,</span>
     <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
     <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
     <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
     <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
-    <span class="n">sample</span><span class="o">=</span><span class="s2">&quot;SRR387777&quot;</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="o">=</span><span class="s2">&quot;G026&quot;</span><span class="p">,</span>   <span class="c1"># required for gene/exon counts</span>
 <span class="p">)</span>
+
 <span class="n">res</span> <span class="o">=</span> <span class="n">R3Resource</span><span class="p">(</span><span class="n">desc</span><span class="p">)</span>
-<span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>  <span class="c1"># saves to local cache</span>
-<span class="n">df</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>                               <span class="c1"># returns pd.DataFrame</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>                     <span class="c1"># fully-qualified URL on the recount3 mirror</span>
+<span class="c1"># http://duffel.rail.bio/recount3/human/data_sources/sra/gene_sums/15/SRP009615/sra.gene_sums.SRP009615.G026.gz</span>
+
+<span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>  <span class="c1"># cache only, no local copy</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>                               <span class="c1"># pandas.DataFrame</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 </pre></div>
 </div>
+<p>The full description catalog:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Resource type</p></th>
+<th class="head"><p>Description class</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;annotations&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Annotations</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;count_files_gene_or_exon&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3GeneOrExonCounts</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;count_files_junctions&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3JunctionCounts</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;metadata_files&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ProjectMetadata</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;bigwig_files&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3BigWig</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;data_sources&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3DataSources</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;data_source_metadata&quot;</span></code></p></td>
+<td><p><code class="xref py py-class docutils literal notranslate"><span class="pre">R3DataSourceMetadata</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<section id="downloading">
+<h3>Downloading<a class="headerlink" href="#downloading" title="Link to this heading"></a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">download()</span></code> has three forms, controlled by
+<code class="docutils literal notranslate"><span class="pre">path</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>                       <span class="c1"># cache only</span>
+<span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;/data/recount3&quot;</span><span class="p">)</span>           <span class="c1"># copy into a directory</span>
+<span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;/data/recount3.zip&quot;</span><span class="p">)</span>       <span class="c1"># append to a ZIP archive</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">cache_mode</span></code> controls cache interaction:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;enable&quot;</span></code> (default): use cached copy if present; download if not.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;update&quot;</span></code>: force a fresh download, then overwrite the cache.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;disable&quot;</span></code>: bypass the cache entirely (only valid when <code class="docutils literal notranslate"><span class="pre">path</span></code> is
+a directory or <code class="docutils literal notranslate"><span class="pre">.zip</span></code>).</p></li>
+</ul>
+</section>
+<section id="loading">
+<h3>Loading<a class="headerlink" href="#loading" title="Link to this heading"></a></h3>
+<p><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code> parses the cached file. The return type
+depends on the resource:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Resource type</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">load()</span></code> returns</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Gene/exon counts</p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Junction MM (with ID sidecar)</p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> (sparse-backed)</p></td>
+</tr>
+<tr class="row-even"><td><p>Junction ID / RR</p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+</tr>
+<tr class="row-odd"><td><p>Metadata tables / source listings</p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+</tr>
+<tr class="row-even"><td><p>BigWig</p></td>
+<td><p><a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a></p></td>
+</tr>
+</tbody>
+</table>
+<p>The parsed object is cached on the resource; subsequent <code class="docutils literal notranslate"><span class="pre">load()</span></code> calls
+return the same instance until you call
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">clear_loaded()</span></code> (or pass <code class="docutils literal notranslate"><span class="pre">force=True</span></code>).</p>
 </section>
 <section id="searching-without-a-bundle">
-<h2>Searching Without a Bundle<a class="headerlink" href="#searching-without-a-bundle" title="Link to this heading"></a></h2>
-<p>The <a class="reference internal" href="api.html#module-recount3.search" title="recount3.search"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.search</span></code></a> helpers return lists of
-<a class="reference internal" href="api.html#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> objects directly:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">search_count_files_gene_or_exon</span>
+<h3>Searching without a bundle<a class="headerlink" href="#searching-without-a-bundle" title="Link to this heading"></a></h3>
+<p>If you want a flat list of resources rather than a bundle, the
+<a class="reference internal" href="api.html#module-recount3.search" title="recount3.search"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.search</span></code></a> helpers return <code class="docutils literal notranslate"><span class="pre">list[R3Resource]</span></code> directly. Each
+takes <a class="reference internal" href="api.html#recount3.types.StringOrIterable" title="recount3.types.StringOrIterable"><code class="xref py py-data docutils literal notranslate"><span class="pre">StringOrIterable</span></code></a> for every parameter and
+returns one resource per Cartesian-product combination:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">search_count_files_gene_or_exon</span><span class="p">,</span>
+    <span class="n">search_metadata_files</span><span class="p">,</span>
+    <span class="n">search_bigwig_files</span><span class="p">,</span>
+<span class="p">)</span>
 
-<span class="n">resources</span> <span class="o">=</span> <span class="n">search_count_files_gene_or_exon</span><span class="p">(</span>
+<span class="n">counts</span> <span class="o">=</span> <span class="n">search_count_files_gene_or_exon</span><span class="p">(</span>
     <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
     <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
     <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
     <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">annotation_extension</span><span class="o">=</span><span class="s2">&quot;G026&quot;</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">resources</span><span class="p">)</span><span class="si">}</span><span class="s2"> count files found.&quot;</span><span class="p">)</span>
+
+<span class="n">meta</span> <span class="o">=</span> <span class="n">search_metadata_files</span><span class="p">(</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">table_name</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;recount_project&quot;</span><span class="p">,</span> <span class="s2">&quot;recount_qc&quot;</span><span class="p">,</span> <span class="s2">&quot;recount_seq_qc&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;recount_pred&quot;</span><span class="p">,</span> <span class="s2">&quot;sra&quot;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">bigwigs</span> <span class="o">=</span> <span class="n">search_bigwig_files</span><span class="p">(</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">sample</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRR387777&quot;</span><span class="p">,</span> <span class="s2">&quot;SRR387778&quot;</span><span class="p">],</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The single-call equivalent is <code class="xref py py-func docutils literal notranslate"><span class="pre">search_project_all()</span></code>
+(used internally by <code class="docutils literal notranslate"><span class="pre">R3ResourceBundle.discover</span></code>).</p>
+</section>
+</section>
+<section id="working-with-sample-metadata">
+<h2>Working with sample metadata<a class="headerlink" href="#working-with-sample-metadata" title="Link to this heading"></a></h2>
+<p>When <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> or
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">to_ranged_summarized_experiment()</span></code>
+assembles an RSE, it merges all available per-project metadata tables
+into <code class="docutils literal notranslate"><span class="pre">column_data</span></code>, namespacing non-key columns by their table of
+origin (e.g. <code class="docutils literal notranslate"><span class="pre">recount_qc__star__all_mapped_reads</span></code>).</p>
+<p>Access it as a pandas DataFrame:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">col_df</span> <span class="o">=</span> <span class="n">rse</span><span class="o">.</span><span class="n">get_column_data</span><span class="p">()</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+<span class="n">col_df</span><span class="o">.</span><span class="n">columns</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="expanding-sra-sample-attributes">
+<h3>Expanding SRA sample attributes<a class="headerlink" href="#expanding-sra-sample-attributes" title="Link to this heading"></a></h3>
+<p>In an assembled RSE, SRA samples carry an <code class="docutils literal notranslate"><span class="pre">sra__sample_attributes</span></code> column
+(the <code class="docutils literal notranslate"><span class="pre">sra</span></code> metadata table namespaced with <code class="docutils literal notranslate"><span class="pre">__</span></code> as described above) that
+encodes key–value pairs in the form <code class="docutils literal notranslate"><span class="pre">&quot;age;;67.78|disease;;Control|...&quot;</span></code>.
+<a class="reference internal" href="api.html#recount3.se.expand_sra_attributes" title="recount3.se.expand_sra_attributes"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.expand_sra_attributes()</span></code></a> parses these into separate columns.
+It accepts either a DataFrame or an SE/RSE object, and recognizes both the
+namespaced <code class="docutils literal notranslate"><span class="pre">sra__sample_attributes</span></code> name and the R-style
+<code class="docutils literal notranslate"><span class="pre">sra.sample_attributes</span></code> spelling. Each parsed attribute becomes a new column
+named <code class="docutils literal notranslate"><span class="pre">sra_attribute.&lt;key&gt;</span></code> (for example, <code class="docutils literal notranslate"><span class="pre">sra_attribute.disease</span></code>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3.se</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_sra_attributes</span>
+
+<span class="n">rse2</span> <span class="o">=</span> <span class="n">expand_sra_attributes</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
+<span class="n">col_df</span> <span class="o">=</span> <span class="n">rse2</span><span class="o">.</span><span class="n">get_column_data</span><span class="p">()</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+<span class="n">sra_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">col_df</span><span class="o">.</span><span class="n">columns</span> <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;sra_attribute.&quot;</span><span class="p">)]</span>
 </pre></div>
 </div>
 </section>
-<section id="cache-management">
-<h2>Cache Management<a class="headerlink" href="#cache-management" title="Link to this heading"></a></h2>
-<p>Downloaded files are cached under <code class="docutils literal notranslate"><span class="pre">~/.cache/recount3/files</span></code> by default.
-Use the <a class="reference internal" href="api.html#module-recount3.config" title="recount3.config"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.config</span></code></a> helpers to inspect or clear the cache:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">recount3_cache</span><span class="p">,</span> <span class="n">recount3_cache_files</span><span class="p">,</span> <span class="n">recount3_cache_rm</span>
+</section>
+<section id="normalization-and-scaling">
+<h2>Normalization and scaling<a class="headerlink" href="#normalization-and-scaling" title="Link to this heading"></a></h2>
+<p>recount3 distributes coverage-sum counts (”<code class="docutils literal notranslate"><span class="pre">raw_counts</span></code>” assay), not
+read counts. <a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> provides recount3-compatible helpers to
+convert and normalize them. All require a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>.</p>
+<section id="approximate-read-counts">
+<h3>Approximate read counts<a class="headerlink" href="#approximate-read-counts" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3.se</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_read_counts</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="n">recount3_cache</span><span class="p">())</span>          <span class="c1"># Path to the cache directory</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">recount3_cache_files</span><span class="p">())</span>    <span class="c1"># List all cached files</span>
+<span class="n">reads</span> <span class="o">=</span> <span class="n">compute_read_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>        <span class="c1"># pandas DataFrame, integer-rounded</span>
+</pre></div>
+</div>
+<p>Values are rounded to whole reads by default; pass <code class="docutils literal notranslate"><span class="pre">round_to_integers=False</span></code>
+to retain the fractional estimates.</p>
+</section>
+<section id="per-sample-scale-factors">
+<h3>Per-sample scale factors<a class="headerlink" href="#per-sample-scale-factors" title="Link to this heading"></a></h3>
+<p>Two methods are supported, matching the R <code class="docutils literal notranslate"><span class="pre">recount3</span></code> reference:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3.se</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_scale_factors</span><span class="p">,</span> <span class="n">transform_counts</span>
 
-<span class="c1"># Remove only junction files (dry run first):</span>
-<span class="n">removed</span> <span class="o">=</span> <span class="n">recount3_cache_rm</span><span class="p">(</span>
+<span class="n">sf_auc</span>      <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">&quot;auc&quot;</span><span class="p">)</span>
+<span class="n">sf_mapreads</span> <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">&quot;mapped_reads&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Apply scale factors to the assay:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scaled</span> <span class="o">=</span> <span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">&quot;auc&quot;</span><span class="p">)</span>          <span class="c1"># default</span>
+<span class="n">scaled</span> <span class="o">=</span> <span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">&quot;mapped_reads&quot;</span><span class="p">,</span> <span class="n">target_read_count</span><span class="o">=</span><span class="mf">4e7</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="tpm-gene-exon-only-needs-feature-widths">
+<h3>TPM (gene/exon only, needs feature widths)<a class="headerlink" href="#tpm-gene-exon-only-needs-feature-widths" title="Link to this heading"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3.se</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_tpm</span>
+
+<span class="n">tpm</span> <span class="o">=</span> <span class="n">compute_tpm</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>                  <span class="c1"># requires rowRanges with widths</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="api.html#recount3.se.is_paired_end" title="recount3.se.is_paired_end"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.is_paired_end()</span></code></a> and the other helpers documented in
+<a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> accept either a DataFrame of metadata or an SE/RSE
+object. See the API reference for full signatures.</p>
+</section>
+</section>
+<section id="bigwig-coverage">
+<h2>BigWig coverage<a class="headerlink" href="#bigwig-coverage" title="Link to this heading"></a></h2>
+<p>Per-sample BigWig coverage files are not included by default; pass
+<code class="docutils literal notranslate"><span class="pre">include_bigwig=True</span></code> (or use the <code class="docutils literal notranslate"><span class="pre">search_bigwig_files</span></code> helper)
+to add them. Requires the <code class="docutils literal notranslate"><span class="pre">bigwig</span></code> extra.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
+    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
+    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+    <span class="n">include_bigwig</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="k">for</span> <span class="n">res</span><span class="p">,</span> <span class="n">bw</span> <span class="ow">in</span> <span class="n">bundle</span><span class="o">.</span><span class="n">iter_bigwig</span><span class="p">():</span>
+    <span class="k">with</span> <span class="n">bw</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">sample</span><span class="p">,</span> <span class="n">bw</span><span class="o">.</span><span class="n">chroms</span><span class="p">(</span><span class="s2">&quot;chr1&quot;</span><span class="p">))</span>
+        <span class="n">mean_chr1</span> <span class="o">=</span> <span class="n">bw</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="s2">&quot;chr1&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1_000_000</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+</pre></div>
+</div>
+<p><a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a> is a thin wrapper around
+<code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code>. Its main methods are <code class="docutils literal notranslate"><span class="pre">chroms()</span></code>, <code class="docutils literal notranslate"><span class="pre">header()</span></code>, <code class="docutils literal notranslate"><span class="pre">values()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">stats()</span></code>, <code class="docutils literal notranslate"><span class="pre">intervals()</span></code>, and <code class="docutils literal notranslate"><span class="pre">close()</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bw_res</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">bigwigs</span><span class="p">()</span><span class="o">.</span><span class="n">resources</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">bw</span> <span class="o">=</span> <span class="n">bw_res</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>                       <span class="c1"># BigWigFile</span>
+<span class="k">with</span> <span class="n">bw</span><span class="p">:</span>                                 <span class="c1"># closes the handle on exit</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">bw</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="s2">&quot;chr1&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="cache-and-configuration">
+<span id="id1"></span><h2>Cache and configuration<a class="headerlink" href="#cache-and-configuration" title="Link to this heading"></a></h2>
+<p>Downloaded files are stored under <code class="docutils literal notranslate"><span class="pre">~/.cache/recount3/files</span></code> by default.
+The <a class="reference internal" href="api.html#module-recount3.config" title="recount3.config"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.config</span></code></a> helpers let you inspect and prune the cache:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">recount3_cache</span><span class="p">,</span>
+    <span class="n">recount3_cache_files</span><span class="p">,</span>
+    <span class="n">recount3_cache_rm</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">recount3_cache</span><span class="p">())</span>                 <span class="c1"># cache directory Path</span>
+<span class="n">files</span> <span class="o">=</span> <span class="n">recount3_cache_files</span><span class="p">(</span><span class="n">pattern</span><span class="o">=</span><span class="s2">&quot;*.gtf.gz&quot;</span><span class="p">)</span>
+
+<span class="c1"># Dry-run a deletion first:</span>
+<span class="n">to_remove</span> <span class="o">=</span> <span class="n">recount3_cache_rm</span><span class="p">(</span>
     <span class="n">predicate</span><span class="o">=</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="s2">&quot;.junctions.&quot;</span> <span class="ow">in</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
     <span class="n">dry_run</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Would remove </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">removed</span><span class="p">)</span><span class="si">}</span><span class="s2"> files.&quot;</span><span class="p">)</span>
+<span class="n">recount3_cache_rm</span><span class="p">(</span><span class="n">predicate</span><span class="o">=</span><span class="k">lambda</span> <span class="n">p</span><span class="p">:</span> <span class="s2">&quot;.junctions.&quot;</span> <span class="ow">in</span> <span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>The cache directory and other settings can be overridden via environment
-variables (<code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_DIR</span></code>, <code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code>, etc.) or by
-constructing a custom <a class="reference internal" href="api.html#recount3.config.Config" title="recount3.config.Config"><code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code></a> and passing it to
-any resource or search function.</p>
-</section>
-<section id="sra-attribute-expansion">
-<h2>SRA Attribute Expansion<a class="headerlink" href="#sra-attribute-expansion" title="Link to this heading"></a></h2>
-<p>recount3 stores SRA sample attributes as a single pipe-delimited string
-column.  <a class="reference internal" href="api.html#recount3.se.build_ranged_summarized_experiment" title="recount3.se.build_ranged_summarized_experiment"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.build_ranged_summarized_experiment()</span></code></a> expands
-them automatically, but you can also call the helper directly:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3.se</span><span class="w"> </span><span class="kn">import</span> <span class="n">expand_sra_attributes</span>
+<p>Configuration precedence is, from lowest to highest: library defaults,
+environment variables, an explicit <code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code> passed to a
+resource or search function. The supported environment variables are:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Effect</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code></p></td>
+<td><p>Base URL of the recount3 mirror</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_DIR</span></code></p></td>
+<td><p>On-disk cache directory</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_DISABLE</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> to disable caching</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_HTTP_TIMEOUT</span></code></p></td>
+<td><p>Network timeout (seconds)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_MAX_RETRIES</span></code></p></td>
+<td><p>Transient-error retry attempts</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_INSECURE_SSL</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> to skip TLS verification (unsafe)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_USER_AGENT</span></code></p></td>
+<td><p>Custom <code class="docutils literal notranslate"><span class="pre">User-Agent</span></code> header</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CHUNK_SIZE</span></code></p></td>
+<td><p>Streaming chunk size (bytes)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>recount3 publishes the same file layout on several interchangeable public
+mirrors, so <code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code> may point at any of them: the Duffel load
+balancer (<code class="docutils literal notranslate"><span class="pre">http://duffel.rail.bio/recount3/</span></code>, the default), AWS Open Data
+(<code class="docutils literal notranslate"><span class="pre">https://recount-opendata.s3.amazonaws.com/recount3/release/</span></code>), or JHU
+IDIES (<code class="docutils literal notranslate"><span class="pre">https://data.idies.jhu.edu/recount3/data/</span></code>). <code class="docutils literal notranslate"><span class="pre">RECOUNT3_INSECURE_SSL</span></code>
+affects only <code class="docutils literal notranslate"><span class="pre">https</span></code> mirrors; it is a no-op for the default <code class="docutils literal notranslate"><span class="pre">http</span></code> mirror.</p>
+</div>
+<p>For programmatic use, construct a <code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code> and pass it
+explicitly:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">R3Resource</span><span class="p">,</span> <span class="n">R3GeneOrExonCounts</span>
 
-<span class="n">rse_expanded</span> <span class="o">=</span> <span class="n">expand_sra_attributes</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
-<span class="n">col_data</span> <span class="o">=</span> <span class="n">rse_expanded</span><span class="o">.</span><span class="n">coldata</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-<span class="c1"># Columns like &quot;sra_attribute.age&quot;, &quot;sra_attribute.disease&quot; are now present.</span>
+<span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="p">(</span>
+    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;http://duffel.rail.bio/recount3/&quot;</span><span class="p">,</span>
+    <span class="n">timeout</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="n">insecure_ssl</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">max_retries</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">user_agent</span><span class="o">=</span><span class="s2">&quot;my-pipeline/0.1&quot;</span><span class="p">,</span>
+    <span class="n">cache_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/scratch/recount3_cache&quot;</span><span class="p">),</span>
+    <span class="n">cache_disabled</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">res</span> <span class="o">=</span> <span class="n">R3Resource</span><span class="p">(</span>
+    <span class="n">R3GeneOrExonCounts</span><span class="p">(</span>
+        <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span> <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
+        <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="n">annotation_extension</span><span class="o">=</span><span class="s2">&quot;G026&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">config</span><span class="o">=</span><span class="n">cfg</span><span class="p">,</span>
+<span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="errors-and-troubleshooting">
+<h2>Errors and troubleshooting<a class="headerlink" href="#errors-and-troubleshooting" title="Link to this heading"></a></h2>
+<p>All <code class="docutils literal notranslate"><span class="pre">recount3</span></code> exceptions derive from <code class="xref py py-exc docutils literal notranslate"><span class="pre">Recount3Error</span></code>,
+so a single <code class="docutils literal notranslate"><span class="pre">except</span></code> clause catches every package-specific failure:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Exception</p></th>
+<th class="head"><p>Raised when</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="xref py py-exc docutils literal notranslate"><span class="pre">ConfigurationError</span></code></p></td>
+<td><p>Bad config (env var, cache dir, option combinations)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-exc docutils literal notranslate"><span class="pre">DownloadError</span></code></p></td>
+<td><p>Network/I-O failure during download</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-exc docutils literal notranslate"><span class="pre">LoadError</span></code></p></td>
+<td><p>Cached file parsed empty, malformed, or shape-mismatched</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-exc docutils literal notranslate"><span class="pre">CompatibilityError</span></code></p></td>
+<td><p>Incompatible resources combined in a stack/build</p></td>
+</tr>
+</tbody>
+</table>
+<section id="common-pitfalls">
+<h3>Common pitfalls<a class="headerlink" href="#common-pitfalls" title="Link to this heading"></a></h3>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">ImportError:</span> <span class="pre">summarizedexperiment</span> <span class="pre">is</span> <span class="pre">required</span></code></dt><dd><p>Install the BiocPy extra: <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;recount3[biocpy]&quot;</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">KeyError:</span> <span class="pre">Missing</span> <span class="pre">required</span> <span class="pre">field:</span> <span class="pre">annotation_extension</span></code></dt><dd><p>Gene and exon descriptions need an annotation code. Pass it
+explicitly (<code class="docutils literal notranslate"><span class="pre">annotation_extension=&quot;G026&quot;</span></code>) or use <code class="docutils literal notranslate"><span class="pre">create_rse</span></code>,
+which resolves a default for you.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">stack_count_matrices()</span> <span class="pre">got</span> <span class="pre">an</span> <span class="pre">unexpected</span> <span class="pre">keyword</span> <span class="pre">'genomic_unit'</span></code></dt><dd><p>Filter the bundle before calling stack:
+<code class="docutils literal notranslate"><span class="pre">bundle.filter(genomic_unit=&quot;gene&quot;).stack_count_matrices()</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">ValueError:</span> <span class="pre">Could</span> <span class="pre">not</span> <span class="pre">derive</span> <span class="pre">genomic</span> <span class="pre">ranges</span> <span class="pre">…</span></code></dt><dd><p>The required GTF (gene/exon) or RR file (junction) was not in the
+bundle, or the annotation code does not match the count files. Either
+include the right annotation, or pass <code class="docutils literal notranslate"><span class="pre">allow_fallback_to_se=True</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">CompatibilityError:</span> <span class="pre">Incompatible</span> <span class="pre">count</span> <span class="pre">families</span> <span class="pre">…</span></code></dt><dd><p>You tried to stack gene/exon counts together with junctions. Filter
+to one family first, or stack each family separately.</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="where-to-go-next">
+<h2>Where to go next<a class="headerlink" href="#where-to-go-next" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="api.html"><span class="doc">API Reference</span></a>: full per-symbol reference for all public modules.</p></li>
+<li><p><a class="reference internal" href="cli.html"><span class="doc">CLI Reference</span></a>: the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> command-line tool, which mirrors this API
+as a discover -&gt; manifest -&gt; materialize workflow.</p></li>
+<li><p>The <a class="reference external" href="https://rna.recount.bio/docs/raw-files.html">recount3 raw-files documentation</a> describes the underlying file
+layout (URLs, sharding, annotation codes). Note that this upstream page (not
+this tutorial) contains several inaccuracies.</p></li>
+</ul>
 </section>
 </section>
 

@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.search &mdash; recount3 1.0.0 documentation</title>
+  <title>recount3.search &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -87,8 +87,8 @@
 <span class="c1">#   display the following acknowledgement: This product includes software</span>
 <span class="c1">#   developed by the copyright holder.</span>
 <span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
-<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
-<span class="c1">#   specific prior written permission.</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software</span>
+<span class="c1">#   without specific prior written permission.</span>
 <span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
 <span class="c1">#   source code must be included with the published work.</span>
 <span class="c1">#</span>
@@ -122,21 +122,28 @@
 <span class="sd">    the above for a given project and returns a combined resource list</span>
 
 <span class="sd">Tier 2: Discovery helpers</span>
-<span class="sd">  These functions download and parse metadata to return structured results:</span>
+<span class="sd">  These functions download and parse metadata to return structured results.</span>
+<span class="sd">  All are part of the public top-level surface (re-exported from</span>
+<span class="sd">  :mod:`recount3`):</span>
 
-<span class="sd">  * :func:`available_samples`: DataFrame of samples available across data sources</span>
+<span class="sd">  * :func:`available_samples`: DataFrame of samples available across data</span>
+<span class="sd">    sources</span>
 <span class="sd">  * :func:`available_projects`: DataFrame of projects with sample counts</span>
-<span class="sd">  * :func:`project_homes`: DataFrame mapping projects to their data-source home URLs</span>
+<span class="sd">  * :func:`project_homes`: DataFrame mapping projects to their data-source</span>
+<span class="sd">    home URLs</span>
 <span class="sd">  * :func:`samples_for_project`: sample IDs for a specific project</span>
+<span class="sd">  * :func:`create_sample_project_lists`: build per-data-source sample/project</span>
+<span class="sd">    lists (backs the ``ids`` CLI command)</span>
 <span class="sd">  * :func:`annotation_options`: mapping of annotation names to extension codes</span>
-<span class="sd">  * :func:`annotation_ext`: resolve a name or code to a canonical extension string</span>
+<span class="sd">  * :func:`annotation_ext`: resolve a name or code to a canonical extension</span>
+<span class="sd">    string</span>
 
 <span class="sd">StringOrIterable and the Cartesian product pattern</span>
 <span class="sd">  All Tier 1 functions accept :data:`~recount3.types.StringOrIterable` for</span>
 <span class="sd">  each parameter: either a single string or an iterable of strings. When</span>
 <span class="sd">  iterables are supplied, the function computes the Cartesian product across</span>
 <span class="sd">  all parameters and returns one resource per unique combination. For example,</span>
-<span class="sd">  passing ``project=[&quot;SRP009615&quot;, &quot;SRP012682&quot;]`` and ``genomic_unit=[&quot;gene&quot;,</span>
+<span class="sd">  passing ``project=[&quot;SRP009615&quot;, &quot;SRP001558&quot;]`` and ``genomic_unit=[&quot;gene&quot;,</span>
 <span class="sd">  &quot;exon&quot;]`` produces four resources.</span>
 
 <span class="sd">Annotation names and extension codes</span>
@@ -264,7 +271,9 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build R3Resource objects from parameter dicts, optionally deduplicating.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build :class:`~recount3.R3Resource` objects from parameter dicts.</span>
+
+<span class="sd">    Optionally deduplicates the result.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        param_dicts: An iterable of parameter dictionaries, each containing at</span>
@@ -341,7 +350,7 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for annotation GTF files.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return :class:`~recount3.R3Resource` objects for annotation GTF files.</span>
 
 <span class="sd">    Constructs the Cartesian product of all provided values and returns one</span>
 <span class="sd">    :class:`~recount3.resource.R3Resource` per unique combination.</span>
@@ -383,8 +392,9 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for per-project gene or exon count matrices.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return gene/exon count :class:`~recount3.R3Resource` objects.</span>
 
+<span class="sd">    Each resource points to a per-project gene or exon count matrix.</span>
 <span class="sd">    Constructs the Cartesian product of all provided values and returns one</span>
 <span class="sd">    :class:`~recount3.resource.R3Resource` per unique combination.</span>
 
@@ -417,13 +427,14 @@
 <span class="sd">                project=&quot;SRP009615&quot;,</span>
 <span class="sd">            )</span>
 
-<span class="sd">        Multiple projects: returns one resource per project (Cartesian product)::</span>
+<span class="sd">        Multiple projects return one resource per project</span>
+<span class="sd">        (Cartesian product)::</span>
 
 <span class="sd">            resources = search_count_files_gene_or_exon(</span>
 <span class="sd">                organism=&quot;human&quot;,</span>
 <span class="sd">                data_source=&quot;sra&quot;,</span>
 <span class="sd">                genomic_unit=&quot;gene&quot;,</span>
-<span class="sd">                project=[&quot;SRP009615&quot;, &quot;SRP012682&quot;],</span>
+<span class="sd">                project=[&quot;SRP009615&quot;, &quot;SRP001558&quot;],</span>
 <span class="sd">            )</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">grid</span> <span class="o">=</span> <span class="n">_build_param_grid</span><span class="p">(</span>
@@ -450,8 +461,9 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for per-project junction count files.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return junction count :class:`~recount3.R3Resource` objects.</span>
 
+<span class="sd">    Each resource points to a per-project junction count file.</span>
 <span class="sd">    Constructs the Cartesian product of all provided values and returns one</span>
 <span class="sd">    :class:`~recount3.resource.R3Resource` per unique combination. Junction</span>
 <span class="sd">    files are distributed as a triplet of sidecar files sharing a common stem:</span>
@@ -504,8 +516,9 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for per-project metadata tables.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return project metadata :class:`~recount3.R3Resource` objects.</span>
 
+<span class="sd">    Each resource points to a per-project metadata table.</span>
 <span class="sd">    Constructs the Cartesian product of all provided values and returns one</span>
 <span class="sd">    :class:`~recount3.resource.R3Resource` per unique combination.</span>
 
@@ -548,8 +561,9 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for per-sample BigWig coverage files.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return BigWig coverage :class:`~recount3.R3Resource` objects.</span>
 
+<span class="sd">    Each resource points to a per-sample BigWig coverage file.</span>
 <span class="sd">    Constructs the Cartesian product of all provided values and returns one</span>
 <span class="sd">    :class:`~recount3.resource.R3Resource` per unique combination.</span>
 
@@ -558,7 +572,8 @@
 <span class="sd">        data_source: One or more data-source identifiers</span>
 <span class="sd">            (e.g. ``&quot;sra&quot;``, ``&quot;gtex&quot;``).</span>
 <span class="sd">        project: One or more project identifiers (e.g. ``&quot;SRP009615&quot;``).</span>
-<span class="sd">        sample: One or more sample identifiers (e.g. a rail_id or SRR accession).</span>
+<span class="sd">        sample: One or more sample identifiers (e.g. a rail_id or SRR</span>
+<span class="sd">            accession).</span>
 <span class="sd">        strict: If ``True`` (default), re-raise any exception encountered while</span>
 <span class="sd">            constructing a resource. If ``False``, silently skip invalid</span>
 <span class="sd">            combinations.</span>
@@ -588,7 +603,7 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for the organism-level data-source index.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return data-source index :class:`~recount3.R3Resource` objects.</span>
 
 <span class="sd">    Each resource resolves to the ``homes_index`` file for one organism,</span>
 <span class="sd">    which lists the available data sources for that organism.</span>
@@ -619,7 +634,7 @@
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">deduplicate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">R3Resource</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return R3Resource objects for data-source-level metadata listings.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return data-source metadata :class:`~recount3.R3Resource` objects.</span>
 
 <span class="sd">    Each resource resolves to the ``recount_project`` metadata file for one</span>
 <span class="sd">    (organism, data_source) pair, which enumerates all projects within that</span>
@@ -678,9 +693,7 @@
         <span class="n">sample_frames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">project_frames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">org</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">VALID_ORGANISMS</span><span class="p">):</span>
-            <span class="n">sample_frames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">available_samples</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="p">)</span>
+            <span class="n">sample_frames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">available_samples</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
             <span class="n">project_frames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
                 <span class="n">available_projects</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
             <span class="p">)</span>
@@ -707,12 +720,7 @@
         <span class="p">):</span>
             <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">samples_df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
                 <span class="n">sample_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
-                    <span class="p">{</span>
-                        <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-                        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">samples_df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span>
-                        <span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
-                        <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
-                    <span class="p">}</span>
+                    <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">samples_df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)}</span>
                 <span class="p">)</span>
                 <span class="k">break</span>
 
@@ -720,12 +728,7 @@
     <span class="n">project_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">projects_df</span><span class="o">.</span><span class="n">empty</span> <span class="ow">and</span> <span class="s2">&quot;project&quot;</span> <span class="ow">in</span> <span class="n">projects_df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="n">project_ids</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
-            <span class="p">{</span>
-                <span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">projects_df</span><span class="p">[</span><span class="s2">&quot;project&quot;</span><span class="p">]</span>
-                <span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
-                <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
-            <span class="p">}</span>
+            <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">projects_df</span><span class="p">[</span><span class="s2">&quot;project&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)}</span>
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">sample_ids</span><span class="p">,</span> <span class="n">project_ids</span></div>
@@ -916,8 +919,10 @@
     <span class="n">samples</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">samples</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
 
     <span class="k">if</span> <span class="s2">&quot;organism&quot;</span> <span class="ow">in</span> <span class="n">samples</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-        <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;organism&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;organism&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
-            <span class="p">{</span><span class="s2">&quot;Homo sapiens&quot;</span><span class="p">:</span> <span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;Mus musculus&quot;</span><span class="p">:</span> <span class="s2">&quot;mouse&quot;</span><span class="p">}</span>
+        <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;organism&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;organism&quot;</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="s2">&quot;Homo sapiens&quot;</span><span class="p">:</span> <span class="s2">&quot;human&quot;</span><span class="p">,</span> <span class="s2">&quot;Mus musculus&quot;</span><span class="p">:</span> <span class="s2">&quot;mouse&quot;</span><span class="p">})</span>
         <span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">samples</span><span class="p">[</span><span class="s2">&quot;organism&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">org</span>
@@ -1051,11 +1056,7 @@
         <span class="n">sample_keys</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">key_cols</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">counts</span> <span class="o">=</span> <span class="n">sample_keys</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span>
 
-        <span class="n">project_keys</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">projects</span><span class="p">[</span><span class="n">key_cols</span><span class="p">]</span>
-            <span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="p">)</span>
+        <span class="n">project_keys</span> <span class="o">=</span> <span class="n">projects</span><span class="p">[</span><span class="n">key_cols</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">projects</span><span class="p">[</span><span class="s2">&quot;n_samples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">project_keys</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;Int64&quot;</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">projects</span><span class="p">[</span><span class="s2">&quot;n_samples&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;Int64&quot;</span><span class="p">)</span>

@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>API Reference &mdash; recount3 1.0.0 documentation</title>
+  <title>API Reference &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=8d563738"></script>
+      <script src="_static/documentation_options.js?v=fc837d61"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -66,11 +66,13 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#module-recount3.resource">recount3.resource</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#recount3.resource.build_url"><code class="docutils literal notranslate"><span class="pre">build_url()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#recount3.resource.R3Resource"><code class="docutils literal notranslate"><span class="pre">R3Resource</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.description"><code class="docutils literal notranslate"><span class="pre">R3Resource.description</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.url"><code class="docutils literal notranslate"><span class="pre">R3Resource.url</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.filepath"><code class="docutils literal notranslate"><span class="pre">R3Resource.filepath</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.config"><code class="docutils literal notranslate"><span class="pre">R3Resource.config</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.from_mapping"><code class="docutils literal notranslate"><span class="pre">R3Resource.from_mapping()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.arcname"><code class="docutils literal notranslate"><span class="pre">R3Resource.arcname</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.download"><code class="docutils literal notranslate"><span class="pre">R3Resource.download()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#recount3.resource.R3Resource.load"><code class="docutils literal notranslate"><span class="pre">R3Resource.load()</span></code></a></li>
@@ -267,7 +269,7 @@ are re-exported here for discovery and convenience.</p>
 <span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
     <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
     <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
-    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP012682&quot;</span><span class="p">],</span>
+    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP001558&quot;</span><span class="p">],</span>
 <span class="p">)</span>
 <span class="n">counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
     <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">,</span>
@@ -283,10 +285,10 @@ are re-exported here for discovery and convenience.</p>
 required for <code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code>,
 <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_ranged_summarized_experiment()</span></code></a>,
 and the compute utilities in <a class="reference internal" href="#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a>.
-Install with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">biocframe</span> <span class="pre">summarizedexperiment</span> <span class="pre">genomicranges</span></code>.</p></li>
-<li><p>pyBigWig: required for BigWig file access via
+Install with <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;recount3[biocpy]&quot;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code>: required for BigWig file access via
 <a class="reference internal" href="#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a>. Install with
-<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">pyBigWig</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;recount3[bigwig]&quot;</span></code>.</p></li>
 </ul>
 </div>
 <section id="module-recount3.config">
@@ -300,32 +302,56 @@ override both environment variables and <a class="reference internal" href="#rec
 <p>The module also exposes three cache utility functions:
 <a class="reference internal" href="#recount3.config.recount3_cache" title="recount3.config.recount3_cache"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3_cache()</span></code></a>, <a class="reference internal" href="#recount3.config.recount3_cache_files" title="recount3.config.recount3_cache_files"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3_cache_files()</span></code></a>, and
 <a class="reference internal" href="#recount3.config.recount3_cache_rm" title="recount3.config.recount3_cache_rm"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3_cache_rm()</span></code></a>.</p>
-<dl class="simple">
+<dl>
 <dt>Environment variables (all optional):</dt><dd><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code>: base URL of the duffel mirror
-(default: <code class="docutils literal notranslate"><span class="pre">https://duffel.rail.bio/recount3/</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code>: base URL of the recount3 mirror
+(default: <code class="docutils literal notranslate"><span class="pre">http://duffel.rail.bio/recount3/</span></code>).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_DIR</span></code>: directory for the on-disk file cache
-(default: <code class="docutils literal notranslate"><span class="pre">~/.cache/recount3</span></code>).</p></li>
+(default: <code class="docutils literal notranslate"><span class="pre">~/.cache/recount3/files</span></code>).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_DISABLE</span></code>: set to <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> to disable caching entirely.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_HTTP_TIMEOUT</span></code>: HTTP request timeout in seconds (default: 30).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_HTTP_TIMEOUT</span></code>: HTTP request timeout in seconds (default: 60).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_MAX_RETRIES</span></code>: maximum retry attempts for transient errors
 (default: 3).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_INSECURE_SSL</span></code>: set to <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> to skip TLS verification
-(unsafe; use only for debugging certificate issues).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_INSECURE_SSL</span></code>: set to <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code> to skip TLS certificate
+verification. This only affects <code class="docutils literal notranslate"><span class="pre">https://</span></code> base URLs; it is a no-op for
+the default <code class="docutils literal notranslate"><span class="pre">http://</span></code> Duffel mirror (see “Mirrors” below).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_USER_AGENT</span></code>: custom <code class="docutils literal notranslate"><span class="pre">User-Agent</span></code> header string.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CHUNK_SIZE</span></code>: streaming chunk size in bytes (default: 65536).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RECOUNT3_CHUNK_SIZE</span></code>: streaming chunk size in bytes
+(default: 1048576, i.e. 1 MiB).</p></li>
 </ul>
+</dd>
+<dt>Mirrors:</dt><dd><p>recount3 publishes the <strong>same relative file layout</strong> on several
+interchangeable public mirrors; <code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code> / <code class="docutils literal notranslate"><span class="pre">base_url</span></code> works with
+any of them unchanged:</p>
+<ul class="simple">
+<li><p>Duffel load balancer (default): <code class="docutils literal notranslate"><span class="pre">http://duffel.rail.bio/recount3/</span></code></p></li>
+<li><p>AWS Open Data:
+<code class="docutils literal notranslate"><span class="pre">https://recount-opendata.s3.amazonaws.com/recount3/release/</span></code></p></li>
+<li><p>JHU IDIES (Dataverse): <code class="docutils literal notranslate"><span class="pre">https://data.idies.jhu.edu/recount3/data/</span></code></p></li>
+</ul>
+<p>The package is coupled to recount3’s layout convention rather than to any one
+host, so switching mirrors is purely a <code class="docutils literal notranslate"><span class="pre">base_url</span></code> change. TLS settings apply
+only to <code class="docutils literal notranslate"><span class="pre">https://</span></code> endpoints: the default Duffel mirror is plain <code class="docutils literal notranslate"><span class="pre">http</span></code>
+(no TLS, so <code class="docutils literal notranslate"><span class="pre">insecure_ssl</span></code> is irrelevant), the AWS and JHU mirrors are
+<code class="docutils literal notranslate"><span class="pre">https</span></code> with valid certificates (no flag needed), and
+<code class="docutils literal notranslate"><span class="pre">RECOUNT3_INSECURE_SSL</span></code> / <code class="docutils literal notranslate"><span class="pre">--insecure-ssl</span></code> is meaningful only for an
+<code class="docutils literal notranslate"><span class="pre">https</span></code> endpoint presenting an untrusted or self-signed certificate.</p>
 </dd>
 </dl>
 <p>Typical usage example:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">recount3_cache</span><span class="p">,</span> <span class="n">recount3_cache_rm</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_config</span><span class="p">,</span> <span class="n">recount3_cache</span><span class="p">,</span> <span class="n">recount3_cache_rm</span>
 
 <span class="c1"># Read the current cache directory (creates it if absent):</span>
 <span class="n">cache_dir</span> <span class="o">=</span> <span class="n">recount3_cache</span><span class="p">()</span>
 
-<span class="c1"># Use a custom cache location for this session:</span>
-<span class="n">cfg</span> <span class="o">=</span> <span class="n">Config</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/scratch/recount3_cache&quot;</span><span class="p">))</span>
+<span class="c1"># Use a custom cache location for this session (override one field of</span>
+<span class="c1"># the environment-derived defaults; Config is immutable):</span>
+<span class="n">cfg</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+    <span class="n">default_config</span><span class="p">(),</span> <span class="n">cache_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/scratch/recount3_cache&quot;</span><span class="p">)</span>
+<span class="p">)</span>
+<span class="n">custom_cache_dir</span> <span class="o">=</span> <span class="n">recount3_cache</span><span class="p">(</span><span class="n">cfg</span><span class="p">)</span>
 
 <span class="c1"># Remove cached files matching a pattern (dry run first):</span>
 <span class="n">to_delete</span> <span class="o">=</span> <span class="n">recount3_cache_rm</span><span class="p">(</span><span class="n">dry_run</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -353,7 +379,9 @@ override both environment variables and <a class="reference internal" href="#rec
 <dl class="py attribute">
 <dt class="sig sig-object py" id="recount3.config.Config.base_url">
 <span class="sig-name descname"><span class="pre">base_url</span></span><a class="headerlink" href="#recount3.config.Config.base_url" title="Link to this definition"></a></dt>
-<dd><p>Base URL for the duffel mirror (ends with a trailing slash).</p>
+<dd><p>Base URL for the recount3 mirror (ends with a trailing slash).
+Defaults to the Duffel load balancer; the AWS Open Data and JHU IDIES
+mirrors serve the same layout (see the module docstring “Mirrors”).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
@@ -375,7 +403,9 @@ override both environment variables and <a class="reference internal" href="#rec
 <dl class="py attribute">
 <dt class="sig sig-object py" id="recount3.config.Config.insecure_ssl">
 <span class="sig-name descname"><span class="pre">insecure_ssl</span></span><a class="headerlink" href="#recount3.config.Config.insecure_ssl" title="Link to this definition"></a></dt>
-<dd><p>True to disable TLS verification (not recommended).</p>
+<dd><p>True to disable TLS certificate verification (not
+recommended). Only affects <code class="docutils literal notranslate"><span class="pre">https://</span></code> base URLs; a no-op for the
+default <code class="docutils literal notranslate"><span class="pre">http://</span></code> Duffel mirror.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
@@ -559,7 +589,7 @@ GTFs, BigWig coverage files, junction counts) is represented as an
 <ol class="arabic simple">
 <li><p>Description -&gt; URL: a <a class="reference internal" href="#recount3._descriptions.R3ResourceDescription" title="recount3._descriptions.R3ResourceDescription"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceDescription</span></code></a>
 provides the structured parameters (organism, project, genomic unit, …) that
-are used to construct the deterministic duffel-mirror URL.</p></li>
+are used to construct the deterministic recount3 mirror URL.</p></li>
 <li><p>URL -&gt; cache: <a class="reference internal" href="#recount3.resource.R3Resource.download" title="recount3.resource.R3Resource.download"><code class="xref py py-meth docutils literal notranslate"><span class="pre">download()</span></code></a> fetches the file over HTTP
 and stores it in a persistent on-disk cache keyed by URL hash.</p></li>
 <li><p>Cache -&gt; materialization: the cached file can be hard-linked or copied
@@ -600,16 +630,53 @@ resources sharing a common cache path without corrupting the cache.</p>
 <p><a class="reference internal" href="#recount3.resource.R3Resource.load" title="recount3.resource.R3Resource.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code></a> returns different types depending on the
 resource type:</p>
 <ul class="simple">
-<li><p>Gene/exon count resources -&gt; <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> (features x samples).</p></li>
-<li><p>Junction MM resources -&gt; <code class="xref py py-class docutils literal notranslate"><span class="pre">scipy.sparse.csr_matrix</span></code>.</p></li>
-<li><p>Junction ID/RR resources -&gt; <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>.</p></li>
+<li><p>Gene/exon count resources -&gt; <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>
+(features x samples).</p></li>
+<li><p>Junction MM resources -&gt; a sparse-backed <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>
+(built via <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.sparse.from_spmatrix.html#pandas.DataFrame.sparse.from_spmatrix" title="(in pandas v3.0.3)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.sparse.from_spmatrix()</span></code></a>).</p></li>
+<li><p>Junction ID/RR resources -&gt; <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>.</p></li>
 <li><p>BigWig resources -&gt; <a class="reference internal" href="#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a>.</p></li>
 </ul>
 </div>
+<dl class="py function">
+<dt class="sig sig-object py" id="recount3.resource.build_url">
+<span class="sig-prename descclassname"><span class="pre">recount3.resource.</span></span><span class="sig-name descname"><span class="pre">build_url</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resource_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><span class="pre">Config</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">fields</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="_modules/recount3/resource.html#build_url"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.resource.build_url" title="Link to this definition"></a></dt>
+<dd><p>Build the absolute URL for a resource from its description fields.</p>
+<p>Constructs the appropriate
+<a class="reference internal" href="#recount3._descriptions.R3ResourceDescription" title="recount3._descriptions.R3ResourceDescription"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceDescription</span></code></a> subclass via the
+type registry and joins its repository-relative path onto the configured
+base URL. The per-resource-type path logic lives in each description’s
+<code class="docutils literal notranslate"><span class="pre">url_path()</span></code>; this function only supplies the base URL and the join,
+mirroring what <code class="xref py py-meth docutils literal notranslate"><span class="pre">R3Resource.__post_init__()</span></code> does. Useful when only a
+URL is needed and a full <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> would be overkill (e.g.
+populating a <code class="docutils literal notranslate"><span class="pre">BigWigURL</span></code> metadata column).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>resource_type</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Registered resource-type key (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;bigwig_files&quot;</span></code>).</p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><em>Config</em></a><em> | </em><em>None</em>) – Optional <a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code></a>; the global default is
+used when omitted.</p></li>
+<li><p><strong>**fields</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Description fields for the resource type (<code class="docutils literal notranslate"><span class="pre">organism</span></code>,
+<code class="docutils literal notranslate"><span class="pre">data_source</span></code>, <code class="docutils literal notranslate"><span class="pre">project</span></code>, <code class="docutils literal notranslate"><span class="pre">sample</span></code>, …).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The full, absolute network URL for the resource.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a><strong>, </strong><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">resource_type</span></code> is unknown or the supplied
+    fields are invalid for it (propagated from the description factory).</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="recount3.resource.R3Resource">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">recount3.resource.</span></span><span class="sig-name descname"><span class="pre">R3Resource</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#recount3._descriptions.R3ResourceDescription" title="recount3._descriptions.R3ResourceDescription"><span class="pre">R3ResourceDescription</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filepath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><span class="pre">Config</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/recount3/resource.html#R3Resource"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.resource.R3Resource" title="Link to this definition"></a></dt>
-<dd><p>Resource that manages URL resolution, caching, materialization, and loading.</p>
+<dd><p>Manage one recount3 file: URL, cache, materialization, loading.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -650,7 +717,8 @@ joining the configured base URL with the description’s relative URL.</p>
 <dt class="sig sig-object py" id="recount3.resource.R3Resource.filepath">
 <span class="sig-name descname"><span class="pre">filepath</span></span><a class="headerlink" href="#recount3.resource.R3Resource.filepath" title="Link to this definition"></a></dt>
 <dd><p>An optional string representing the absolute local path where
-the resource was successfully materialized (either copied or linked).</p>
+the resource was successfully materialized (either copied
+or linked).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a> | None</p>
@@ -662,11 +730,45 @@ the resource was successfully materialized (either copied or linked).</p>
 <dt class="sig sig-object py" id="recount3.resource.R3Resource.config">
 <span class="sig-name descname"><span class="pre">config</span></span><a class="headerlink" href="#recount3.resource.R3Resource.config" title="Link to this definition"></a></dt>
 <dd><p>An optional <cite>Config</cite> instance dictating strict network and cache
-behaviors. If omitted, the global default configuration is dynamically
-applied.</p>
+behaviors. If omitted, the global default configuration is
+dynamically applied.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config">recount3.config.Config</a> | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="recount3.resource.R3Resource.from_mapping">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_mapping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapping</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><span class="pre">Mapping</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><span class="pre">Config</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a></span></span><a class="reference internal" href="_modules/recount3/resource.html#R3Resource.from_mapping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.resource.R3Resource.from_mapping" title="Link to this definition"></a></dt>
+<dd><p>Rehydrate an <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> from a serialized mapping.</p>
+<p>Builds the resource’s
+<a class="reference internal" href="#recount3._descriptions.R3ResourceDescription" title="recount3._descriptions.R3ResourceDescription"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3ResourceDescription</span></code></a> from the
+mapping’s description fields and returns a configured resource.
+Derived convenience keys this class emits when serialized (<code class="docutils literal notranslate"><span class="pre">url</span></code>,
+<code class="docutils literal notranslate"><span class="pre">arcname</span></code>) are ignored; the canonical URL is recomputed from the
+description and configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mapping</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><em>Mapping</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a><em>]</em>) – JSON-like mapping for a single resource (e.g. a JSONL line),
+containing <code class="docutils literal notranslate"><span class="pre">resource_type</span></code> and the fields for that type.</p></li>
+<li><p><strong>config</strong> (<a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><em>Config</em></a><em> | </em><em>None</em>) – Optional <a class="reference internal" href="#recount3.config.Config" title="recount3.config.Config"><code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code></a> for URL/cache
+behavior; the global default is used when omitted.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A configured <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a>.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.14)"><strong>KeyError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">resource_type</span></code> is missing.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the fields are invalid for that resource type.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><em>R3Resource</em></a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -690,17 +792,17 @@ depending on the arguments provided.</p>
 <li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – Target destination. If None, performs a cache-only download.
 If a directory path, links or copies the file there. If a
 ‘.zip’ path, injects the file into the archive using <cite>arcname</cite>.</p></li>
-<li><p><strong>cache_mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'enable'</em><em>, </em><em>'disable'</em><em>, </em><em>'update'</em><em>]</em>) – Caching behavior. ‘enable’ uses existing cache, ‘disable’
-streams directly to <cite>path</cite> without caching, ‘update’ forces a
-cache refresh before materialization.</p></li>
+<li><p><strong>cache_mode</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'enable'</em><em>, </em><em>'disable'</em><em>, </em><em>'update'</em><em>]</em>) – Caching behavior. ‘enable’ uses existing cache,
+‘disable’ streams directly to <cite>path</cite> without caching, ‘update’
+forces a cache refresh before materialization.</p></li>
 <li><p><strong>overwrite</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, replaces existing files at the destination.</p></li>
 <li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – Byte size for streaming operations. Defaults to the
 configured chunk size.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The final file path if materialized to a directory. None if performing
-a cache-only download or appending to a ZIP archive.</p>
+<dd class="field-even"><p>The final file path if materialized to a directory. None if
+performing a cache-only download or appending to a ZIP archive.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – Combinations are invalid (e.g., path=None with
@@ -733,8 +835,9 @@ a cache-only download or appending to a ZIP archive.</p>
 <dt class="sig sig-object py" id="recount3.resource.R3Resource.load">
 <span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><span class="pre">object</span></a></span></span><a class="reference internal" href="_modules/recount3/resource.html#R3Resource.load"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.resource.R3Resource.load" title="Link to this definition"></a></dt>
 <dd><p>Parse the resource into an appropriate in-memory Python object.</p>
-<p>Downloads and caches the resource if missing. Uses the resource description
-to determine the parsing strategy (e.g., BigWig, tabular counts, junctions).
+<p>Downloads and caches the resource if missing. Uses the resource
+description to determine the parsing strategy (e.g., BigWig, tabular
+counts, junctions).
 Caches the resulting object internally to prevent redundant disk I/O.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -805,7 +908,7 @@ data directly from disk.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="recount3.resource.R3Resource.clear_loaded">
 <span class="sig-name descname"><span class="pre">clear_loaded</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/recount3/resource.html#R3Resource.clear_loaded"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.resource.R3Resource.clear_loaded" title="Link to this definition"></a></dt>
-<dd><p>Evict the in-memory object cache and close file handles if applicable.</p>
+<dd><p>Evict the in-memory cache and close file handles if open.</p>
 <p>Does not delete or modify the on-disk file cache.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
@@ -833,8 +936,8 @@ attributes are set accordingly. For multi-project bundles these attributes
 are <code class="docutils literal notranslate"><span class="pre">None</span></code> to avoid misrepresenting the identity.</p>
 <dl class="simple">
 <dt>Filtering with FieldSpec</dt><dd><p><a class="reference internal" href="#recount3.bundle.R3ResourceBundle.filter" title="recount3.bundle.R3ResourceBundle.filter"><code class="xref py py-meth docutils literal notranslate"><span class="pre">filter()</span></code></a> accepts a
-<a class="reference internal" href="#recount3.types.FieldSpec" title="recount3.types.FieldSpec"><code class="xref py py-data docutils literal notranslate"><span class="pre">FieldSpec</span></code></a> for each description field. Three
-forms are accepted:</p>
+<a class="reference internal" href="#recount3.types.FieldSpec" title="recount3.types.FieldSpec"><code class="xref py py-data docutils literal notranslate"><span class="pre">FieldSpec</span></code></a> for each description field. The
+following forms are accepted:</p>
 <ul class="simple">
 <li><p>A string: exact match (e.g. <code class="docutils literal notranslate"><span class="pre">genomic_unit=&quot;gene&quot;</span></code>).</p></li>
 <li><p>An iterable of strings: keep if the field is any of the given values.</p></li>
@@ -870,7 +973,7 @@ forms are accepted:</p>
 <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_ranged_summarized_experiment()</span></code></a> methods
 require the BiocPy package <code class="docutils literal notranslate"><span class="pre">summarizedexperiment</span></code>, which might be
 difficult to install on Windows. Install with:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">summarizedexperiment</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="s2">&quot;recount3[biocpy]&quot;</span>
 </pre></div>
 </div>
 </div>
@@ -947,10 +1050,9 @@ left as <a class="reference external" href="https://docs.python.org/3/library/co
 <dt class="sig sig-object py" id="recount3.bundle.R3ResourceBundle.discover">
 <span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">discover</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">genomic_units</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('gene',</span> <span class="pre">'exon')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'default'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">junction_exts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('MM',)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">junction_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ALL'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_bigwig</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><span class="pre">R3ResourceBundle</span></a></span></span><a class="reference internal" href="_modules/recount3/bundle.html#R3ResourceBundle.discover"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.bundle.R3ResourceBundle.discover" title="Link to this definition"></a></dt>
 <dd><p>Discover resources for one or more projects and return a bundle.</p>
-<p>This is a generalized version of
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">recount3.project.R3Project.discover()</span></code>. It can operate on a
-single <code class="docutils literal notranslate"><span class="pre">(organism,</span> <span class="pre">data_source,</span> <span class="pre">project)</span></code> triple or on the
-Cartesian product of multiple values for each identifier.</p>
+<p>It can operate on a single <code class="docutils literal notranslate"><span class="pre">(organism,</span> <span class="pre">data_source,</span> <span class="pre">project)</span></code>
+triple or on the Cartesian product of multiple values for each
+identifier.</p>
 <p>When discovery spans more than one project, the returned bundle
 will contain resources from all projects and the bundle-level
 <code class="docutils literal notranslate"><span class="pre">organism</span></code>, <code class="docutils literal notranslate"><span class="pre">data_source</span></code>, and <code class="docutils literal notranslate"><span class="pre">project</span></code> attributes will be
@@ -1015,7 +1117,7 @@ attributes are set accordingly.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
     <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
     <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
-    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP012682&quot;</span><span class="p">],</span>
+    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP001558&quot;</span><span class="p">],</span>
     <span class="n">genomic_units</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;gene&quot;</span><span class="p">,),</span>
 <span class="p">)</span>
 </pre></div>
@@ -1279,8 +1381,7 @@ that match all supplied filters and the optional predicate.</p>
 <dt class="sig sig-object py" id="recount3.bundle.R3ResourceBundle.counts">
 <span class="sig-name descname"><span class="pre">counts</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><span class="pre">R3ResourceBundle</span></a></span></span><a class="reference internal" href="_modules/recount3/bundle.html#R3ResourceBundle.counts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.bundle.R3ResourceBundle.counts" title="Link to this definition"></a></dt>
 <dd><p>Return a sub-bundle containing only count-file resources.</p>
-<p>This is a convenience alias for <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.only_counts" title="recount3.bundle.R3ResourceBundle.only_counts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">only_counts()</span></code></a> maintained
-for API continuity with <code class="xref py py-class docutils literal notranslate"><span class="pre">recount3.project.R3Project</span></code>.</p>
+<p>This is a convenience alias for <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.only_counts" title="recount3.bundle.R3ResourceBundle.only_counts"><code class="xref py py-meth docutils literal notranslate"><span class="pre">only_counts()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><em>R3ResourceBundle</em></a></p>
@@ -1292,8 +1393,7 @@ for API continuity with <code class="xref py py-class docutils literal notransla
 <dt class="sig sig-object py" id="recount3.bundle.R3ResourceBundle.metadata">
 <span class="sig-name descname"><span class="pre">metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><span class="pre">R3ResourceBundle</span></a></span></span><a class="reference internal" href="_modules/recount3/bundle.html#R3ResourceBundle.metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.bundle.R3ResourceBundle.metadata" title="Link to this definition"></a></dt>
 <dd><p>Return a sub-bundle containing only metadata resources.</p>
-<p>This is a convenience alias for <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.only_metadata" title="recount3.bundle.R3ResourceBundle.only_metadata"><code class="xref py py-meth docutils literal notranslate"><span class="pre">only_metadata()</span></code></a> maintained
-for compatibility with <code class="xref py py-class docutils literal notranslate"><span class="pre">recount3.project.R3Project</span></code>.</p>
+<p>This is a convenience alias for <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.only_metadata" title="recount3.bundle.R3ResourceBundle.only_metadata"><code class="xref py py-meth docutils literal notranslate"><span class="pre">only_metadata()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><em>R3ResourceBundle</em></a></p>
@@ -1351,8 +1451,8 @@ not created by <a class="reference internal" href="#recount3.bundle.R3ResourceBu
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>join_policy</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Join policy passed to <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.concat.html#pandas.concat" title="(in pandas v3.0.1)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pandas.concat()</span></code></a>.</p></li>
-<li><p><strong>axis</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Concatenation axis passed to <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.concat.html#pandas.concat" title="(in pandas v3.0.1)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pandas.concat()</span></code></a>.</p></li>
+<li><p><strong>join_policy</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Join policy passed to <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.concat.html#pandas.concat" title="(in pandas v3.0.3)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pandas.concat()</span></code></a>.</p></li>
+<li><p><strong>axis</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Concatenation axis passed to <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.concat.html#pandas.concat" title="(in pandas v3.0.3)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pandas.concat()</span></code></a>.</p></li>
 <li><p><strong>verify_integrity</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">True</span></code></a>, raise when labels are not
 unique along the concatenation axis.</p></li>
 <li><p><strong>autoload</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">True</span></code></a>, automatically load resources prior to
@@ -1364,7 +1464,7 @@ space (for example, same genomic unit and junction subtype).</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> containing the concatenated count
+<dd class="field-even"><p>A <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> containing the concatenated count
 matrices.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
@@ -1372,7 +1472,7 @@ matrices.</p>
 <li><p><a class="reference internal" href="#recount3.errors.CompatibilityError" title="recount3.errors.CompatibilityError"><strong>recount3.errors.CompatibilityError</strong></a> – If incompatible count
     resources are mixed in a way that violates <code class="docutils literal notranslate"><span class="pre">compat</span></code>.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If a loaded object is not a
-    <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>.</p></li>
+    <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If no applicable resources are present or if no
     loaded count matrices are found.</p></li>
 </ul>
@@ -1389,7 +1489,8 @@ matrices.</p>
 <span class="p">)</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>Require identical feature sets (faster; fails if annotations differ):</p>
+<p>Require an identical feature space; fails if gene and exon are
+mixed (the annotation build is not constrained):</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
     <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span>
 <span class="p">)</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">compat</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span>
@@ -1491,13 +1592,19 @@ derived for the requested combination.</p></li>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="recount3.bundle.R3ResourceBundle.download">
-<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'enable'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'disable'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'update'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'enable'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/recount3/bundle.html#R3ResourceBundle.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.bundle.R3ResourceBundle.download" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">download</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">dest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'.'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'enable'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'disable'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'update'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'enable'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="_modules/recount3/bundle.html#R3ResourceBundle.download"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.bundle.R3ResourceBundle.download" title="Link to this definition"></a></dt>
 <dd><p>Download all resources in the bundle to a local destination.</p>
 <p>This method is a convenience wrapper around
 <a class="reference internal" href="#recount3.resource.R3Resource.download" title="recount3.resource.R3Resource.download"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recount3.resource.R3Resource.download()</span></code></a> for each contained
-resource. For more advanced workflows (event logs, streaming to a
-ZIP archive, and so on) prefer the command-line interface,
-<code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">download</span></code>.</p>
+resource. Downloading is I/O-bound, so by default the resources are
+fetched concurrently using a pool of worker threads (the same
+mechanism the <code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">download</span></code> CLI command uses). For more
+advanced workflows (per-resource event logs, JSONL progress) prefer
+the command-line interface, <code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">download</span></code>.</p>
+<p>Concurrency is safe because per-resource downloads are coordinated by
+a shared <a class="reference external" href="https://docs.python.org/3/library/threading.html#threading.Lock" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">threading.Lock</span></code></a> over the on-disk cache and by
+per-path locks for <code class="docutils literal notranslate"><span class="pre">.zip</span></code> archives, and files are materialized
+atomically. See <a class="reference internal" href="#module-recount3.resource" title="recount3.resource"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.resource</span></code></a> for details.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1509,6 +1616,9 @@ provided, resources are written into that archive.</p></li>
 directory mode.</p></li>
 <li><p><strong>cache</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><em>Literal</em></a><em>[</em><em>'enable'</em><em>, </em><em>'disable'</em><em>, </em><em>'update'</em><em>]</em>) – Cache behavior: <code class="docutils literal notranslate"><span class="pre">&quot;enable&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;disable&quot;</span></code>, or
 <code class="docutils literal notranslate"><span class="pre">&quot;update&quot;</span></code> as defined by <a class="reference internal" href="#recount3.types.CacheMode" title="recount3.types.CacheMode"><code class="xref py py-class docutils literal notranslate"><span class="pre">recount3.types.CacheMode</span></code></a>.</p></li>
+<li><p><strong>max_workers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Maximum number of parallel download threads. Values
+<code class="docutils literal notranslate"><span class="pre">&lt;=</span> <span class="pre">1</span></code> download sequentially. The effective worker count is
+also capped at the number of resources in the bundle.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -1544,21 +1654,28 @@ directory mode.</p></li>
 the above for a given project and returns a combined resource list</p></li>
 </ul>
 </dd>
-<dt>Tier 2: Discovery helpers</dt><dd><p>These functions download and parse metadata to return structured results:</p>
+<dt>Tier 2: Discovery helpers</dt><dd><p>These functions download and parse metadata to return structured results.
+All are part of the public top-level surface (re-exported from
+<a class="reference internal" href="#module-recount3" title="recount3"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3</span></code></a>):</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="#recount3.search.available_samples" title="recount3.search.available_samples"><code class="xref py py-func docutils literal notranslate"><span class="pre">available_samples()</span></code></a>: DataFrame of samples available across data sources</p></li>
+<li><p><a class="reference internal" href="#recount3.search.available_samples" title="recount3.search.available_samples"><code class="xref py py-func docutils literal notranslate"><span class="pre">available_samples()</span></code></a>: DataFrame of samples available across data
+sources</p></li>
 <li><p><a class="reference internal" href="#recount3.search.available_projects" title="recount3.search.available_projects"><code class="xref py py-func docutils literal notranslate"><span class="pre">available_projects()</span></code></a>: DataFrame of projects with sample counts</p></li>
-<li><p><a class="reference internal" href="#recount3.search.project_homes" title="recount3.search.project_homes"><code class="xref py py-func docutils literal notranslate"><span class="pre">project_homes()</span></code></a>: DataFrame mapping projects to their data-source home URLs</p></li>
+<li><p><a class="reference internal" href="#recount3.search.project_homes" title="recount3.search.project_homes"><code class="xref py py-func docutils literal notranslate"><span class="pre">project_homes()</span></code></a>: DataFrame mapping projects to their data-source
+home URLs</p></li>
 <li><p><a class="reference internal" href="#recount3.search.samples_for_project" title="recount3.search.samples_for_project"><code class="xref py py-func docutils literal notranslate"><span class="pre">samples_for_project()</span></code></a>: sample IDs for a specific project</p></li>
+<li><p><a class="reference internal" href="#recount3.search.create_sample_project_lists" title="recount3.search.create_sample_project_lists"><code class="xref py py-func docutils literal notranslate"><span class="pre">create_sample_project_lists()</span></code></a>: build per-data-source sample/project
+lists (backs the <code class="docutils literal notranslate"><span class="pre">ids</span></code> CLI command)</p></li>
 <li><p><a class="reference internal" href="#recount3.search.annotation_options" title="recount3.search.annotation_options"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotation_options()</span></code></a>: mapping of annotation names to extension codes</p></li>
-<li><p><a class="reference internal" href="#recount3.search.annotation_ext" title="recount3.search.annotation_ext"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotation_ext()</span></code></a>: resolve a name or code to a canonical extension string</p></li>
+<li><p><a class="reference internal" href="#recount3.search.annotation_ext" title="recount3.search.annotation_ext"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotation_ext()</span></code></a>: resolve a name or code to a canonical extension
+string</p></li>
 </ul>
 </dd>
 <dt>StringOrIterable and the Cartesian product pattern</dt><dd><p>All Tier 1 functions accept <a class="reference internal" href="#recount3.types.StringOrIterable" title="recount3.types.StringOrIterable"><code class="xref py py-data docutils literal notranslate"><span class="pre">StringOrIterable</span></code></a> for
 each parameter: either a single string or an iterable of strings. When
 iterables are supplied, the function computes the Cartesian product across
 all parameters and returns one resource per unique combination. For example,
-passing <code class="docutils literal notranslate"><span class="pre">project=[&quot;SRP009615&quot;,</span> <span class="pre">&quot;SRP012682&quot;]</span></code> and <code class="docutils literal notranslate"><span class="pre">genomic_unit=[&quot;gene&quot;,</span>
+passing <code class="docutils literal notranslate"><span class="pre">project=[&quot;SRP009615&quot;,</span> <span class="pre">&quot;SRP001558&quot;]</span></code> and <code class="docutils literal notranslate"><span class="pre">genomic_unit=[&quot;gene&quot;,</span>
 <span class="pre">&quot;exon&quot;]</span></code> produces four resources.</p>
 </dd>
 <dt>Annotation names and extension codes</dt><dd><p>Gene/exon count resources are keyed by an annotation extension code
@@ -1617,7 +1734,7 @@ the normalised tuple of strings.</p></li>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_annotations">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">genomic_unit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_extension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_annotations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_annotations" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for annotation GTF files.</p>
+<dd><p>Return <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects for annotation GTF files.</p>
 <p>Constructs the Cartesian product of all provided values and returns one
 <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> per unique combination.</p>
 <dl class="field-list simple">
@@ -1647,8 +1764,9 @@ unique (organism, genomic_unit, annotation_extension) combination.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_count_files_gene_or_exon">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_count_files_gene_or_exon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">genomic_unit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_extension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">('G026',)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_count_files_gene_or_exon"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_count_files_gene_or_exon" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for per-project gene or exon count matrices.</p>
-<p>Constructs the Cartesian product of all provided values and returns one
+<dd><p>Return gene/exon count <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects.</p>
+<p>Each resource points to a per-project gene or exon count matrix.
+Constructs the Cartesian product of all provided values and returns one
 <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> per unique combination.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1686,12 +1804,13 @@ annotation_extension) combination.</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>Multiple projects: returns one resource per project (Cartesian product):</p>
+<p>Multiple projects return one resource per project
+(Cartesian product):</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">resources</span> <span class="o">=</span> <span class="n">search_count_files_gene_or_exon</span><span class="p">(</span>
     <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
     <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
     <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
-    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP012682&quot;</span><span class="p">],</span>
+    <span class="n">project</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span> <span class="s2">&quot;SRP001558&quot;</span><span class="p">],</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -1700,8 +1819,9 @@ annotation_extension) combination.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_count_files_junctions">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_count_files_junctions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">junction_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'ALL'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">junction_extension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'MM'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_count_files_junctions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_count_files_junctions" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for per-project junction count files.</p>
-<p>Constructs the Cartesian product of all provided values and returns one
+<dd><p>Return junction count <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects.</p>
+<p>Each resource points to a per-project junction count file.
+Constructs the Cartesian product of all provided values and returns one
 <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> per unique combination. Junction
 files are distributed as a triplet of sidecar files sharing a common stem:
 a MatrixMarket matrix (<code class="docutils literal notranslate"><span class="pre">.MM.gz</span></code>), a sample-ID table (<code class="docutils literal notranslate"><span class="pre">.ID.gz</span></code>), and a
@@ -1741,8 +1861,9 @@ junction_extension) combination.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_metadata_files">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_metadata_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">table_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_metadata_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_metadata_files" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for per-project metadata tables.</p>
-<p>Constructs the Cartesian product of all provided values and returns one
+<dd><p>Return project metadata <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects.</p>
+<p>Each resource points to a per-project metadata table.
+Constructs the Cartesian product of all provided values and returns one
 <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> per unique combination.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1773,8 +1894,9 @@ unique (organism, data_source, table_name, project) combination.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_bigwig_files">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_bigwig_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_bigwig_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_bigwig_files" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for per-sample BigWig coverage files.</p>
-<p>Constructs the Cartesian product of all provided values and returns one
+<dd><p>Return BigWig coverage <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects.</p>
+<p>Each resource points to a per-sample BigWig coverage file.
+Constructs the Cartesian product of all provided values and returns one
 <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a> per unique combination.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1783,7 +1905,8 @@ unique (organism, data_source, table_name, project) combination.</p>
 <li><p><strong>data_source</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – One or more data-source identifiers
 (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;sra&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;gtex&quot;</span></code>).</p></li>
 <li><p><strong>project</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – One or more project identifiers (e.g. <code class="docutils literal notranslate"><span class="pre">&quot;SRP009615&quot;</span></code>).</p></li>
-<li><p><strong>sample</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – One or more sample identifiers (e.g. a rail_id or SRR accession).</p></li>
+<li><p><strong>sample</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – One or more sample identifiers (e.g. a rail_id or SRR
+accession).</p></li>
 <li><p><strong>strict</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), re-raise any exception encountered while
 constructing a resource. If <code class="docutils literal notranslate"><span class="pre">False</span></code>, silently skip invalid
 combinations.</p></li>
@@ -1804,7 +1927,7 @@ unique (organism, data_source, project, sample) combination.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_data_sources">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_data_sources</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_data_sources"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_data_sources" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for the organism-level data-source index.</p>
+<dd><p>Return data-source index <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects.</p>
 <p>Each resource resolves to the <code class="docutils literal notranslate"><span class="pre">homes_index</span></code> file for one organism,
 which lists the available data sources for that organism.</p>
 <dl class="field-list simple">
@@ -1831,7 +1954,7 @@ unique organism.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.search.search_data_source_metadata">
 <span class="sig-prename descclassname"><span class="pre">recount3.search.</span></span><span class="sig-name descname"><span class="pre">search_data_source_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">organism</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deduplicate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><span class="pre">R3Resource</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/recount3/search.html#search_data_source_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.search.search_data_source_metadata" title="Link to this definition"></a></dt>
-<dd><p>Return R3Resource objects for data-source-level metadata listings.</p>
+<dd><p>Return data-source metadata <code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code> objects.</p>
 <p>Each resource resolves to the <code class="docutils literal notranslate"><span class="pre">recount_project</span></code> metadata file for one
 (organism, data_source) pair, which enumerates all projects within that
 data source.</p>
@@ -2147,8 +2270,8 @@ mapped-reads-based scale factors.</p></li>
     <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
     <span class="n">annotation_label</span><span class="o">=</span><span class="s2">&quot;gencode_v26&quot;</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="n">sf</span> <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
-<span class="n">scaled</span> <span class="o">=</span> <span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">scale_factors</span><span class="o">=</span><span class="n">sf</span><span class="p">)</span>
+<span class="n">sf</span> <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>  <span class="c1"># per-sample factors (for inspection)</span>
+<span class="n">scaled</span> <span class="o">=</span> <span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">&quot;auc&quot;</span><span class="p">)</span>  <span class="c1"># apply scaling to the matrix</span>
 </pre></div>
 </div>
 <div class="admonition note">
@@ -2156,14 +2279,15 @@ mapped-reads-based scale factors.</p></li>
 <p>Most functions in this module require BiocPy packages
 (<code class="docutils literal notranslate"><span class="pre">biocframe</span></code>, <code class="docutils literal notranslate"><span class="pre">summarizedexperiment</span></code>, <code class="docutils literal notranslate"><span class="pre">genomicranges</span></code>).
 Install them with:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">summarizedexperiment</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="s2">&quot;recount3[biocpy]&quot;</span>
 </pre></div>
 </div>
 </div>
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.se.build_summarized_experiment">
 <span class="sig-prename descclassname"><span class="pre">recount3.se.</span></span><span class="sig-name descname"><span class="pre">build_summarized_experiment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bundle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><span class="pre">R3ResourceBundle</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">genomic_unit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_extension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assay_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'raw_counts'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">join_policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'inner'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">autoload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">summarizedexperiment.SummarizedExperiment</span></span></span><a class="reference internal" href="_modules/recount3/se.html#build_summarized_experiment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.se.build_summarized_experiment" title="Link to this definition"></a></dt>
-<dd><p>Create a SummarizedExperiment from a resource bundle.</p>
+<dd><p>Create a <code class="xref py py-class docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code>.</p>
+<p>Builds the experiment from a resource bundle.</p>
 <p>This is a convenience wrapper around
 <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.to_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recount3.bundle.R3ResourceBundle.to_summarized_experiment()</span></code></a>.</p>
 <dl class="field-list simple">
@@ -2190,8 +2314,9 @@ assays (for example, <code class="docutils literal notranslate"><span class="pre
 <dl class="py function">
 <dt class="sig sig-object py" id="recount3.se.build_ranged_summarized_experiment">
 <span class="sig-prename descclassname"><span class="pre">recount3.se.</span></span><span class="sig-name descname"><span class="pre">build_ranged_summarized_experiment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bundle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#recount3.bundle.R3ResourceBundle" title="recount3.bundle.R3ResourceBundle"><span class="pre">R3ResourceBundle</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">genomic_unit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_extension</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefer_rr_junction_coordinates</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assay_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'raw_counts'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">join_policy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'inner'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">autoload</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_fallback_to_se</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">summarizedexperiment.RangedSummarizedExperiment</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">summarizedexperiment.SummarizedExperiment</span></span></span><a class="reference internal" href="_modules/recount3/se.html#build_ranged_summarized_experiment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#recount3.se.build_ranged_summarized_experiment" title="Link to this definition"></a></dt>
-<dd><p>Create a RangedSummarizedExperiment when ranges can be resolved.</p>
-<p>This is a convenience wrapper around
+<dd><p>Create a <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>.</p>
+<p>Returns a ranged experiment when genomic ranges can be resolved.
+This is a convenience wrapper around
 <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2253,7 +2378,10 @@ over <code class="docutils literal notranslate"><span class="pre">annotation_lab
 <li><p><strong>junction_type</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Junction type; typically <code class="docutils literal notranslate"><span class="pre">&quot;ALL&quot;</span></code>.</p></li>
 <li><p><strong>junction_extensions</strong> (<em>Sequence</em><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Iterable of junction artifact extensions
 to include (for example, <code class="docutils literal notranslate"><span class="pre">(&quot;MM&quot;,)</span></code> or <code class="docutils literal notranslate"><span class="pre">(&quot;MM&quot;,</span> <span class="pre">&quot;RR&quot;)</span></code>). If
-<a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">None</span></code></a>, the default <code class="docutils literal notranslate"><span class="pre">(&quot;MM&quot;,)</span></code> is used.</p></li>
+<a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><code class="xref py py-data docutils literal notranslate"><span class="pre">None</span></code></a>, the default depends on <code class="docutils literal notranslate"><span class="pre">genomic_unit</span></code>:
+<code class="docutils literal notranslate"><span class="pre">(&quot;MM&quot;,</span> <span class="pre">&quot;RR&quot;)</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;junction&quot;</span></code> (so genomic ranges can be
+attached to each row), and <code class="docutils literal notranslate"><span class="pre">(&quot;MM&quot;,)</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;gene&quot;</span></code> / <code class="docutils literal notranslate"><span class="pre">&quot;exon&quot;</span></code>
+(the RR sidecar does not apply to those units).</p></li>
 <li><p><strong>include_metadata</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to include the five project metadata
 tables in the underlying bundle (recommended).</p></li>
 <li><p><strong>include_bigwig</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Whether to include per-sample BigWig coverage
@@ -2377,12 +2505,12 @@ the form:</p>
 </pre></div>
 </div>
 <p>Each <code class="docutils literal notranslate"><span class="pre">key;;value</span></code> pair becomes a new column named
-<code class="docutils literal notranslate"><span class="pre">{attribute_column_prefix}{key}</span></code> (with spaces in <code class="docutils literal notranslate"><span class="pre">key</span></code> replaced by <code class="docutils literal notranslate"><span class="pre">'_'</span></code>), and
-the parsed values are stored per sample. The original string column
+<code class="docutils literal notranslate"><span class="pre">{attribute_column_prefix}{key}</span></code> (with spaces in <code class="docutils literal notranslate"><span class="pre">key</span></code> replaced by
+<code class="docutils literal notranslate"><span class="pre">'_'</span></code>), and the parsed values are stored per sample. The original column
 is preserved.</p>
 <p>The function supports two calling styles:</p>
 <ul class="simple">
-<li><p>Passing a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> of column metadata, in which
+<li><p>Passing a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> of column metadata, in which
 case a new DataFrame is returned with extra columns.</p></li>
 <li><p>Passing a BiocPy
 <code class="xref py py-class docutils literal notranslate"><span class="pre">summarizedexperiment.SummarizedExperiment</span></code> or
@@ -2393,25 +2521,29 @@ case a new object of the same class is returned with updated
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>experiment_or_coldata</strong> (<em>summarizedexperiment.RangedSummarizedExperiment</em><em> | </em><em>summarizedexperiment.SummarizedExperiment</em><em> | </em><em>pd.DataFrame</em>) – Column metadata DataFrame or a BiocPy SE/RSE object.</p></li>
+<li><p><strong>experiment_or_coldata</strong> (<em>summarizedexperiment.RangedSummarizedExperiment</em><em> | </em><em>summarizedexperiment.SummarizedExperiment</em><em> | </em><em>pd.DataFrame</em>) – Column metadata DataFrame or a BiocPy SE/RSE
+object.</p></li>
 <li><p><strong>sra_attributes_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Name of the column that holds the raw SRA attribute
 strings.</p></li>
-<li><p><strong>attribute_column_prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Prefix to prepend to the generated attribute column names.</p></li>
+<li><p><strong>attribute_column_prefix</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Prefix to prepend to the generated attribute
+column names.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A new object of the same type as <code class="docutils literal notranslate"><span class="pre">experiment_or_coldata</span></code> with additional columns
-corresponding to parsed SRA attributes. If the requested column is
-missing, <code class="docutils literal notranslate"><span class="pre">experiment_or_coldata</span></code> is returned unchanged.</p>
+<dd class="field-even"><p>A new object of the same type as <code class="docutils literal notranslate"><span class="pre">experiment_or_coldata</span></code> with
+additional columns corresponding to parsed SRA attributes. If the
+requested column is missing, <code class="docutils literal notranslate"><span class="pre">experiment_or_coldata</span></code> is returned
+unchanged.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><strong>ImportError</strong></a> – If a SummarizedExperiment/RangedSummarizedExperiment
-    is supplied but BiocPy packages are not installed.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><strong>ImportError</strong></a> – If a <code class="xref py py-class docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> /
+    <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> is supplied
+    but BiocPy packages are not installed.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#AttributeError" title="(in Python v3.14)"><strong>AttributeError</strong></a> – If the BiocPy object does not expose
     <code class="docutils literal notranslate"><span class="pre">column_data</span></code> or <code class="docutils literal notranslate"><span class="pre">set_column_data</span></code> in the expected API.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">experiment_or_coldata</span></code> is neither a pandas DataFrame nor a
-    supported BiocPy experiment object.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">experiment_or_coldata</span></code> is neither a
+    <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a> nor a supported BiocPy experiment object.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -2455,25 +2587,28 @@ assume counts are integer-valued.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>rse</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – A RangedSummarizedExperiment-like object containing a “raw_counts”
-assay and sample metadata in <cite>col_data</cite>.</p></li>
+<li><p><strong>rse</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – A <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>-like
+object containing a “raw_counts” assay and sample metadata in
+<cite>col_data</cite>.</p></li>
 <li><p><strong>round_to_integers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, round the resulting values to 0 decimals.</p></li>
-<li><p><strong>avg_mapped_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Name of the metadata column containing average
-mapped read length per sample. The column must be present in <cite>col_data</cite>
-and must contain numeric values.</p></li>
+<li><p><strong>avg_mapped_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Name of the metadata column containing
+average mapped read length per sample. The column must be present in
+<cite>col_data</cite> and must contain numeric values.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A pandas DataFrame of approximate read counts with the same shape as the
-“raw_counts” assay (features x samples). Row and column names are
-preserved when available.</p>
+<dd class="field-even"><p>A <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a> of approximate read counts with the same
+shape as the “raw_counts” assay (features x samples). Row and column
+names are preserved when available.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <cite>rse</cite> is not a RangedSummarizedExperiment, if the
-    “raw_counts” assay is missing, if <cite>avg_mapped_read_length_column</cite> is missing
-    from <cite>col_data</cite>, or if the assay and metadata dimensions do not align.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <cite>round_to_integers</cite> is not a bool.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <cite>rse</cite> is not a
+    <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>, or if
+    <cite>round_to_integers</cite> is not a bool.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the “raw_counts” assay is missing, if
+    <cite>avg_mapped_read_length_column</cite> is missing from <cite>col_data</cite>, or if the
+    assay and metadata dimensions do not align.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -2497,15 +2632,18 @@ preserved when available.</p>
 </dl>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>rse</strong> (<em>summarizedexperiment.RangedSummarizedExperiment</em>) – A RangedSummarizedExperiment object containing raw coverage sums.
-Must have feature widths defined in rowRanges.</p>
+<dd class="field-odd"><p><strong>rse</strong> (<em>summarizedexperiment.RangedSummarizedExperiment</em>) – A <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>
+object containing raw coverage sums. Must have feature widths
+defined in rowRanges.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A pandas DataFrame of TPM values.</p>
+<dd class="field-even"><p>A <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a> of TPM values.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If rse is not a RangedSummarizedExperiment (needs rowRanges).</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If rse is not a
+    <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>
+    (needs rowRanges).</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If feature widths or read lengths are missing.</p></li>
 </ul>
 </dd>
@@ -2535,9 +2673,11 @@ result &lt;- ratio == 2, with names(result) = external_id.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>sample_metadata_source</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Sample metadata (DataFrame) or a (Ranged)SummarizedExperiment-like
-object with <cite>col_data.to_pandas()</cite>.</p></li>
-<li><p><strong>avg_mapped_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column containing average mapped length.</p></li>
+<li><p><strong>sample_metadata_source</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Sample metadata (DataFrame) or a
+<code class="docutils literal notranslate"><span class="pre">(Ranged)SummarizedExperiment</span></code>-like object with
+<cite>col_data.to_pandas()</cite>.</p></li>
+<li><p><strong>avg_mapped_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column with average mapped
+length.</p></li>
 <li><p><strong>avg_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column containing average read length.</p></li>
 </ul>
 </dd>
@@ -2584,7 +2724,8 @@ Uses mapped read counts and read length to normalize samples to a common
 target_read_count and a common target read length target_read_length_bp:</p>
 <blockquote>
 <div><dl class="simple">
-<dt>s[j] = target_read_count * target_read_length_bp * paired_multiplier[j] /</dt><dd><p>(mapped_reads[j] * (avg_mapped_read_length[j] ** 2))</p>
+<dt>s[j] = target_read_count * target_read_length_bp *</dt><dd><p>paired_multiplier[j] /
+(mapped_reads[j] * (avg_mapped_read_length[j] ** 2))</p>
 </dd>
 </dl>
 </div></blockquote>
@@ -2596,8 +2737,9 @@ target_read_count and a common target read length target_read_length_bp:</p>
 </ul>
 </dd>
 </dl>
-<p>If <cite>paired_end_status</cite> is not provided, paired-end status is inferred from
-metadata by comparing average mapped length to average read length:</p>
+<p>If <cite>paired_end_status</cite> is not provided, paired-end status is inferred
+from metadata by comparing average mapped length to average read
+length:</p>
 <blockquote>
 <div><p>ratio = round(avg_mapped_read_length / avg_read_length)</p>
 </div></blockquote>
@@ -2610,18 +2752,22 @@ Non-numeric metadata values raise an error.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>sample_metadata_source</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Sample metadata as a pandas DataFrame, or an object with
+<li><p><strong>sample_metadata_source</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Sample metadata as a
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a>, or an object with
 <cite>col_data.to_pandas()</cite> that yields sample metadata.</p></li>
 <li><p><strong>by</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Scaling method: “auc” or “mapped_reads”.</p></li>
-<li><p><strong>target_read_count</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target library size used to compute scale factors. Interpreted
-as the number of single-end reads to scale each sample to.</p></li>
-<li><p><strong>target_read_length_bp</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target read length used only when by=”mapped_reads”.</p></li>
+<li><p><strong>target_read_count</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target library size used to compute scale factors.
+Interpreted as the number of single-end reads to scale each sample to.</p></li>
+<li><p><strong>target_read_length_bp</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target read length used only when
+by=”mapped_reads”.</p></li>
 <li><p><strong>auc_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column name for the per-sample AUC metric.</p></li>
-<li><p><strong>avg_mapped_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column name for average mapped read length
-per sample.</p></li>
-<li><p><strong>mapped_reads_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column name for mapped read counts per sample.</p></li>
-<li><p><strong>paired_end_status</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>] </em><em>| </em><em>Series</em><em> | </em><em>None</em>) – Optional paired-end indicator per sample. If provided, it must
-align with the samples in <cite>external_id</cite>. If omitted, paired-end status
+<li><p><strong>avg_mapped_read_length_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column name for average mapped
+read length per sample.</p></li>
+<li><p><strong>mapped_reads_column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Metadata column name for mapped read counts per
+sample.</p></li>
+<li><p><strong>paired_end_status</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><em>Sequence</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>] </em><em>| </em><em>Series</em><em> | </em><em>None</em>) – Optional paired-end indicator per sample. If
+provided, it must align with the samples in <cite>external_id</cite>. If
+omitted, paired-end status
 is inferred from metadata.</p></li>
 </ul>
 </dd>
@@ -2633,7 +2779,8 @@ is “scale_factor”.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <cite>by</cite> is invalid, required metadata columns are missing, or
     non-numeric metadata values are present.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <cite>target_read_count</cite> or <cite>target_read_length_bp</cite> are not numeric scalars.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <cite>target_read_count</cite> or <cite>target_read_length_bp</cite> are not
+    numeric scalars.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -2642,8 +2789,8 @@ is “scale_factor”.</p>
 </dl>
 <p class="rubric">Examples</p>
 <p>AUC-based scaling (default):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sf</span> <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
-<span class="n">scaled</span> <span class="o">=</span> <span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">scale_factors</span><span class="o">=</span><span class="n">sf</span><span class="p">)</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">sf</span> <span class="o">=</span> <span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>  <span class="c1"># inspect per-sample factors</span>
+<span class="n">scaled</span> <span class="o">=</span> <span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">&quot;auc&quot;</span><span class="p">)</span>  <span class="c1"># apply scaling</span>
 </pre></div>
 </div>
 <p>Mapped-reads-based scaling:</p>
@@ -2692,34 +2839,42 @@ target_read_length_bp.</p>
 </li>
 </ul>
 <p>The returned values remain in the same feature-by-sample shape as the
-input. If round_to_integers is True, values are rounded to integer-like counts.</p>
+input. If round_to_integers is True, values are rounded to integer-like
+counts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>rse</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – A RangedSummarizedExperiment-like object containing a “raw_counts”
-assay and sample metadata in <cite>col_data</cite>.</p></li>
+<li><p><strong>rse</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – A <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>-like
+object containing a “raw_counts” assay and sample metadata in
+<cite>col_data</cite>.</p></li>
 <li><p><strong>by</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Scaling method: “auc” or “mapped_reads”.</p></li>
-<li><p><strong>target_read_count</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target library size used to compute scale factors. Interpreted
-as the number of single-end reads to scale each sample to.</p></li>
-<li><p><strong>target_read_length_bp</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target read length used only when by=”mapped_reads”.</p></li>
+<li><p><strong>target_read_count</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target library size used to compute scale factors.
+Interpreted as the number of single-end reads to scale each sample to.</p></li>
+<li><p><strong>target_read_length_bp</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Target read length used only when
+by=”mapped_reads”.</p></li>
 <li><p><strong>round_to_integers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – If True, round scaled values to 0 decimals.</p></li>
-<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Additional parameters forwarded to compute_scale_factors(). Use
-this to override metadata column names (for example, <cite>auc_column=…</cite>,
-<cite>mapped_reads_column=…</cite>, <cite>avg_mapped_read_length_column=…</cite>) or to provide
+<li><p><strong>**kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – Additional parameters forwarded to
+<a class="reference internal" href="#recount3.se.compute_scale_factors" title="recount3.se.compute_scale_factors"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_scale_factors()</span></code></a>. Use this to override
+metadata column names (for example, <cite>auc_column=…</cite>,
+<cite>mapped_reads_column=…</cite>, <cite>avg_mapped_read_length_column=…</cite>) or to
+provide
 <cite>paired_end_status=…</cite> when paired-end status should not be inferred.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A pandas DataFrame of scaled counts with the same dimensions as
-<cite>assay(“raw_counts”)</cite>. Row and column names are preserved when available.</p>
+<dd class="field-even"><p>A <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataFrame</span></code></a> of scaled counts with the same dimensions
+as <cite>assay(“raw_counts”)</cite>. Row and column names are preserved when
+available.</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <cite>rse</cite> is not a RangedSummarizedExperiment, if the required
-    assay or metadata columns are missing, if <cite>by</cite> is invalid, or if the
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <cite>rse</cite> is not a
+    <code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code>, if the
+    required assay or metadata columns are missing, if <cite>by</cite> is invalid,
+    or if the
     assay and metadata dimensions do not align.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <cite>round_to_integers</cite> is not a bool, or if numeric parameters are
-    not valid scalars.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.14)"><strong>TypeError</strong></a> – If <cite>round_to_integers</cite> is not a bool, or if numeric
+    parameters are not valid scalars.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
@@ -2776,7 +2931,7 @@ returns an instance of the registered concrete subclass for that
 <p>Valid values for the <code class="docutils literal notranslate"><span class="pre">organism</span></code> and <code class="docutils literal notranslate"><span class="pre">data_source</span></code> fields are exposed as
 the module-level constants <code class="xref py py-data docutils literal notranslate"><span class="pre">VALID_ORGANISMS</span></code> and
 <code class="xref py py-data docutils literal notranslate"><span class="pre">VALID_DATA_SOURCES</span></code>.</p>
-<p>Typical usage:</p>
+<p>Typical usage example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3._descriptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceDescription</span>
 
 <span class="n">desc</span> <span class="o">=</span> <span class="n">R3ResourceDescription</span><span class="p">(</span>
@@ -3030,7 +3185,7 @@ separators as needed).</p>
 </ul>
 </dd>
 <dt>Duffel layout:</dt><dd><dl class="simple">
-<dt>{organism}/data_sources/{data_source}/{genomic_unit}_sums/</dt><dd><p>{p2(project)}/{project}/
+<dt>{organism}/data_sources/{data_source}/{genomic_unit}_sums/</dt><dd><p>{_project_shard(project)}/{project}/
 {data_source}.{genomic_unit}_sums.{project}.{annotation_extension}.gz</p>
 </dd>
 </dl>
@@ -3115,8 +3270,9 @@ separators as needed).</p>
 </ul>
 </dd>
 <dt>Duffel layout:</dt><dd><dl class="simple">
-<dt>{organism}/data_sources/{data_source}/junctions/</dt><dd><p>{p2(project)}/{project}/
-{data_source}.junctions.{project}.{junction_type}.{junction_extension}.gz</p>
+<dt>{organism}/data_sources/{data_source}/junctions/</dt><dd><p>{_project_shard(project)}/{project}/
+{data_source}.junctions.{project}.{junction_type}.
+{junction_extension}.gz</p>
 </dd>
 </dl>
 </dd>
@@ -3199,7 +3355,7 @@ separators as needed).</p>
 </ul>
 </dd>
 <dt>Duffel layout:</dt><dd><dl class="simple">
-<dt>{organism}/data_sources/{data_source}/metadata/</dt><dd><p>{p2(project)}/{project}/
+<dt>{organism}/data_sources/{data_source}/metadata/</dt><dd><p>{_project_shard(project)}/{project}/
 {data_source}.{table_name}.{project}.MD.gz</p>
 </dd>
 </dl>
@@ -3283,7 +3439,8 @@ separators as needed).</p>
 </ul>
 </dd>
 <dt>Duffel layout:</dt><dd><dl class="simple">
-<dt>{organism}/data_sources/{data_source}/base_sums/</dt><dd><p>{p2(project)}/{project}/{shard(sample, data_source)}/
+<dt>{organism}/data_sources/{data_source}/base_sums/</dt><dd><p>{_project_shard(project)}/{project}/
+{_sample_shard(sample, data_source)}/
 {data_source}.base_sums.{project}_{sample}.ALL.bw</p>
 </dd>
 </dl>
@@ -3609,7 +3766,10 @@ in <a class="reference internal" href="#recount3.bundle.R3ResourceBundle.stack_c
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;family&quot;</span></code>: all count resources must belong to the same
 high-level family (gene/exon versus junctions).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;feature&quot;</span></code>: stricter: all resources must additionally share
-an identical feature space (same genomic unit and annotation).</p></li>
+an identical feature space – the same genomic unit for
+gene/exon resources, or the same junction type and extension for
+junction resources. (Note: this does not constrain the annotation
+extension, so mixed-annotation gene/exon builds are not rejected.)</p></li>
 </ul>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
@@ -3663,7 +3823,7 @@ resource.</p></li>
 <a class="reference internal" href="#recount3.resource.R3Resource" title="recount3.resource.R3Resource"><code class="xref py py-class docutils literal notranslate"><span class="pre">R3Resource</span></code></a>.</p>
 <p>The optional dependency is imported through
 <code class="xref py py-func docutils literal notranslate"><span class="pre">get_pybigwig_module()</span></code>.</p>
-<p>Typical usage:</p>
+<p>Typical usage example:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3._bigwig</span><span class="w"> </span><span class="kn">import</span> <span class="n">BigWigFile</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">with</span> <span class="n">BigWigFile</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;example.bw&quot;</span><span class="p">))</span> <span class="k">as</span> <span class="n">bw</span><span class="p">:</span>
@@ -3674,9 +3834,9 @@ resource.</p></li>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Requires the optional <code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code> package. Install with
-<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">pyBigWig</span></code>. An <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ImportError</span></code></a> is raised on first use
-if the package is not available. <code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code> can be difficult to
-install on non-Linux systems.</p>
+<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;recount3[bigwig]&quot;</span></code>. An <a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ImportError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ImportError</span></code></a> is raised on
+first use if the package is not available. <code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code> can be difficult
+to install on non-Linux systems.</p>
 </div>
 <dl class="py class">
 <dt class="sig sig-object py" id="recount3._bigwig.BigWigFile">
@@ -3696,8 +3856,8 @@ for subsequent calls and can be explicitly released with <a class="reference int
 <dl class="py attribute">
 <dt class="sig sig-object py" id="recount3._bigwig.BigWigFile.path">
 <span class="sig-name descname"><span class="pre">path</span></span><a class="headerlink" href="#recount3._bigwig.BigWigFile.path" title="Link to this definition"></a></dt>
-<dd><p>Filesystem path to a BigWig file (typically <code class="docutils literal notranslate"><span class="pre">.bw</span></code>). The file must
-exist when the handle is opened.</p>
+<dd><p>Filesystem path to a BigWig file (typically <code class="docutils literal notranslate"><span class="pre">.bw</span></code>). The
+file must exist when the handle is opened.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)">pathlib.Path</a></p>
@@ -3785,9 +3945,10 @@ return a NumPy array depending on its configuration.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Values returned by <code class="docutils literal notranslate"><span class="pre">pyBigWig.values</span></code>. When <code class="docutils literal notranslate"><span class="pre">numpy</span></code> is not True, this is
-typically a <code class="docutils literal notranslate"><span class="pre">list[float]</span></code>. When <code class="docutils literal notranslate"><span class="pre">numpy</span></code> is True, <code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code> may
-return a NumPy array depending on its configuration.</p>
+<dd class="field-even"><p>Values returned by <code class="docutils literal notranslate"><span class="pre">pyBigWig.values</span></code>. When <code class="docutils literal notranslate"><span class="pre">numpy</span></code> is not
+True, this is typically a <code class="docutils literal notranslate"><span class="pre">list[float]</span></code>. When <code class="docutils literal notranslate"><span class="pre">numpy</span></code> is
+True, <code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code> may return a NumPy array depending on its
+configuration.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a>] | <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a></p>
@@ -3809,7 +3970,8 @@ computed over the whole chromosome.</p></li>
 computed over the whole chromosome.</p></li>
 <li><p><strong>type</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Statistic name understood by <code class="docutils literal notranslate"><span class="pre">pyBigWig.stats</span></code> (for example,
 <code class="docutils literal notranslate"><span class="pre">&quot;mean&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;min&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;max&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;coverage&quot;</span></code>).</p></li>
-<li><p><strong>n_bins</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – If provided, request binned stats via the <code class="docutils literal notranslate"><span class="pre">nBins</span></code> argument.</p></li>
+<li><p><strong>n_bins</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> | </em><em>None</em>) – If provided, request binned stats via the <code class="docutils literal notranslate"><span class="pre">nBins</span></code>
+argument.</p></li>
 <li><p><strong>exact</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em> | </em><em>None</em>) – If provided, forward to the <code class="docutils literal notranslate"><span class="pre">exact</span></code> argument.</p></li>
 </ul>
 </dd>
@@ -3838,9 +4000,9 @@ the entire chromosome may be returned.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Intervals returned by <code class="docutils literal notranslate"><span class="pre">pyBigWig.intervals</span></code>. This is often a list of
-<code class="docutils literal notranslate"><span class="pre">(start,</span> <span class="pre">end,</span> <span class="pre">value)</span></code> tuples. <code class="docutils literal notranslate"><span class="pre">None</span></code> may be returned when no intervals
-overlap the requested region.</p>
+<dd class="field-even"><p>Intervals returned by <code class="docutils literal notranslate"><span class="pre">pyBigWig.intervals</span></code>. This is often a
+list of <code class="docutils literal notranslate"><span class="pre">(start,</span> <span class="pre">end,</span> <span class="pre">value)</span></code> tuples. <code class="docutils literal notranslate"><span class="pre">None</span></code> may be returned
+when no intervals overlap the requested region.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a>]] | None | <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a></p>

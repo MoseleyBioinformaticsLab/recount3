@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.bundle &mdash; recount3 1.0.0 documentation</title>
+  <title>recount3.bundle &mdash; recount3 1.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=8d563738"></script>
+      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -87,8 +87,8 @@
 <span class="c1">#   display the following acknowledgement: This product includes software</span>
 <span class="c1">#   developed by the copyright holder.</span>
 <span class="c1"># * Neither the name of the copyright holder nor the names of its contributors</span>
-<span class="c1">#   may be used to endorse or promote products derived from this software without</span>
-<span class="c1">#   specific prior written permission.</span>
+<span class="c1">#   may be used to endorse or promote products derived from this software</span>
+<span class="c1">#   without specific prior written permission.</span>
 <span class="c1"># * If the source code is used in a published work, then proper citation of the</span>
 <span class="c1">#   source code must be included with the published work.</span>
 <span class="c1">#</span>
@@ -121,8 +121,8 @@
 
 <span class="sd">Filtering with FieldSpec</span>
 <span class="sd">  :meth:`~R3ResourceBundle.filter` accepts a</span>
-<span class="sd">  :data:`~recount3.types.FieldSpec` for each description field. Three</span>
-<span class="sd">  forms are accepted:</span>
+<span class="sd">  :data:`~recount3.types.FieldSpec` for each description field. The</span>
+<span class="sd">  following forms are accepted:</span>
 
 <span class="sd">  * A string: exact match (e.g. ``genomic_unit=&quot;gene&quot;``).</span>
 <span class="sd">  * An iterable of strings: keep if the field is any of the given values.</span>
@@ -156,11 +156,12 @@
 <span class="sd">    require the BiocPy package ``summarizedexperiment``, which might be</span>
 <span class="sd">    difficult to install on Windows. Install with::</span>
 
-<span class="sd">        pip install summarizedexperiment</span>
+<span class="sd">        pip install &quot;recount3[biocpy]&quot;</span>
 <span class="sd">&quot;&quot;&quot;</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">concurrent.futures</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
@@ -197,8 +198,9 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return a copy with unique, non-empty string column names.</span>
 
 <span class="sd">    Many recount3 metadata tables share column names (for example,</span>
-<span class="sd">    ``external_id``) and concatenation can introduce duplicates. BiocFrame</span>
-<span class="sd">    drops duplicated names, which then breaks downstream validation. This</span>
+<span class="sd">    ``external_id``) and concatenation can introduce duplicates.</span>
+<span class="sd">    :class:`~biocframe.BiocFrame` drops duplicated names, which then breaks</span>
+<span class="sd">    downstream validation. This</span>
 <span class="sd">    helper ensures that:</span>
 
 <span class="sd">    * All column names are strings (``None`` becomes an empty string).</span>
@@ -382,7 +384,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_collapse_rows_by_key</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collapse duplicated keys by taking the first non-null value per column.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collapse duplicated keys, keeping the first non-null per column.&quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">df</span>
 
@@ -461,7 +463,7 @@
         <span class="k">pass</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>  <span class="c1"># pylint: disable=protected-access</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Cannot resolve cached RR path for: </span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">url</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -575,7 +577,9 @@
     <span class="n">width</span> <span class="o">=</span> <span class="p">(</span><span class="n">ends_num</span> <span class="o">-</span> <span class="n">starts_num</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;Int64&quot;</span><span class="p">)</span>
 
     <span class="n">score_str</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">score</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;string&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="s2">&quot;.&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span><span class="p">})</span>  <span class="c1"># pyright: ignore[reportArgumentType]</span>
+        <span class="n">score</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">&quot;string&quot;</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="s2">&quot;.&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span><span class="p">})</span>  <span class="c1"># pyright: ignore[reportArgumentType]</span>
     <span class="p">)</span>  <span class="c1"># pyright: ignore[reportArgumentType]</span>
     <span class="n">score_num</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">score_str</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;coerce&quot;</span><span class="p">)</span>
 
@@ -637,8 +641,9 @@
 <span class="sd">      `ranges` except for &#39;feature_id&#39; (which is used as the index).</span>
 
 <span class="sd">    Raises:</span>
-<span class="sd">      ValueError: If required coordinate columns are missing from `ranges`, or if</span>
-<span class="sd">        version-stripped matching is ambiguous (conflicting coordinates).</span>
+<span class="sd">      ValueError: If required coordinate columns are missing from `ranges`,</span>
+<span class="sd">        or if version-stripped matching is ambiguous (conflicting</span>
+<span class="sd">        coordinates).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;feature_id&quot;</span><span class="p">,</span> <span class="s2">&quot;seqnames&quot;</span><span class="p">,</span> <span class="s2">&quot;starts&quot;</span><span class="p">,</span> <span class="s2">&quot;ends&quot;</span><span class="p">,</span> <span class="s2">&quot;strand&quot;</span><span class="p">}</span>
     <span class="n">missing_cols</span> <span class="o">=</span> <span class="n">required</span> <span class="o">-</span> <span class="nb">set</span><span class="p">(</span><span class="n">ranges</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span>
@@ -672,8 +677,9 @@
         <span class="k">if</span> <span class="n">conflicting</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="n">bad</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nunique</span><span class="p">[</span><span class="n">conflicting</span><span class="p">]</span><span class="o">.</span><span class="n">index</span><span class="p">[:</span><span class="mi">10</span><span class="p">])</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;After stripping Ensembl versions, multiple annotation rows map to &quot;</span>
-                <span class="s2">&quot;the same ID but with conflicting coordinates. Example IDs: &quot;</span>
+                <span class="s2">&quot;After stripping Ensembl versions, multiple annotation &quot;</span>
+                <span class="s2">&quot;rows map to the same ID but with conflicting &quot;</span>
+                <span class="s2">&quot;coordinates. Example IDs: &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bad</span><span class="si">!r}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
         <span class="n">ranges_uv</span> <span class="o">=</span> <span class="n">ranges_uv</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">(</span>
@@ -720,7 +726,7 @@
 <span class="sd">      ValueError: If the cached path for the resource cannot be resolved.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>  <span class="c1"># pylint: disable=protected-access</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">&quot;Cannot resolve cached GTF path for: </span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">url</span><span class="si">}</span><span class="s2">&quot;</span>
@@ -870,12 +876,12 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_peek_gtf_feature_counts</span><span class="p">(</span>
     <span class="n">res</span><span class="p">:</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_lines</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50000</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Quickly scan the GTF and count feature types without loading the whole file.&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scan the GTF and count feature types without loading it fully.&quot;&quot;&quot;</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>  <span class="c1"># pylint: disable=protected-access</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
     <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-exception-caught</span>
         <span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">&quot;enable&quot;</span><span class="p">)</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>  <span class="c1"># pylint: disable=protected-access</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
 
     <span class="n">opener</span> <span class="o">=</span> <span class="n">gzip</span><span class="o">.</span><span class="n">open</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.gz&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="nb">open</span>
     <span class="n">counts</span><span class="p">:</span> <span class="n">Counter</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">()</span>
@@ -937,7 +943,8 @@
             <span class="n">feats</span> <span class="o">=</span> <span class="n">_peek_gtf_feature_counts</span><span class="p">(</span><span class="n">res</span><span class="p">,</span> <span class="n">max_lines</span><span class="o">=</span><span class="mi">50000</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">feats</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">feature_kind</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">logging</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                    <span class="s2">&quot;Selected annotation resource for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2"> (peek features=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;Selected annotation resource for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2"> &quot;</span>
+                    <span class="s2">&quot;(peek features=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
                     <span class="n">genomic_unit</span><span class="p">,</span>
                     <span class="n">res</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">url_path</span><span class="p">(),</span>
                     <span class="nb">dict</span><span class="p">(</span><span class="n">feats</span><span class="o">.</span><span class="n">most_common</span><span class="p">(</span><span class="mi">5</span><span class="p">)),</span>
@@ -952,7 +959,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_to_genomic_ranges</span><span class="p">(</span><span class="n">ranges_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">genomicranges</span><span class="o">.</span><span class="n">GenomicRanges</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a GenomicRanges object from a pandas DataFrame.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a :class:`~genomicranges.GenomicRanges` from a DataFrame.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">      ranges_df: DataFrame with at least ``seqnames``, ``starts``,</span>
@@ -976,14 +983,16 @@
     <span class="n">assay_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">SummarizedExperiment</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a SummarizedExperiment using the latest BiocPy API.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a :class:`~summarizedexperiment.SummarizedExperiment`.</span>
 
 <span class="sd">    This function targets the modern `summarizedexperiment.SummarizedExperiment`</span>
 <span class="sd">    constructor that accepts:</span>
 
 <span class="sd">      - assays: dict[str, 2D matrix]</span>
-<span class="sd">      - row_data: feature metadata (coerced to BiocFrame by BiocPy)</span>
-<span class="sd">      - column_data: sample metadata (coerced to BiocFrame by BiocPy)</span>
+<span class="sd">      - row_data: feature metadata (coerced to</span>
+<span class="sd">        :class:`~biocframe.BiocFrame` by BiocPy)</span>
+<span class="sd">      - column_data: sample metadata (coerced to</span>
+<span class="sd">        :class:`~biocframe.BiocFrame` by BiocPy)</span>
 <span class="sd">      - row_names / column_names: optional but provided explicitly here</span>
 <span class="sd">      - metadata: optional experiment-level metadata</span>
 
@@ -995,12 +1004,12 @@
 <span class="sd">    Args:</span>
 <span class="sd">      counts_df: Feature-by-sample counts matrix.</span>
 <span class="sd">      row_df: Feature metadata DataFrame (will be reindexed to counts_df.index).</span>
-<span class="sd">      col_df: Sample metadata DataFrame (will be reindexed to counts_df.columns).</span>
+<span class="sd">      col_df: Sample metadata DataFrame (reindexed to counts_df.columns).</span>
 <span class="sd">      assay_name: Name of the assay (e.g. &quot;raw_counts&quot;).</span>
 <span class="sd">      metadata: Optional experiment-level metadata.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">      A SummarizedExperiment instance.</span>
+<span class="sd">      A :class:`~summarizedexperiment.SummarizedExperiment` instance.</span>
 
 <span class="sd">    Raises:</span>
 <span class="sd">      ValueError: If shapes are inconsistent or assay contains invalid values.</span>
@@ -1078,14 +1087,15 @@
     <span class="n">assay_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">metadata</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">summarizedexperiment</span><span class="o">.</span><span class="n">RangedSummarizedExperiment</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a RangedSummarizedExperiment using the latest BiocPy API.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct a :class:`~summarizedexperiment.RangedSummarizedExperiment`.</span>
 
 <span class="sd">    This targets the modern `summarizedexperiment.RangedSummarizedExperiment`</span>
 <span class="sd">    constructor with kwargs:</span>
 
 <span class="sd">      - assays: dict[str, 2D matrix]</span>
-<span class="sd">      - row_ranges: GenomicRanges</span>
-<span class="sd">      - row_data / column_data: pandas DataFrames (coerced to BiocFrame by BiocPy)</span>
+<span class="sd">      - row_ranges: :class:`~genomicranges.GenomicRanges`</span>
+<span class="sd">      - row_data / column_data: pandas DataFrames (coerced to</span>
+<span class="sd">        :class:`~biocframe.BiocFrame` by BiocPy)</span>
 <span class="sd">      - row_names / column_names: provided explicitly for stability</span>
 <span class="sd">      - metadata: optional experiment metadata</span>
 
@@ -1098,13 +1108,14 @@
 <span class="sd">      counts_df: Feature-by-sample counts matrix.</span>
 <span class="sd">      row_df: Feature metadata (reindexed to counts_df.index).</span>
 <span class="sd">      col_df: Sample metadata (reindexed to counts_df.columns).</span>
-<span class="sd">      ranges_df: DataFrame with at least [&quot;seqnames&quot;, &quot;starts&quot;, &quot;ends&quot;, &quot;strand&quot;].</span>
-<span class="sd">        Must have the same number/order of rows as counts_df.</span>
+<span class="sd">      ranges_df: DataFrame with at least</span>
+<span class="sd">        [&quot;seqnames&quot;, &quot;starts&quot;, &quot;ends&quot;, &quot;strand&quot;]. Must have the same</span>
+<span class="sd">        number/order of rows as counts_df.</span>
 <span class="sd">      assay_name: Name of the assay (e.g. &quot;raw_counts&quot;).</span>
 <span class="sd">      metadata: Optional experiment-level metadata.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">      A RangedSummarizedExperiment instance.</span>
+<span class="sd">      A :class:`~summarizedexperiment.RangedSummarizedExperiment` instance.</span>
 
 <span class="sd">    Raises:</span>
 <span class="sd">      ValueError: If shapes/columns are inconsistent or counts are not numeric.</span>
@@ -1363,10 +1374,9 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R3ResourceBundle</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Discover resources for one or more projects and return a bundle.</span>
 
-<span class="sd">        This is a generalized version of</span>
-<span class="sd">        :meth:`recount3.project.R3Project.discover`. It can operate on a</span>
-<span class="sd">        single ``(organism, data_source, project)`` triple or on the</span>
-<span class="sd">        Cartesian product of multiple values for each identifier.</span>
+<span class="sd">        It can operate on a single ``(organism, data_source, project)``</span>
+<span class="sd">        triple or on the Cartesian product of multiple values for each</span>
+<span class="sd">        identifier.</span>
 
 <span class="sd">        When discovery spans more than one project, the returned bundle</span>
 <span class="sd">        will contain resources from all projects and the bundle-level</span>
@@ -1425,7 +1435,7 @@
 <span class="sd">                bundle = R3ResourceBundle.discover(</span>
 <span class="sd">                    organism=&quot;human&quot;,</span>
 <span class="sd">                    data_source=&quot;sra&quot;,</span>
-<span class="sd">                    project=[&quot;SRP009615&quot;, &quot;SRP012682&quot;],</span>
+<span class="sd">                    project=[&quot;SRP009615&quot;, &quot;SRP001558&quot;],</span>
 <span class="sd">                    genomic_units=(&quot;gene&quot;,),</span>
 <span class="sd">                )</span>
 
@@ -1834,8 +1844,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">counts</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R3ResourceBundle</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a sub-bundle containing only count-file resources.</span>
 
-<span class="sd">        This is a convenience alias for :meth:`only_counts` maintained</span>
-<span class="sd">        for API continuity with :class:`recount3.project.R3Project`.</span>
+<span class="sd">        This is a convenience alias for :meth:`only_counts`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">only_counts</span><span class="p">()</span></div>
 
@@ -1845,8 +1854,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R3ResourceBundle</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a sub-bundle containing only metadata resources.</span>
 
-<span class="sd">        This is a convenience alias for :meth:`only_metadata` maintained</span>
-<span class="sd">        for compatibility with :class:`recount3.project.R3Project`.</span>
+<span class="sd">        This is a convenience alias for :meth:`only_metadata`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">only_metadata</span><span class="p">()</span></div>
 
@@ -2023,7 +2031,8 @@
 <span class="sd">                    genomic_unit=&quot;gene&quot;,</span>
 <span class="sd">                ).stack_count_matrices()</span>
 
-<span class="sd">            Require identical feature sets (faster; fails if annotations differ)::</span>
+<span class="sd">            Require an identical feature space; fails if gene and exon are</span>
+<span class="sd">            mixed (the annotation build is not constrained)::</span>
 
 <span class="sd">                df = bundle.filter(</span>
 <span class="sd">                    resource_type=&quot;count_files_gene_or_exon&quot;</span>
@@ -2119,9 +2128,10 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a wide counts DataFrame for the requested feature family.</span>
 
-<span class="sd">        This is a bundle-scoped helper used by the SummarizedExperiment</span>
-<span class="sd">        builders. It enforces appropriate compatibility within the</span>
-<span class="sd">        gene/exon family or the junctions family.</span>
+<span class="sd">        This is a bundle-scoped helper used by the</span>
+<span class="sd">        :class:`~summarizedexperiment.SummarizedExperiment` builders. It</span>
+<span class="sd">        enforces appropriate compatibility within the gene/exon family or</span>
+<span class="sd">        the junctions family.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">          genomic_unit: One of ``&quot;gene&quot;``, ``&quot;exon&quot;``, or ``&quot;junction&quot;``.</span>
@@ -2204,8 +2214,8 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Add a ``BigWigURL`` column to sample metadata.</span>
 
 <span class="sd">        For each sample (identified by ``external_id`` in ``col_df``), this</span>
-<span class="sd">        method constructs the duffel URL for its BigWig coverage file by</span>
-<span class="sd">        inspecting the bundle&#39;s count resources to infer ``organism``,</span>
+<span class="sd">        method constructs the recount3 mirror URL for its BigWig coverage file</span>
+<span class="sd">        by inspecting the bundle&#39;s count resources to infer ``organism``,</span>
 <span class="sd">        ``data_source``, and ``project``.</span>
 
 <span class="sd">        This matches the R reference behavior in ``create_rse_manual()``</span>
@@ -2219,9 +2229,6 @@
 <span class="sd">          the necessary resource attributes cannot be inferred, the column</span>
 <span class="sd">          contains ``pd.NA``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">recount3._descriptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3BigWig</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">recount3.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_config</span>
-
         <span class="n">out</span> <span class="o">=</span> <span class="n">col_df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="s2">&quot;external_id&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">out</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
@@ -2250,14 +2257,15 @@
                 <span class="n">file_source_col</span> <span class="o">=</span> <span class="n">col</span>
                 <span class="k">break</span>
         <span class="k">if</span> <span class="n">file_source_col</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">first_source</span> <span class="o">=</span> <span class="n">out</span><span class="p">[</span><span class="n">file_source_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="p">[</span><span class="n">file_source_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">empty</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">first_source</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">out</span><span class="p">[</span><span class="n">file_source_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="p">[</span><span class="n">file_source_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">empty</span>
+                <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
             <span class="k">if</span> <span class="n">first_source</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">first_source</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="n">resolved</span> <span class="o">=</span> <span class="n">first_source</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
                 <span class="k">if</span> <span class="n">resolved</span><span class="p">:</span>
                     <span class="n">data_source</span> <span class="o">=</span> <span class="n">resolved</span>
-
-        <span class="n">cfg</span> <span class="o">=</span> <span class="n">default_config</span><span class="p">()</span>
-        <span class="n">base_url</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">.</span><span class="n">base_url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
 
         <span class="n">urls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">ext_id</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[</span><span class="s2">&quot;external_id&quot;</span><span class="p">]:</span>
@@ -2266,14 +2274,15 @@
                 <span class="n">urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
                 <span class="k">continue</span>
             <span class="k">try</span><span class="p">:</span>
-                <span class="n">bw_desc</span> <span class="o">=</span> <span class="n">R3BigWig</span><span class="p">(</span>
-                    <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;bigwig_files&quot;</span><span class="p">,</span>
-                    <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
-                    <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
-                    <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
-                    <span class="n">sample</span><span class="o">=</span><span class="n">ext_id_str</span><span class="p">,</span>
+                <span class="n">urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">resource</span><span class="o">.</span><span class="n">build_url</span><span class="p">(</span>
+                        <span class="s2">&quot;bigwig_files&quot;</span><span class="p">,</span>
+                        <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
+                        <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
+                        <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+                        <span class="n">sample</span><span class="o">=</span><span class="n">ext_id_str</span><span class="p">,</span>
+                    <span class="p">)</span>
                 <span class="p">)</span>
-                <span class="n">urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_url</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">bw_desc</span><span class="o">.</span><span class="n">url_path</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-except</span>
                 <span class="n">urls</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
@@ -2407,7 +2416,7 @@
                 <span class="n">annotation_extension</span><span class="o">=</span><span class="n">annotation_extension</span><span class="p">,</span>
             <span class="p">)</span>
 
-        <span class="n">counts_df</span> <span class="o">=</span> <span class="n">working</span><span class="o">.</span><span class="n">_stack_counts_for</span><span class="p">(</span>  <span class="c1"># pylint: disable=protected-access</span>
+        <span class="n">counts_df</span> <span class="o">=</span> <span class="n">working</span><span class="o">.</span><span class="n">_stack_counts_for</span><span class="p">(</span>
             <span class="n">genomic_unit</span><span class="o">=</span><span class="n">genomic_unit</span><span class="p">,</span>
             <span class="n">join_policy</span><span class="o">=</span><span class="n">join_policy</span><span class="p">,</span>
             <span class="n">autoload</span><span class="o">=</span><span class="n">autoload</span><span class="p">,</span>
@@ -2433,8 +2442,9 @@
         <span class="n">row_names</span> <span class="o">=</span> <span class="n">original_feature_ids</span>
         <span class="k">if</span> <span class="n">dup_count</span><span class="p">:</span>
             <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;Counts contain </span><span class="si">%d</span><span class="s2"> duplicate feature IDs; generating unique row_names &quot;</span>
-                <span class="s2">&quot;and preserving originals in row_data[&#39;feature_id&#39;].&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Counts contain </span><span class="si">%d</span><span class="s2"> duplicate feature IDs; generating &quot;</span>
+                <span class="s2">&quot;unique row_names and preserving originals in &quot;</span>
+                <span class="s2">&quot;row_data[&#39;feature_id&#39;].&quot;</span><span class="p">,</span>
                 <span class="n">dup_count</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">row_names</span> <span class="o">=</span> <span class="n">_make_unique_names</span><span class="p">(</span><span class="n">original_feature_ids</span><span class="p">)</span>
@@ -2512,7 +2522,7 @@
         <span class="n">last_ranges_error</span><span class="p">:</span> <span class="ne">Exception</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="n">working</span> <span class="o">=</span> <span class="bp">self</span>
-        <span class="n">counts_df</span> <span class="o">=</span> <span class="n">working</span><span class="o">.</span><span class="n">_stack_counts_for</span><span class="p">(</span>  <span class="c1"># pylint: disable=protected-access</span>
+        <span class="n">counts_df</span> <span class="o">=</span> <span class="n">working</span><span class="o">.</span><span class="n">_stack_counts_for</span><span class="p">(</span>
             <span class="n">genomic_unit</span><span class="o">=</span><span class="n">genomic_unit</span><span class="p">,</span>
             <span class="n">join_policy</span><span class="o">=</span><span class="n">join_policy</span><span class="p">,</span>
             <span class="n">autoload</span><span class="o">=</span><span class="n">autoload</span><span class="p">,</span>
@@ -2538,8 +2548,9 @@
         <span class="n">row_names</span> <span class="o">=</span> <span class="n">original_feature_ids</span>
         <span class="k">if</span> <span class="n">dup_count</span><span class="p">:</span>
             <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                <span class="s2">&quot;Counts contain </span><span class="si">%d</span><span class="s2"> duplicate feature IDs; generating unique row_names &quot;</span>
-                <span class="s2">&quot;and preserving originals in row_data[&#39;feature_id&#39;].&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;Counts contain </span><span class="si">%d</span><span class="s2"> duplicate feature IDs; generating &quot;</span>
+                <span class="s2">&quot;unique row_names and preserving originals in &quot;</span>
+                <span class="s2">&quot;row_data[&#39;feature_id&#39;].&quot;</span><span class="p">,</span>
                 <span class="n">dup_count</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">row_names</span> <span class="o">=</span> <span class="n">_make_unique_names</span><span class="p">(</span><span class="n">original_feature_ids</span><span class="p">)</span>
@@ -2589,10 +2600,13 @@
                             <span class="k">if</span> <span class="n">m</span>
                         <span class="p">][:</span><span class="mi">10</span><span class="p">]</span>
                         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="s2">&quot;Annotation does not contain ranges for some feature IDs present in &quot;</span>
-                            <span class="s2">&quot;the counts matrix. Example missing feature_ids: &quot;</span>
-                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">missing_ids</span><span class="si">}</span><span class="s2">. This usually indicates an annotation mismatch; try &quot;</span>
-                            <span class="s2">&quot;setting annotation_extension to match the counts resource.&quot;</span>
+                            <span class="s2">&quot;Annotation does not contain ranges for some &quot;</span>
+                            <span class="s2">&quot;feature IDs present in the counts matrix. &quot;</span>
+                            <span class="s2">&quot;Example missing feature_ids: &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">missing_ids</span><span class="si">}</span><span class="s2">. This usually indicates an &quot;</span>
+                            <span class="s2">&quot;annotation mismatch; try setting &quot;</span>
+                            <span class="s2">&quot;annotation_extension to match the counts &quot;</span>
+                            <span class="s2">&quot;resource.&quot;</span>
                         <span class="p">)</span>
 
                     <span class="n">ranges_df</span> <span class="o">=</span> <span class="n">idxed</span><span class="p">[</span>
@@ -2680,7 +2694,8 @@
 
                 <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">std</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n_features</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;RR row count </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">std</span><span class="p">)</span><span class="si">}</span><span class="s2"> != MM feature count </span><span class="si">{</span><span class="n">n_features</span><span class="si">}</span><span class="s2">; cannot build junction ranges.&quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;RR row count </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">std</span><span class="p">)</span><span class="si">}</span><span class="s2"> != MM feature count &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">n_features</span><span class="si">}</span><span class="s2">; cannot build junction ranges.&quot;</span>
                     <span class="p">)</span>
 
                 <span class="n">id_candidates</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;junction_id&quot;</span><span class="p">,</span> <span class="s2">&quot;jxn_id&quot;</span><span class="p">,</span> <span class="s2">&quot;jid&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">)</span>
@@ -2720,7 +2735,8 @@
 
             <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-except</span>
                 <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                    <span class="s2">&quot;Falling back: failed to derive junction ranges from RR (reason: </span><span class="si">%r</span><span class="s2">).&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;Falling back: failed to derive junction ranges from &quot;</span>
+                    <span class="s2">&quot;RR (reason: </span><span class="si">%r</span><span class="s2">).&quot;</span><span class="p">,</span>
                     <span class="n">exc</span><span class="p">,</span>
                 <span class="p">)</span>
                 <span class="n">last_ranges_error</span> <span class="o">=</span> <span class="n">exc</span>
@@ -2761,14 +2777,22 @@
         <span class="n">dest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="p">,</span>
         <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">cache</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">CacheMode</span> <span class="o">=</span> <span class="s2">&quot;enable&quot;</span><span class="p">,</span>
+        <span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Download all resources in the bundle to a local destination.</span>
 
 <span class="sd">        This method is a convenience wrapper around</span>
 <span class="sd">        :meth:`recount3.resource.R3Resource.download` for each contained</span>
-<span class="sd">        resource. For more advanced workflows (event logs, streaming to a</span>
-<span class="sd">        ZIP archive, and so on) prefer the command-line interface,</span>
-<span class="sd">        ``recount3 download``.</span>
+<span class="sd">        resource. Downloading is I/O-bound, so by default the resources are</span>
+<span class="sd">        fetched concurrently using a pool of worker threads (the same</span>
+<span class="sd">        mechanism the ``recount3 download`` CLI command uses). For more</span>
+<span class="sd">        advanced workflows (per-resource event logs, JSONL progress) prefer</span>
+<span class="sd">        the command-line interface, ``recount3 download``.</span>
+
+<span class="sd">        Concurrency is safe because per-resource downloads are coordinated by</span>
+<span class="sd">        a shared :class:`threading.Lock` over the on-disk cache and by</span>
+<span class="sd">        per-path locks for ``.zip`` archives, and files are materialized</span>
+<span class="sd">        atomically. See :mod:`recount3.resource` for details.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">          dest: Destination directory or ``.zip`` path. When a directory</span>
@@ -2779,14 +2803,34 @@
 <span class="sd">            directory mode.</span>
 <span class="sd">          cache: Cache behavior: ``&quot;enable&quot;``, ``&quot;disable&quot;``, or</span>
 <span class="sd">            ``&quot;update&quot;`` as defined by :class:`recount3.types.CacheMode`.</span>
+<span class="sd">          max_workers: Maximum number of parallel download threads. Values</span>
+<span class="sd">            ``&lt;= 1`` download sequentially. The effective worker count is</span>
+<span class="sd">            also capped at the number of resources in the bundle.</span>
 
 <span class="sd">        Raises:</span>
 <span class="sd">          ValueError: Propagated from underlying resource download</span>
 <span class="sd">            failures, for example when an unsupported cache mode is</span>
 <span class="sd">            selected.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">resources</span><span class="p">:</span>
-            <span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">dest</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span></div>
+        <span class="n">resources</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">resources</span>
+        <span class="k">if</span> <span class="n">max_workers</span> <span class="o">&lt;=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">resources</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">resources</span><span class="p">:</span>
+                <span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">dest</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">workers</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">max_workers</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">resources</span><span class="p">))</span>
+        <span class="k">with</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">workers</span><span class="p">)</span> <span class="k">as</span> <span class="n">pool</span><span class="p">:</span>
+            <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">pool</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span>
+                    <span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">,</span>
+                    <span class="n">path</span><span class="o">=</span><span class="n">dest</span><span class="p">,</span>
+                    <span class="n">cache_mode</span><span class="o">=</span><span class="n">cache</span><span class="p">,</span>
+                    <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">resources</span>
+            <span class="p">]</span>
+            <span class="k">for</span> <span class="n">fut</span> <span class="ow">in</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">as_completed</span><span class="p">(</span><span class="n">futures</span><span class="p">):</span>
+                <span class="n">fut</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>  <span class="c1"># re-raise the first download error, if any</span></div>
 </div>
 
 </pre></div>
