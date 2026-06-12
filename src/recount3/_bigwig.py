@@ -48,9 +48,9 @@ Typical usage example::
 
 Note:
     Requires the optional ``pyBigWig`` package. Install with
-    ``pip install pyBigWig``. An :exc:`ImportError` is raised on first use
-    if the package is not available. ``pyBigWig`` can be difficult to
-    install on non-Linux systems.
+    ``pip install "recount3[bigwig]"``. An :exc:`ImportError` is raised on
+    first use if the package is not available. ``pyBigWig`` can be difficult
+    to install on non-Linux systems.
 """
 
 from __future__ import annotations

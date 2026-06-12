@@ -58,7 +58,7 @@ Environment variables (all optional):
     (default: 1048576, i.e. 1 MiB).
 
 Mirrors:
-  recount3 publishes the same relative file layout on several
+  recount3 publishes the **same relative file layout** on several
   interchangeable public mirrors; ``RECOUNT3_URL`` / ``base_url`` works with
   any of them unchanged:
 
@@ -76,14 +76,19 @@ Mirrors:
 
 Typical usage example::
 
+    import dataclasses
     from pathlib import Path
-    from recount3.config import Config, recount3_cache, recount3_cache_rm
+    from recount3.config import default_config, recount3_cache, recount3_cache_rm
 
     # Read the current cache directory (creates it if absent):
     cache_dir = recount3_cache()
 
-    # Use a custom cache location for this session:
-    cfg = Config(cache_dir=Path("/scratch/recount3_cache"))
+    # Use a custom cache location for this session (override one field of
+    # the environment-derived defaults; Config is immutable):
+    cfg = dataclasses.replace(
+        default_config(), cache_dir=Path("/scratch/recount3_cache")
+    )
+    custom_cache_dir = recount3_cache(cfg)
 
     # Remove cached files matching a pattern (dry run first):
     to_delete = recount3_cache_rm(dry_run=True)
