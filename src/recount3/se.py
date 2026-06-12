@@ -29,7 +29,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-"""High-level builders and utilities for SummarizedExperiment objects.
+"""High-level builders and utilities for :class:`~summarizedexperiment.SummarizedExperiment` objects.
 
 This module provides helpers for constructing BiocPy
 :class:`~summarizedexperiment.SummarizedExperiment` and
@@ -202,7 +202,7 @@ def _resolve_annotation_extension(
     annotation_label: str | None,
     annotation_extension: str | None,
 ) -> str | None:
-    """Resolve a single annotation extension for create_rse-style helpers.
+    """Resolve a single annotation extension for :func:`~recount3.create_rse`-style helpers.
 
     For gene and exon assays, this helper maps a human-readable
     annotation name (for example, ``"gencode_v26"``) or an explicit
@@ -252,7 +252,7 @@ def build_summarized_experiment(
     join_policy: str = "inner",
     autoload: bool = True,
 ) -> summarizedexperiment.SummarizedExperiment:
-    """Create a SummarizedExperiment from a resource bundle.
+    """Create a :class:`~summarizedexperiment.SummarizedExperiment` from a resource bundle.
 
     This is a convenience wrapper around
     :meth:`recount3.bundle.R3ResourceBundle.to_summarized_experiment`.
@@ -293,7 +293,7 @@ def build_ranged_summarized_experiment(
     summarizedexperiment.RangedSummarizedExperiment
     | summarizedexperiment.SummarizedExperiment
 ):
-    """Create a RangedSummarizedExperiment when ranges can be resolved.
+    """Create a :class:`~summarizedexperiment.RangedSummarizedExperiment` when ranges can be resolved.
 
     This is a convenience wrapper around
     :meth:`recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`.
@@ -585,11 +585,12 @@ def expand_sra_attributes(
       missing, ``experiment_or_coldata`` is returned unchanged.
 
     Raises:
-      ImportError: If a SummarizedExperiment/RangedSummarizedExperiment
-        is supplied but BiocPy packages are not installed.
+      ImportError: If a :class:`~summarizedexperiment.SummarizedExperiment` /
+        :class:`~summarizedexperiment.RangedSummarizedExperiment` is supplied
+        but BiocPy packages are not installed.
       AttributeError: If the BiocPy object does not expose
         ``column_data`` or ``set_column_data`` in the expected API.
-      TypeError: If ``experiment_or_coldata`` is neither a pandas DataFrame nor a
+      TypeError: If ``experiment_or_coldata`` is neither a :class:`~pandas.DataFrame` nor a
         supported BiocPy experiment object.
 
     Examples:
@@ -681,20 +682,20 @@ def compute_read_counts(
     assume counts are integer-valued.
 
     Args:
-      rse: A RangedSummarizedExperiment-like object containing a "raw_counts"
-        assay and sample metadata in `col_data`.
+      rse: A :class:`~summarizedexperiment.RangedSummarizedExperiment`-like object
+        containing a "raw_counts" assay and sample metadata in `col_data`.
       round_to_integers: If True, round the resulting values to 0 decimals.
       avg_mapped_read_length_column: Name of the metadata column containing average
         mapped read length per sample. The column must be present in `col_data`
         and must contain numeric values.
 
     Returns:
-      A pandas DataFrame of approximate read counts with the same shape as the
+      A :class:`~pandas.DataFrame` of approximate read counts with the same shape as the
       "raw_counts" assay (features x samples). Row and column names are
       preserved when available.
 
     Raises:
-      ValueError: If `rse` is not a RangedSummarizedExperiment, if the
+      ValueError: If `rse` is not a :class:`~summarizedexperiment.RangedSummarizedExperiment`, if the
         "raw_counts" assay is missing, if `avg_mapped_read_length_column` is missing
         from `col_data`, or if the assay and metadata dimensions do not align.
       TypeError: If `round_to_integers` is not a bool.
@@ -784,14 +785,14 @@ def compute_tpm(
       4. TPM = RPK / Scale Factor
 
     Args:
-      rse: A RangedSummarizedExperiment object containing raw coverage sums.
+      rse: A :class:`~summarizedexperiment.RangedSummarizedExperiment` object containing raw coverage sums.
         Must have feature widths defined in rowRanges.
 
     Returns:
-      A pandas DataFrame of TPM values.
+      A :class:`~pandas.DataFrame` of TPM values.
 
     Raises:
-      TypeError: If rse is not a RangedSummarizedExperiment (needs rowRanges).
+      TypeError: If rse is not a :class:`~summarizedexperiment.RangedSummarizedExperiment` (needs rowRanges).
       ValueError: If feature widths or read lengths are missing.
 
     Examples:
@@ -843,7 +844,7 @@ def is_paired_end(
       result <- ratio == 2, with names(result) = external_id.
 
     Args:
-        sample_metadata_source: Sample metadata (DataFrame) or a (Ranged)SummarizedExperiment-like
+        sample_metadata_source: Sample metadata (DataFrame) or a ``(Ranged)SummarizedExperiment``-like
           object with `col_data.to_pandas()`.
         avg_mapped_read_length_column: Metadata column containing average mapped length.
         avg_read_length_column: Metadata column containing average read length.
@@ -951,7 +952,7 @@ def compute_scale_factors(
     Non-numeric metadata values raise an error.
 
     Args:
-      sample_metadata_source: Sample metadata as a pandas DataFrame, or an object with
+      sample_metadata_source: Sample metadata as a :class:`~pandas.DataFrame`, or an object with
         `col_data.to_pandas()` that yields sample metadata.
       by: Scaling method: "auc" or "mapped_reads".
       target_read_count: Target library size used to compute scale factors. Interpreted
@@ -1105,24 +1106,24 @@ def transform_counts(
     input. If round_to_integers is True, values are rounded to integer-like counts.
 
     Args:
-      rse: A RangedSummarizedExperiment-like object containing a "raw_counts"
-        assay and sample metadata in `col_data`.
+      rse: A :class:`~summarizedexperiment.RangedSummarizedExperiment`-like object
+        containing a "raw_counts" assay and sample metadata in `col_data`.
       by: Scaling method: "auc" or "mapped_reads".
       target_read_count: Target library size used to compute scale factors. Interpreted
         as the number of single-end reads to scale each sample to.
       target_read_length_bp: Target read length used only when by="mapped_reads".
       round_to_integers: If True, round scaled values to 0 decimals.
-      **kwargs: Additional parameters forwarded to compute_scale_factors(). Use
+      **kwargs: Additional parameters forwarded to :func:`~recount3.se.compute_scale_factors`. Use
         this to override metadata column names (for example, `auc_column=...`,
         `mapped_reads_column=...`, `avg_mapped_read_length_column=...`) or to provide
         `paired_end_status=...` when paired-end status should not be inferred.
 
     Returns:
-      A pandas DataFrame of scaled counts with the same dimensions as
+      A :class:`~pandas.DataFrame` of scaled counts with the same dimensions as
       `assay("raw_counts")`. Row and column names are preserved when available.
 
     Raises:
-      ValueError: If `rse` is not a RangedSummarizedExperiment, if the required
+      ValueError: If `rse` is not a :class:`~summarizedexperiment.RangedSummarizedExperiment`, if the required
         assay or metadata columns are missing, if `by` is invalid, or if the
         assay and metadata dimensions do not align.
       TypeError: If `round_to_integers` is not a bool, or if numeric parameters are

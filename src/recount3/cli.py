@@ -1628,7 +1628,7 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
 def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     """Implement ``bundle se`` subcommand.
 
-    Loads resources from a manifest and assembles a SummarizedExperiment.
+    Loads resources from a manifest and assembles a :class:`~summarizedexperiment.SummarizedExperiment`.
 
     Args:
       args: Parsed CLI arguments for ``bundle se``.
@@ -1678,7 +1678,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
 def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
     """Implement ``bundle rse`` subcommand.
 
-    Loads resources from a manifest and assembles a RangedSummarizedExperiment.
+    Loads resources from a manifest and assembles a :class:`~summarizedexperiment.RangedSummarizedExperiment`.
 
     Args:
       args: Parsed CLI arguments for ``bundle rse``.

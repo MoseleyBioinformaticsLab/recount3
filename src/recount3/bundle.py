@@ -124,7 +124,7 @@ def _ensure_unique_columns(
     """Return a copy with unique, non-empty string column names.
 
     Many recount3 metadata tables share column names (for example,
-    ``external_id``) and concatenation can introduce duplicates. BiocFrame
+    ``external_id``) and concatenation can introduce duplicates. :class:`~biocframe.BiocFrame`
     drops duplicated names, which then breaks downstream validation. This
     helper ensures that:
 
@@ -879,7 +879,7 @@ def _select_gtf_resource_for_unit(
 
 
 def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
-    """Construct a GenomicRanges object from a pandas DataFrame.
+    """Construct a :class:`~genomicranges.GenomicRanges` object from a :class:`~pandas.DataFrame`.
 
     Args:
       ranges_df: DataFrame with at least ``seqnames``, ``starts``,
@@ -903,14 +903,14 @@ def _construct_summarized_experiment(
     assay_name: str,
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> summarizedexperiment.SummarizedExperiment:
-    """Construct a SummarizedExperiment using the latest BiocPy API.
+    """Construct a :class:`~summarizedexperiment.SummarizedExperiment` using the latest BiocPy API.
 
     This function targets the modern `summarizedexperiment.SummarizedExperiment`
     constructor that accepts:
 
       - assays: dict[str, 2D matrix]
-      - row_data: feature metadata (coerced to BiocFrame by BiocPy)
-      - column_data: sample metadata (coerced to BiocFrame by BiocPy)
+      - row_data: feature metadata (coerced to :class:`~biocframe.BiocFrame` by BiocPy)
+      - column_data: sample metadata (coerced to :class:`~biocframe.BiocFrame` by BiocPy)
       - row_names / column_names: optional but provided explicitly here
       - metadata: optional experiment-level metadata
 
@@ -927,7 +927,7 @@ def _construct_summarized_experiment(
       metadata: Optional experiment-level metadata.
 
     Returns:
-      A SummarizedExperiment instance.
+      A :class:`~summarizedexperiment.SummarizedExperiment` instance.
 
     Raises:
       ValueError: If shapes are inconsistent or assay contains invalid values.
@@ -1005,14 +1005,14 @@ def _construct_ranged_summarized_experiment(
     assay_name: str,
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> summarizedexperiment.RangedSummarizedExperiment:
-    """Construct a RangedSummarizedExperiment using the latest BiocPy API.
+    """Construct a :class:`~summarizedexperiment.RangedSummarizedExperiment` using the latest BiocPy API.
 
     This targets the modern `summarizedexperiment.RangedSummarizedExperiment`
     constructor with kwargs:
 
       - assays: dict[str, 2D matrix]
-      - row_ranges: GenomicRanges
-      - row_data / column_data: pandas DataFrames (coerced to BiocFrame by BiocPy)
+      - row_ranges: :class:`~genomicranges.GenomicRanges`
+      - row_data / column_data: pandas DataFrames (coerced to :class:`~biocframe.BiocFrame` by BiocPy)
       - row_names / column_names: provided explicitly for stability
       - metadata: optional experiment metadata
 
@@ -1031,7 +1031,7 @@ def _construct_ranged_summarized_experiment(
       metadata: Optional experiment-level metadata.
 
     Returns:
-      A RangedSummarizedExperiment instance.
+      A :class:`~summarizedexperiment.RangedSummarizedExperiment` instance.
 
     Raises:
       ValueError: If shapes/columns are inconsistent or counts are not numeric.
@@ -1993,8 +1993,9 @@ class R3ResourceBundle:
     ) -> pd.DataFrame:
         """Return a wide counts DataFrame for the requested feature family.
 
-        This is a bundle-scoped helper used by the SummarizedExperiment
-        builders. It enforces appropriate compatibility within the
+        This is a bundle-scoped helper used by the
+        :class:`~summarizedexperiment.SummarizedExperiment` builders. It enforces
+        appropriate compatibility within the
         gene/exon family or the junctions family.
 
         Args:

@@ -194,7 +194,7 @@ def _make_resources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Build R3Resource objects from parameter dicts, optionally deduplicating.
+    """Build :class:`~recount3.R3Resource` objects from parameter dicts, optionally deduplicating.
 
     Args:
         param_dicts: An iterable of parameter dictionaries, each containing at
@@ -266,7 +266,7 @@ def search_annotations(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for annotation GTF files.
+    """Return :class:`~recount3.R3Resource` objects for annotation GTF files.
 
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
@@ -305,7 +305,7 @@ def search_count_files_gene_or_exon(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for per-project gene or exon count matrices.
+    """Return :class:`~recount3.R3Resource` objects for per-project gene or exon count matrices.
 
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
@@ -369,7 +369,7 @@ def search_count_files_junctions(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for per-project junction count files.
+    """Return :class:`~recount3.R3Resource` objects for per-project junction count files.
 
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination. Junction
@@ -420,7 +420,7 @@ def search_metadata_files(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for per-project metadata tables.
+    """Return :class:`~recount3.R3Resource` objects for per-project metadata tables.
 
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
@@ -461,7 +461,7 @@ def search_bigwig_files(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for per-sample BigWig coverage files.
+    """Return :class:`~recount3.R3Resource` objects for per-sample BigWig coverage files.
 
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
@@ -498,7 +498,7 @@ def search_data_sources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for the organism-level data-source index.
+    """Return :class:`~recount3.R3Resource` objects for the organism-level data-source index.
 
     Each resource resolves to the ``homes_index`` file for one organism,
     which lists the available data sources for that organism.
@@ -526,7 +526,7 @@ def search_data_source_metadata(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return R3Resource objects for data-source-level metadata listings.
+    """Return :class:`~recount3.R3Resource` objects for data-source-level metadata listings.
 
     Each resource resolves to the ``recount_project`` metadata file for one
     (organism, data_source) pair, which enumerates all projects within that

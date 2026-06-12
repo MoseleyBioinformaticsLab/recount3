@@ -755,17 +755,17 @@ def _resolve_counts_assay_name(
 
 
 def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
-    """Coerce sample metadata into a pandas DataFrame.
+    """Coerce sample metadata into a :class:`~pandas.DataFrame`.
 
     Args:
-        sample_metadata_source: Either a BiocPy (Ranged)SummarizedExperiment-like object with a
-          `.col_data.to_pandas()` method, or a pandas DataFrame already.
+        sample_metadata_source: Either a BiocPy ``(Ranged)SummarizedExperiment``-like object with a
+          `.col_data.to_pandas()` method, or a :class:`~pandas.DataFrame` already.
 
     Returns:
-        A pandas DataFrame of sample metadata.
+        A :class:`~pandas.DataFrame` of sample metadata.
 
     Raises:
-        TypeError: If `sample_metadata_source` cannot be coerced to a pandas DataFrame.
+        TypeError: If `sample_metadata_source` cannot be coerced to a :class:`~pandas.DataFrame`.
     """
     if isinstance(sample_metadata_source, pd.DataFrame):
         return sample_metadata_source
@@ -871,7 +871,7 @@ def _format_optional_dependency_import_error(
     """Format a standardized ImportError message for an optional dependency.
 
     Args:
-        module_name: Import name used by Python (for example, "pyBigWig").
+        module_name: Import name used by Python (for example, ``pyBigWig``).
         exc: Underlying exception raised during import, if available.
 
     Returns:
@@ -908,7 +908,7 @@ def _format_optional_dependency_import_failure(
         exc: The underlying exception raised during import.
 
     Returns:
-        A detailed message suitable for raising as a CompatibilityError.
+        A detailed message suitable for raising as a :exc:`~recount3.errors.CompatibilityError`.
     """
     return (
         f"Optional dependency {module_name!r} could not be imported.\n"
@@ -1057,13 +1057,13 @@ def get_ranged_summarizedexperiment_class() -> (
 
 
 def get_pybigwig_module() -> types.ModuleType:
-    """Return the optional "pyBigWig" module.
+    """Return the optional ``pyBigWig`` module.
 
     This is a small convenience wrapper around import_optional_module so that
     callers do not need to hard-code the import name.
 
     Returns:
-        The imported "pyBigWig" module.
+        The imported ``pyBigWig`` module.
 
     Raises:
         ImportError: If the optional dependency is missing or fails to import.
