@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -169,7 +169,7 @@ for readability)::
      "sample":null,"annotation_extension":"G026","junction_type":null,
      "junction_extension":null,"table_name":null,
      "url":".../sra/gene_sums/15/SRP009615/sra.gene_sums.SRP009615.G026.gz",
-     "arcname":"human/data_sources/sra/gene_sums/15/SRP009615/sra.gene_sums.SRP009615.G026.gz"}
+     "arcname":"human/data_sources/.../sra.gene_sums.SRP009615.G026.gz"}
 
 ``download`` writes one progress event per resource to stdout::
 
@@ -192,7 +192,7 @@ The relevant environment variables are::
     RECOUNT3_HTTP_TIMEOUT      HTTP timeout in seconds (int)
     RECOUNT3_MAX_RETRIES       Max retry attempts for transient errors (int)
     RECOUNT3_INSECURE_SSL      "1" to disable TLS verification (unsafe; https
-                               base URLs only, no-op for the default http mirror)
+                               base URLs only, no-op for default http mirror)
     RECOUNT3_USER_AGENT        Custom HTTP User-Agent string
     RECOUNT3_CHUNK_SIZE        Streaming chunk size in bytes
 
@@ -1617,7 +1617,8 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
 def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     """Implement ``bundle se`` subcommand.
 
-    Loads resources from a manifest and assembles a :class:`~summarizedexperiment.SummarizedExperiment`.
+    Loads resources from a manifest and assembles a
+    :class:`~summarizedexperiment.SummarizedExperiment`.
 
     Args:
       args: Parsed CLI arguments for ``bundle se``.
@@ -1667,7 +1668,8 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
 def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
     """Implement ``bundle rse`` subcommand.
 
-    Loads resources from a manifest and assembles a :class:`~summarizedexperiment.RangedSummarizedExperiment`.
+    Loads resources from a manifest and assembles a
+    :class:`~summarizedexperiment.RangedSummarizedExperiment`.
 
     Args:
       args: Parsed CLI arguments for ``bundle rse``.

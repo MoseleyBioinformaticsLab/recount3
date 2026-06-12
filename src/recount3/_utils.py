@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -54,7 +54,8 @@ Examples:
         path = _cache_path("https://example.com/data.tsv", Path("/tmp/cache"))
 
 Attributes:
-    _ZIP_LOCKS_GUARD: Threading lock to safely interact with the weakref dictionary.
+    _ZIP_LOCKS_GUARD: Threading lock to safely interact with the weakref
+        dictionary.
     _ZIP_LOCKS: A weak reference dictionary mapping ZIP file paths to specific
         threading locks. This synchronizes ZIP mutations per-file, preventing
         race conditions without leaking memory for inactive cache paths.
@@ -138,9 +139,6 @@ def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
         return lock
 
 
-
-
-
 def _sha256(text: str) -> str:
     """Return the hex SHA256 digest of input text.
 
@@ -193,9 +191,6 @@ def _cache_path(url: str, cache_root: str | Path) -> Path:
     return Path(cache_root) / _cache_key_for_url(url)
 
 
-
-
-
 def _ensure_dir(path: str | Path) -> None:
     """Ensure directory exists, creating parents as needed.
 
@@ -211,9 +206,7 @@ def _ensure_dir(path: str | Path) -> None:
     try:
         p.mkdir(parents=True, exist_ok=True)
     except FileExistsError as exc:
-        raise NotADirectoryError(
-            f"Exists but is not a directory: {p}"
-        ) from exc
+        raise NotADirectoryError(f"Exists but is not a directory: {p}") from exc
 
 
 def _hardlink_or_copy(src: Path, dst: Path) -> None:
@@ -230,9 +223,9 @@ def _hardlink_or_copy(src: Path, dst: Path) -> None:
         OSError: On unexpected filesystem errors beyond the handled cases.
         FileNotFoundError: If source file doesn't exist.
     """
-    tmp_dst = (
-        dst.parent
-        / f".{dst.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmp"
+    tmp_dst = dst.parent / (
+        f".{dst.name}.{os.getpid()}_"
+        f"{threading.get_ident()}_{time.time_ns()}.tmp"
     )
 
     try:
@@ -273,9 +266,6 @@ def _atomic_replace(src_tmp: Path, final_path: Path) -> None:
     """
     _ensure_dir(final_path.parent)
     os.replace(src_tmp, final_path)
-
-
-
 
 
 def _ssl_insecure_context() -> ssl.SSLContext:
@@ -443,9 +433,9 @@ def download_to_file(
         ) as resp:
             _ensure_dir(out_path.parent)
 
-            tmp = (
-                out_path.parent
-                / f".{out_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.downloading"
+            tmp = out_path.parent / (
+                f".{out_path.name}.{os.getpid()}_"
+                f"{threading.get_ident()}_{time.time_ns()}.downloading"
             )
 
             try:
@@ -527,7 +517,8 @@ def _write_or_replace_in_zip(
 
         if member_exists:
             tmp_zip = zip_path.parent / (
-                f".{zip_path.name}.{os.getpid()}_{threading.get_ident()}_{time.time_ns()}.tmpzip"
+                f".{zip_path.name}.{os.getpid()}_"
+                f"{threading.get_ident()}_{time.time_ns()}.tmpzip"
             )
             try:
                 with zipfile.ZipFile(zip_path, "r") as zf_in:
@@ -694,9 +685,6 @@ def write_cached_file_to_zip(
     _write_or_replace_in_zip(zip_path, cached_file, arcname, overwrite)
 
 
-
-
-
 def _normalize_genomic_unit(genomic_unit: str) -> str:
     """Return a normalized genomic unit string and validate it.
 
@@ -758,14 +746,17 @@ def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
     """Coerce sample metadata into a :class:`~pandas.DataFrame`.
 
     Args:
-        sample_metadata_source: Either a BiocPy ``(Ranged)SummarizedExperiment``-like object with a
-          `.col_data.to_pandas()` method, or a :class:`~pandas.DataFrame` already.
+        sample_metadata_source: Either a BiocPy
+          ``(Ranged)SummarizedExperiment``-like object with a
+          `.col_data.to_pandas()` method, or a
+          :class:`~pandas.DataFrame` already.
 
     Returns:
         A :class:`~pandas.DataFrame` of sample metadata.
 
     Raises:
-        TypeError: If `sample_metadata_source` cannot be coerced to a :class:`~pandas.DataFrame`.
+        TypeError: If `sample_metadata_source` cannot be coerced to a
+          :class:`~pandas.DataFrame`.
     """
     if isinstance(sample_metadata_source, pd.DataFrame):
         return sample_metadata_source
@@ -776,8 +767,8 @@ def _coerce_col_data_to_pandas(sample_metadata_source: Any) -> pd.DataFrame:
         return sample_metadata_source.col_data.to_pandas()
 
     raise TypeError(
-        "Expected a pandas.DataFrame or a SummarizedExperiment-like object with "
-        "`col_data.to_pandas()`."
+        "Expected a pandas.DataFrame or a SummarizedExperiment-like "
+        "object with `col_data.to_pandas()`."
     )
 
 
@@ -847,8 +838,6 @@ def _resolve_metadata_column(
         "If your metadata uses '__' as a namespace separator, pass the "
         "actual column name explicitly."
     )
-
-
 
 
 _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
@@ -1037,7 +1026,7 @@ def get_summarizedexperiment_class() -> (
 def get_ranged_summarizedexperiment_class() -> (
     type["summarizedexperiment.RangedSummarizedExperiment"]
 ):
-    """Return the BiocPy "summarizedexperiment.RangedSummarizedExperiment" class.
+    """Return the BiocPy RangedSummarizedExperiment class.
 
     Returns:
         The "summarizedexperiment.RangedSummarizedExperiment" class.
@@ -1069,8 +1058,6 @@ def get_pybigwig_module() -> types.ModuleType:
         ImportError: If the optional dependency is missing or fails to import.
     """
     return import_optional_module("pyBigWig")
-
-
 
 
 _JXN_SIDECAR_RE = re.compile(r"\.(MM|ID|RR)\.gz$", re.IGNORECASE)

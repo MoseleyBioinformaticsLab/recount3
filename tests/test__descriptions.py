@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -37,8 +37,7 @@ import pytest
 
 import recount3._descriptions
 
-
-COMMON_FIELDS = recount3._descriptions._R3CommonFields  # pylint: disable=protected-access
+COMMON_FIELDS = recount3._descriptions._R3CommonFields
 
 
 @pytest.mark.parametrize(
@@ -53,7 +52,7 @@ COMMON_FIELDS = recount3._descriptions._R3CommonFields  # pylint: disable=protec
 )
 def test_project_shard(value: str | None, expected: str) -> None:
     descriptions = recount3._descriptions
-    result = descriptions._project_shard(value)  # pylint: disable=protected-access
+    result = descriptions._project_shard(value)
     assert result == expected
 
 
@@ -90,7 +89,7 @@ def test_registry_contains_expected_types() -> None:
     assert set(registry.keys()) == expected
 
     for resource_type, subcls in registry.items():
-        assert subcls._RESOURCE_TYPE == resource_type  # pylint: disable=protected-access
+        assert subcls._RESOURCE_TYPE == resource_type
 
 
 @pytest.mark.parametrize(
@@ -205,7 +204,7 @@ def test_base_url_path_raises_not_implemented() -> None:
         annotation_extension="G026",
     )
     with pytest.raises(NotImplementedError):
-        recount3._descriptions.R3ResourceDescription.url_path(desc)  # pylint: disable=protected-access
+        recount3._descriptions.R3ResourceDescription.url_path(desc)
 
 
 @pytest.mark.parametrize(
@@ -471,7 +470,5 @@ def test_sample_shard(
     data_source: str | None,
     expected: str,
 ) -> None:
-    result = recount3._descriptions._sample_shard(  # pylint: disable=protected-access
-        sample, data_source
-    )
+    result = recount3._descriptions._sample_shard(sample, data_source)
     assert result == expected

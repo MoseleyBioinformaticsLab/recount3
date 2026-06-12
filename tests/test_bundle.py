@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -29,7 +29,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# pylint: disable=redefined-outer-name,protected-access
+# pylint: disable=redefined-outer-name
 
 from __future__ import annotations
 
@@ -83,12 +83,19 @@ _DATA_DIR = _TESTS_DIR / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
 
 _GENE_GTF_GZ = (
-    _MIRROR / "human" / "annotations" / "gene_sums" / "human.gene_sums.G026.gtf.gz"
+    _MIRROR
+    / "human"
+    / "annotations"
+    / "gene_sums"
+    / "human.gene_sums.G026.gtf.gz"
 )
 _EXON_GTF_GZ = (
-    _MIRROR / "human" / "annotations" / "exon_sums" / "human.exon_sums.G026.gtf.gz"
+    _MIRROR
+    / "human"
+    / "annotations"
+    / "exon_sums"
+    / "human.exon_sums.G026.gtf.gz"
 )
-
 
 
 @pytest.fixture()
@@ -133,11 +140,15 @@ def _mock_resource(
     return res
 
 
-def _gene_df(features: list[str] | None = None, samples: list[str] | None = None) -> pd.DataFrame:
+def _gene_df(
+    features: list[str] | None = None, samples: list[str] | None = None
+) -> pd.DataFrame:
     """Return a tiny gene-counts DataFrame."""
     rows = features or ["ENSG0001", "ENSG0002"]
     cols = samples or ["SRR001", "SRR002"]
-    data = np.arange(len(rows) * len(cols), dtype=float).reshape(len(rows), len(cols))
+    data = np.arange(len(rows) * len(cols), dtype=float).reshape(
+        len(rows), len(cols)
+    )
     return pd.DataFrame(data, index=rows, columns=cols)
 
 
@@ -258,7 +269,9 @@ class TestMetadataOrigin:
 
 class TestNamespaceMetadataColumns:
     def test_key_columns_not_renamed(self) -> None:
-        df = pd.DataFrame({"rail_id": ["1"], "external_id": ["x"], "study": ["s"]})
+        df = pd.DataFrame(
+            {"rail_id": ["1"], "external_id": ["x"], "study": ["s"]}
+        )
         out, prov = _namespace_metadata_columns(df, origin="tbl")
         assert "rail_id" in out.columns
         assert "external_id" in out.columns
@@ -285,29 +298,35 @@ class TestOuterMergeMetadataFrames:
         assert len(result) == 0
 
     def test_single_frame(self) -> None:
-        df = pd.DataFrame({
-            "rail_id": ["1"],
-            "external_id": ["SRR001"],
-            "study": ["SRP001"],
-            "extra": ["v"],
-        })
+        df = pd.DataFrame(
+            {
+                "rail_id": ["1"],
+                "external_id": ["SRR001"],
+                "study": ["SRP001"],
+                "extra": ["v"],
+            }
+        )
         result = _outer_merge_metadata_frames([df])
         assert len(result) == 1
         assert "extra" in result.columns
 
     def test_two_frames_merged(self) -> None:
-        df1 = pd.DataFrame({
-            "rail_id": ["1", "2"],
-            "external_id": ["A", "B"],
-            "study": ["S1", "S1"],
-            "col_a": [10, 20],
-        })
-        df2 = pd.DataFrame({
-            "rail_id": ["1", "3"],
-            "external_id": ["A", "C"],
-            "study": ["S1", "S1"],
-            "col_b": [100, 300],
-        })
+        df1 = pd.DataFrame(
+            {
+                "rail_id": ["1", "2"],
+                "external_id": ["A", "B"],
+                "study": ["S1", "S1"],
+                "col_a": [10, 20],
+            }
+        )
+        df2 = pd.DataFrame(
+            {
+                "rail_id": ["1", "3"],
+                "external_id": ["A", "C"],
+                "study": ["S1", "S1"],
+                "col_b": [100, 300],
+            }
+        )
         result = _outer_merge_metadata_frames([df1, df2])
         assert len(result) == 3  # outer merge: rows 1, 2, 3
         assert "col_a" in result.columns
@@ -316,10 +335,14 @@ class TestOuterMergeMetadataFrames:
 
 class TestChooseAlignmentKey:
     def test_prefers_external_id_when_better_match(self) -> None:
-        merged = pd.DataFrame({
-            "external_id": pd.array(["SRR001", "SRR002", "SRR003"], dtype="string"),
-            "rail_id": pd.array(["1", "2", "99"], dtype="string"),
-        })
+        merged = pd.DataFrame(
+            {
+                "external_id": pd.array(
+                    ["SRR001", "SRR002", "SRR003"], dtype="string"
+                ),
+                "rail_id": pd.array(["1", "2", "99"], dtype="string"),
+            }
+        )
         key = _choose_alignment_key(
             sample_ids=["SRR001", "SRR002"],
             merged=merged,
@@ -327,10 +350,12 @@ class TestChooseAlignmentKey:
         assert key == "external_id"
 
     def test_prefers_rail_id_when_better_match(self) -> None:
-        merged = pd.DataFrame({
-            "external_id": pd.array(["XX", "YY"], dtype="string"),
-            "rail_id": pd.array(["1", "2"], dtype="string"),
-        })
+        merged = pd.DataFrame(
+            {
+                "external_id": pd.array(["XX", "YY"], dtype="string"),
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+            }
+        )
         key = _choose_alignment_key(
             sample_ids=["1", "2"],
             merged=merged,
@@ -350,27 +375,33 @@ class TestCollapseRowsByKey:
         pd.testing.assert_frame_equal(result, df)
 
     def test_collapse_duplicates(self) -> None:
-        df = pd.DataFrame({
-            "key": ["A", "A", "B"],
-            "val": [1, 2, 3],
-        })
+        df = pd.DataFrame(
+            {
+                "key": ["A", "A", "B"],
+                "val": [1, 2, 3],
+            }
+        )
         result = _collapse_rows_by_key(df, key="key")
         assert len(result) == 2
         assert set(result["key"]) == {"A", "B"}
 
     def test_first_non_null_used(self) -> None:
-        df = pd.DataFrame({
-            "key": ["A", "A"],
-            "val": [pd.NA, 42],
-        })
+        df = pd.DataFrame(
+            {
+                "key": ["A", "A"],
+                "val": [pd.NA, 42],
+            }
+        )
         result = _collapse_rows_by_key(df, key="key")
         assert result.loc[result["key"] == "A", "val"].iloc[0] == 42
 
     def test_all_null_returns_na(self) -> None:
-        df = pd.DataFrame({
-            "key": ["A", "A"],
-            "val": [pd.NA, pd.NA],
-        })
+        df = pd.DataFrame(
+            {
+                "key": ["A", "A"],
+                "val": [pd.NA, pd.NA],
+            }
+        )
         result = _collapse_rows_by_key(df, key="key")
         val = result.loc[result["key"] == "A", "val"].iloc[0]
         assert pd.isna(val)
@@ -380,13 +411,17 @@ class TestMaybeRelabelCountsColumnsToExternalId:
     def test_no_external_id_col(self) -> None:
         counts = _gene_df(samples=["c1", "c2"])
         col_df = pd.DataFrame({"other": ["x", "y"]}, index=["c1", "c2"])
-        out_counts, out_col = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, out_col = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == list(counts.columns)
 
     def test_length_mismatch(self) -> None:
         counts = _gene_df(samples=["c1", "c2"])
         col_df = pd.DataFrame({"external_id": ["x"]})
-        out_counts, out_col = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, out_col = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == list(counts.columns)
 
     def test_missing_external_id_values(self) -> None:
@@ -395,7 +430,9 @@ class TestMaybeRelabelCountsColumnsToExternalId:
             {"external_id": pd.array(["SRR001", pd.NA], dtype="string")},
             index=["c1", "c2"],
         )
-        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == ["c1", "c2"]
 
     def test_non_unique_external_ids(self) -> None:
@@ -404,7 +441,9 @@ class TestMaybeRelabelCountsColumnsToExternalId:
             {"external_id": pd.array(["SRR001", "SRR001"], dtype="string")},
             index=["c1", "c2"],
         )
-        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == ["c1", "c2"]
 
     def test_already_matching_no_rename(self) -> None:
@@ -413,7 +452,9 @@ class TestMaybeRelabelCountsColumnsToExternalId:
             {"external_id": pd.array(["SRR001", "SRR002"], dtype="string")},
             index=["SRR001", "SRR002"],
         )
-        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == ["SRR001", "SRR002"]
 
     def test_successful_relabel(self) -> None:
@@ -422,7 +463,9 @@ class TestMaybeRelabelCountsColumnsToExternalId:
             {"external_id": pd.array(["SRR001", "SRR002"], dtype="string")},
             index=["1", "2"],
         )
-        out_counts, out_col = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, out_col = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == ["SRR001", "SRR002"]
         assert list(out_col.index) == ["SRR001", "SRR002"]
 
@@ -432,7 +475,9 @@ class TestMaybeRelabelCountsColumnsToExternalId:
             {"external_id": pd.array(["SRR001", ""], dtype="string")},
             index=["c1", "c2"],
         )
-        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(counts, col_df)
+        out_counts, _ = _maybe_relabel_counts_columns_to_external_id(
+            counts, col_df
+        )
         assert list(out_counts.columns) == ["c1", "c2"]
 
 
@@ -495,10 +540,12 @@ class TestParseGtfAttributes:
         assert result["gene_id"].iloc[0] == "ENSG001"
 
     def test_multiple_rows(self) -> None:
-        attrs = pd.Series([
-            'gene_id "ENSG001"; biotype "protein_coding"',
-            'gene_id "ENSG002"; biotype "lncRNA"',
-        ])
+        attrs = pd.Series(
+            [
+                'gene_id "ENSG001"; biotype "protein_coding"',
+                'gene_id "ENSG002"; biotype "lncRNA"',
+            ]
+        )
         result = _parse_gtf_attributes(attrs)
         assert len(result) == 2
         assert result["gene_id"].iloc[1] == "ENSG002"
@@ -514,7 +561,9 @@ class TestCoerceGtfPhase:
         assert pd.isna(result.iloc[3])
         assert pd.isna(result.iloc[4])
 
-    def test_invalid_phase_coerced_to_na_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_invalid_phase_coerced_to_na_with_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         s = pd.Series(["0", "5", "9"])
         with caplog.at_level(logging.WARNING):
             result = _coerce_gtf_phase_column(s)
@@ -576,13 +625,15 @@ class TestStripEnsemblVersion:
 
 
 def _minimal_ranges(feature_ids: list[str]) -> pd.DataFrame:
-    return pd.DataFrame({
-        "feature_id": feature_ids,
-        "seqnames": ["chr1"] * len(feature_ids),
-        "starts": list(range(1, len(feature_ids) + 1)),
-        "ends": list(range(100, 100 + len(feature_ids))),
-        "strand": ["+"] * len(feature_ids),
-    })
+    return pd.DataFrame(
+        {
+            "feature_id": feature_ids,
+            "seqnames": ["chr1"] * len(feature_ids),
+            "starts": list(range(1, len(feature_ids) + 1)),
+            "ends": list(range(100, 100 + len(feature_ids))),
+            "strand": ["+"] * len(feature_ids),
+        }
+    )
 
 
 class TestAlignRangesToFeatures:
@@ -605,13 +656,15 @@ class TestAlignRangesToFeatures:
         assert result["seqnames"].notna().all()
 
     def test_conflicting_version_stripped_duplicates_raises(self) -> None:
-        ranges = pd.DataFrame({
-            "feature_id": ["ENSG001.1", "ENSG001.2"],
-            "seqnames": ["chr1", "chr2"],
-            "starts": [1, 200],
-            "ends": [100, 300],
-            "strand": ["+", "-"],
-        })
+        ranges = pd.DataFrame(
+            {
+                "feature_id": ["ENSG001.1", "ENSG001.2"],
+                "seqnames": ["chr1", "chr2"],
+                "starts": [1, 200],
+                "ends": [100, 300],
+                "strand": ["+", "-"],
+            }
+        )
         with pytest.raises(ValueError, match="conflicting coordinates"):
             _align_ranges_to_features(ranges, feature_ids=["ENSG001"])
 
@@ -622,14 +675,18 @@ class TestAlignRangesToFeatures:
         )
         assert pd.isna(result.loc["NOTFOUND", "seqnames"])
 
-    def test_version_strip_with_non_conflicting_duplicates(self, caplog: pytest.LogCaptureFixture) -> None:
-        ranges = pd.DataFrame({
-            "feature_id": ["ENSG001.1", "ENSG001.2"],
-            "seqnames": ["chr1", "chr1"],
-            "starts": [100, 100],
-            "ends": [200, 200],
-            "strand": ["+", "+"],
-        })
+    def test_version_strip_with_non_conflicting_duplicates(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        ranges = pd.DataFrame(
+            {
+                "feature_id": ["ENSG001.1", "ENSG001.2"],
+                "seqnames": ["chr1", "chr1"],
+                "starts": [100, 100],
+                "ends": [200, 200],
+                "strand": ["+", "+"],
+            }
+        )
         with caplog.at_level(logging.INFO):
             result = _align_ranges_to_features(ranges, feature_ids=["ENSG001"])
         assert result.loc["ENSG001", "seqnames"] == "chr1"
@@ -649,8 +706,17 @@ class TestReadGtfDataframe:
         df = _read_gtf_dataframe(res)
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 2000
-        expected_cols = {"seqname", "source", "feature", "start", "end",
-                         "score", "strand", "frame", "attributes"}
+        expected_cols = {
+            "seqname",
+            "source",
+            "feature",
+            "start",
+            "end",
+            "score",
+            "strand",
+            "frame",
+            "attributes",
+        }
         assert expected_cols.issubset(set(df.columns))
         assert set(df["feature"].unique()) == {"gene"}
 
@@ -674,17 +740,19 @@ class TestRangesFromGtf:
         """Create a minimal GTF DataFrame; rows = (feature, attrs, seqname)."""
         data = []
         for i, (feat, attrs, seqname) in enumerate(rows):
-            data.append({
-                "seqname": seqname,
-                "source": "ref",
-                "feature": feat,
-                "start": i * 100 + 1,
-                "end": i * 100 + 100,
-                "score": ".",
-                "strand": "+",
-                "frame": ".",
-                "attributes": attrs,
-            })
+            data.append(
+                {
+                    "seqname": seqname,
+                    "source": "ref",
+                    "feature": feat,
+                    "start": i * 100 + 1,
+                    "end": i * 100 + 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": attrs,
+                }
+            )
         return pd.DataFrame(data)
 
     def test_empty_dataframe_for_feature_kind(self) -> None:
@@ -699,9 +767,7 @@ class TestRangesFromGtf:
         assert str(result["feature_id"].iloc[0]) == "ENSG001"
 
     def test_exon_with_recount_exon_id(self) -> None:
-        gtf = self._make_gtf_df([
-            ("exon", 'recount_exon_id "RCE001"', "chr1")
-        ])
+        gtf = self._make_gtf_df([("exon", 'recount_exon_id "RCE001"', "chr1")])
         result = _ranges_from_gtf(gtf, feature_kind="exon")
         assert len(result) == 1
         assert str(result["feature_id"].iloc[0]) == "RCE001"
@@ -722,42 +788,82 @@ class TestRangesFromGtf:
     def test_duplicate_gene_ids_same_coords_dropped(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        gtf = pd.DataFrame([
-            {"seqname": "chr1", "source": "ref", "feature": "gene",
-             "start": 1, "end": 100, "score": ".", "strand": "+",
-             "frame": ".", "attributes": 'gene_id "DUP"'},
-            {"seqname": "chr1", "source": "ref", "feature": "gene",
-             "start": 1, "end": 100, "score": ".", "strand": "+",
-             "frame": ".", "attributes": 'gene_id "DUP"'},
-        ])
+        gtf = pd.DataFrame(
+            [
+                {
+                    "seqname": "chr1",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 1,
+                    "end": 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": 'gene_id "DUP"',
+                },
+                {
+                    "seqname": "chr1",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 1,
+                    "end": 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": 'gene_id "DUP"',
+                },
+            ]
+        )
         with caplog.at_level(logging.INFO):
             result = _ranges_from_gtf(gtf, feature_kind="gene")
         assert len(result) == 1
 
     def test_duplicate_gene_ids_conflicting_coords_raises(self) -> None:
-        gtf = pd.DataFrame([
-            {"seqname": "chr1", "source": "ref", "feature": "gene",
-             "start": 1, "end": 100, "score": ".", "strand": "+",
-             "frame": ".", "attributes": 'gene_id "DUP"'},
-            {"seqname": "chr2", "source": "ref", "feature": "gene",
-             "start": 999, "end": 1999, "score": ".", "strand": "-",
-             "frame": ".", "attributes": 'gene_id "DUP"'},
-        ])
+        gtf = pd.DataFrame(
+            [
+                {
+                    "seqname": "chr1",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 1,
+                    "end": 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": 'gene_id "DUP"',
+                },
+                {
+                    "seqname": "chr2",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 999,
+                    "end": 1999,
+                    "score": ".",
+                    "strand": "-",
+                    "frame": ".",
+                    "attributes": 'gene_id "DUP"',
+                },
+            ]
+        )
         with pytest.raises(ValueError, match="conflicting"):
             _ranges_from_gtf(gtf, feature_kind="gene")
 
     def test_level_column_coerced_to_int64(self) -> None:
-        gtf = pd.DataFrame([{
-            "seqname": "chr1",
-            "source": "ref",
-            "feature": "gene",
-            "start": 1,
-            "end": 100,
-            "score": ".",
-            "strand": "+",
-            "frame": ".",
-            "attributes": 'gene_id "G1"; level "2"',
-        }])
+        gtf = pd.DataFrame(
+            [
+                {
+                    "seqname": "chr1",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 1,
+                    "end": 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": 'gene_id "G1"; level "2"',
+                }
+            ]
+        )
         result = _ranges_from_gtf(gtf, feature_kind="gene")
         assert "level" in result.columns
         assert result["level"].dtype == pd.Int64Dtype()
@@ -783,8 +889,10 @@ class TestPeekGtfFeatureCounts:
         assert counts["gene"] == 2000
 
     def test_max_lines_limits_scan(self, tmp_path: Path) -> None:
-        lines = ["chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id \"G%d\"\n" % i
-                 for i in range(20)]
+        lines = [
+            'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G%d"\n' % i
+            for i in range(20)
+        ]
         gz_path = tmp_path / "test.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.writelines(lines)
@@ -795,7 +903,7 @@ class TestPeekGtfFeatureCounts:
         assert counts["gene"] == 5
 
     def test_comment_lines_skipped(self, tmp_path: Path) -> None:
-        content = "# comment\nchr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id \"G1\"\n"
+        content = '# comment\nchr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
         gz_path = tmp_path / "test.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write(content)
@@ -808,11 +916,12 @@ class TestPeekGtfFeatureCounts:
 
     def test_downloads_when_cached_path_raises(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "test.gtf.gz"
-        content = "chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id \"G1\"\n"
+        content = 'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write(content)
 
         call_count = {"n": 0}
+
         def cached_path_side_effect() -> Path:
             call_count["n"] += 1
             if call_count["n"] == 1:
@@ -843,7 +952,9 @@ class TestSelectGtfResourceForUnit:
         res.url = "http://example.com/gene_sums/human.gene_sums.G026.gtf.gz"
         desc = MagicMock()
         desc.resource_type = "annotations"
-        desc.url_path.return_value = "human/annotations/gene_sums/human.gene_sums.G026.gtf.gz"
+        desc.url_path.return_value = (
+            "human/annotations/gene_sums/human.gene_sums.G026.gtf.gz"
+        )
         desc.genomic_unit = "gene"
         desc.annotation_extension = "G026"
         res.description = desc
@@ -889,7 +1000,7 @@ class TestSelectGtfResourceForUnit:
     def test_returns_best_when_no_feature_found(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "exon_only.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
-            f.write("chr1\tref\texon\t1\t100\t.\t+\t.\texon_id \"E1\"\n")
+            f.write('chr1\tref\texon\t1\t100\t.\t+\t.\texon_id "E1"\n')
 
         res = MagicMock(spec=R3Resource)
         desc = MagicMock()
@@ -914,13 +1025,17 @@ class TestToGenomicRanges:
         mock_instance = MagicMock()
         mock_gr_cls.from_pandas.return_value = mock_instance
 
-        ranges_df = pd.DataFrame({
-            "seqnames": ["chr1"],
-            "starts": [1],
-            "ends": [100],
-            "strand": ["+"],
-        })
-        with patch.object(_utils_module, "get_genomicranges_class", return_value=mock_gr_cls):
+        ranges_df = pd.DataFrame(
+            {
+                "seqnames": ["chr1"],
+                "starts": [1],
+                "ends": [100],
+                "strand": ["+"],
+            }
+        )
+        with patch.object(
+            _utils_module, "get_genomicranges_class", return_value=mock_gr_cls
+        ):
             result = _to_genomic_ranges(ranges_df)
         assert result is mock_instance
         mock_gr_cls.from_pandas.assert_called_once_with(ranges_df)
@@ -989,12 +1104,14 @@ class TestConstructSummarizedExperiment:
 @pytest.mark.requires_biocpy
 class TestConstructRangedSummarizedExperiment:
     def _ranges(self, n: int) -> pd.DataFrame:
-        return pd.DataFrame({
-            "seqnames": ["chr1"] * n,
-            "starts": list(range(1, n + 1)),
-            "ends": list(range(100, 100 + n)),
-            "strand": ["+"] * n,
-        })
+        return pd.DataFrame(
+            {
+                "seqnames": ["chr1"] * n,
+                "starts": list(range(1, n + 1)),
+                "ends": list(range(100, 100 + n)),
+                "strand": ["+"] * n,
+            }
+        )
 
     def test_raises_if_not_2d(self) -> None:
         counts = pd.Series([1, 2])
@@ -1043,12 +1160,14 @@ class TestConstructRangedSummarizedExperiment:
 
     def test_raises_missing_coordinate_values(self) -> None:
         counts = _gene_df()
-        ranges = pd.DataFrame({
-            "seqnames": [pd.NA, "chr1"],
-            "starts": [1, 2],
-            "ends": [10, 20],
-            "strand": ["+", "+"],
-        })
+        ranges = pd.DataFrame(
+            {
+                "seqnames": [pd.NA, "chr1"],
+                "starts": [1, 2],
+                "ends": [10, 20],
+                "strand": ["+", "+"],
+            }
+        )
         with pytest.raises(ValueError, match="missing values"):
             _construct_ranged_summarized_experiment(
                 counts_df=counts,
@@ -1124,7 +1243,9 @@ class TestCountCompatKeys:
 
     def test_unknown_type_raises(self) -> None:
         res = _mock_resource("bigwig_files")
-        with pytest.raises(ValueError, match="not a recognized count-file type"):
+        with pytest.raises(
+            ValueError, match="not a recognized count-file type"
+        ):
             _count_compat_keys(res)
 
 
@@ -1150,13 +1271,15 @@ class TestMakeUniqueNames:
 
 class TestDedupeRangesOnFeatureId:
     def _ranges(self, fids: list[str]) -> pd.DataFrame:
-        return pd.DataFrame({
-            "feature_id": fids,
-            "seqnames": ["chr1"] * len(fids),
-            "starts": list(range(1, len(fids) + 1)),
-            "ends": list(range(100, 100 + len(fids))),
-            "strand": ["+"] * len(fids),
-        })
+        return pd.DataFrame(
+            {
+                "feature_id": fids,
+                "seqnames": ["chr1"] * len(fids),
+                "starts": list(range(1, len(fids) + 1)),
+                "ends": list(range(100, 100 + len(fids))),
+                "strand": ["+"] * len(fids),
+            }
+        )
 
     def test_missing_feature_id_raises(self) -> None:
         df = pd.DataFrame({"seqnames": ["chr1"]})
@@ -1169,33 +1292,39 @@ class TestDedupeRangesOnFeatureId:
         assert len(result) == 2
 
     def test_missing_coord_columns_raises(self) -> None:
-        df = pd.DataFrame({"feature_id": ["A", "A"], "seqnames": ["chr1", "chr2"]})
+        df = pd.DataFrame(
+            {"feature_id": ["A", "A"], "seqnames": ["chr1", "chr2"]}
+        )
         with pytest.raises(ValueError, match="missing one or more"):
             _dedupe_ranges_on_feature_id(df)
 
     def test_consistent_duplicates_deduped_with_warning(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        df = pd.DataFrame({
-            "feature_id": ["A", "A"],
-            "seqnames": ["chr1", "chr1"],
-            "starts": [1, 1],
-            "ends": [100, 100],
-            "strand": ["+", "+"],
-        })
+        df = pd.DataFrame(
+            {
+                "feature_id": ["A", "A"],
+                "seqnames": ["chr1", "chr1"],
+                "starts": [1, 1],
+                "ends": [100, 100],
+                "strand": ["+", "+"],
+            }
+        )
         with caplog.at_level(logging.WARNING):
             result = _dedupe_ranges_on_feature_id(df)
         assert len(result) == 1
         assert "duplicate feature_id" in caplog.text
 
     def test_inconsistent_duplicates_raises(self) -> None:
-        df = pd.DataFrame({
-            "feature_id": ["A", "A"],
-            "seqnames": ["chr1", "chr2"],
-            "starts": [1, 999],
-            "ends": [100, 1100],
-            "strand": ["+", "-"],
-        })
+        df = pd.DataFrame(
+            {
+                "feature_id": ["A", "A"],
+                "seqnames": ["chr1", "chr2"],
+                "starts": [1, 999],
+                "ends": [100, 1100],
+                "strand": ["+", "-"],
+            }
+        )
         with pytest.raises(ValueError, match="different coordinates"):
             _dedupe_ranges_on_feature_id(df)
 
@@ -1239,18 +1368,26 @@ class TestR3ResourceBundleDiscover:
 
     def test_empty_organism_raises(self) -> None:
         with pytest.raises(ValueError, match="must not be empty"):
-            R3ResourceBundle.discover(organism=[], data_source="sra", project="P1")
+            R3ResourceBundle.discover(
+                organism=[], data_source="sra", project="P1"
+            )
 
     def test_empty_data_source_raises(self) -> None:
         with pytest.raises(ValueError, match="must not be empty"):
-            R3ResourceBundle.discover(organism="human", data_source=[], project="P1")
+            R3ResourceBundle.discover(
+                organism="human", data_source=[], project="P1"
+            )
 
     def test_empty_project_raises(self) -> None:
         with pytest.raises(ValueError, match="must not be empty"):
-            R3ResourceBundle.discover(organism="human", data_source="sra", project=[])
+            R3ResourceBundle.discover(
+                organism="human", data_source="sra", project=[]
+            )
 
     def test_single_project_sets_identity(self) -> None:
-        with patch.object(search_module, "search_project_all", side_effect=self._fake_search):
+        with patch.object(
+            search_module, "search_project_all", side_effect=self._fake_search
+        ):
             b = R3ResourceBundle.discover(
                 organism="human",
                 data_source="sra",
@@ -1262,7 +1399,9 @@ class TestR3ResourceBundleDiscover:
         assert len(b.resources) >= 1
 
     def test_multi_project_clears_identity(self) -> None:
-        with patch.object(search_module, "search_project_all", side_effect=self._fake_search):
+        with patch.object(
+            search_module, "search_project_all", side_effect=self._fake_search
+        ):
             b = R3ResourceBundle.discover(
                 organism="human",
                 data_source="sra",
@@ -1282,7 +1421,9 @@ class TestR3ResourceBundleDiscover:
             res.description = desc
             return [res]
 
-        with patch.object(search_module, "search_project_all", side_effect=same_url_search):
+        with patch.object(
+            search_module, "search_project_all", side_effect=same_url_search
+        ):
             b = R3ResourceBundle.discover(
                 organism="human",
                 data_source="sra",
@@ -1373,7 +1514,10 @@ class TestR3ResourceBundleIterLoaded:
         meta_res = _mock_resource("metadata_files", loaded_data=pd.DataFrame())
         b = R3ResourceBundle(resources=[gene_res, meta_res])
         results = list(b.iter_loaded(resource_type="count_files_gene_or_exon"))
-        assert all(r.description.resource_type == "count_files_gene_or_exon" for r, _ in results)
+        assert all(
+            r.description.resource_type == "count_files_gene_or_exon"
+            for r, _ in results
+        )
 
     def test_skips_none_loaded_data(self) -> None:
         res = MagicMock(spec=R3Resource)
@@ -1398,6 +1542,7 @@ class TestR3ResourceBundleIterLoaded:
 class TestR3ResourceBundleIterBigwig:
     def test_yields_bigwig_resources(self) -> None:
         from recount3._bigwig import BigWigFile
+
         bw = MagicMock(spec=BigWigFile)
         res = _mock_resource("bigwig_files", loaded_data=bw)
         b = R3ResourceBundle(resources=[res])
@@ -1437,7 +1582,10 @@ class TestR3ResourceBundleFilter:
         b = R3ResourceBundle(resources=[gene_res, meta_res])
         filtered = b.filter(resource_type="metadata_files", invert=True)
         assert len(filtered.resources) == 1
-        assert filtered.resources[0].description.resource_type == "count_files_gene_or_exon"
+        assert (
+            filtered.resources[0].description.resource_type
+            == "count_files_gene_or_exon"
+        )
 
     def test_filter_by_predicate(self) -> None:
         res1 = _mock_resource("count_files_gene_or_exon")
@@ -1477,7 +1625,9 @@ class TestR3ResourceBundleConvenienceFilters:
 
     def test_only_counts(self) -> None:
         b = self._bundle_with_types(
-            "count_files_gene_or_exon", "count_files_junctions", "metadata_files"
+            "count_files_gene_or_exon",
+            "count_files_junctions",
+            "metadata_files",
         )
         result = b.only_counts()
         assert len(result.resources) == 2
@@ -1490,7 +1640,9 @@ class TestR3ResourceBundleConvenienceFilters:
         assert len(result.resources) == 1
 
     def test_exclude_metadata(self) -> None:
-        b = self._bundle_with_types("count_files_gene_or_exon", "metadata_files")
+        b = self._bundle_with_types(
+            "count_files_gene_or_exon", "metadata_files"
+        )
         result = b.exclude_metadata()
         assert len(result.resources) == 1
         assert result.resources[0].description.resource_type != "metadata_files"
@@ -1517,14 +1669,18 @@ class TestR3ResourceBundleConvenienceFilters:
 
 class TestResolveProjectIdentity:
     def test_uses_stored_identity(self) -> None:
-        b = R3ResourceBundle(organism="human", data_source="sra", project="SRP001")
+        b = R3ResourceBundle(
+            organism="human", data_source="sra", project="SRP001"
+        )
         org, src, proj = b._resolve_project_identity(None, None, None)
         assert org == "human"
         assert src == "sra"
         assert proj == "SRP001"
 
     def test_explicit_overrides_stored(self) -> None:
-        b = R3ResourceBundle(organism="human", data_source="sra", project="SRP001")
+        b = R3ResourceBundle(
+            organism="human", data_source="sra", project="SRP001"
+        )
         org, src, proj = b._resolve_project_identity("human", "sra", "SRP001")
         assert proj == "SRP001"
 
@@ -1544,24 +1700,32 @@ class TestResolveProjectIdentity:
             b._resolve_project_identity(None, None, None)
 
     def test_conflicting_organism_raises(self) -> None:
-        b = R3ResourceBundle(organism="human", data_source="sra", project="SRP001")
+        b = R3ResourceBundle(
+            organism="human", data_source="sra", project="SRP001"
+        )
         with pytest.raises(ValueError, match="does not match"):
             b._resolve_project_identity("mouse", None, None)
 
     def test_conflicting_data_source_raises(self) -> None:
-        b = R3ResourceBundle(organism="human", data_source="sra", project="SRP001")
+        b = R3ResourceBundle(
+            organism="human", data_source="sra", project="SRP001"
+        )
         with pytest.raises(ValueError, match="does not match"):
             b._resolve_project_identity(None, "gtex", None)
 
     def test_conflicting_project_raises(self) -> None:
-        b = R3ResourceBundle(organism="human", data_source="sra", project="SRP001")
+        b = R3ResourceBundle(
+            organism="human", data_source="sra", project="SRP001"
+        )
         with pytest.raises(ValueError, match="does not match"):
             b._resolve_project_identity(None, None, "SRP999")
 
 
 class TestR3ResourceBundleSamples:
     def test_calls_samples_for_project(self) -> None:
-        b = R3ResourceBundle(organism="human", data_source="sra", project="SRP001")
+        b = R3ResourceBundle(
+            organism="human", data_source="sra", project="SRP001"
+        )
         with patch.object(
             search_module,
             "samples_for_project",
@@ -1598,7 +1762,9 @@ class TestR3ResourceBundleStackCountMatrices:
             junction_extension="MM",
         )
         b = R3ResourceBundle(resources=[gene_res, jxn_res])
-        with pytest.raises(CompatibilityError, match="Incompatible count families"):
+        with pytest.raises(
+            CompatibilityError, match="Incompatible count families"
+        ):
             b.stack_count_matrices(compat="family")
 
     def test_raises_mixed_features_compat_feature(self) -> None:
@@ -1613,11 +1779,17 @@ class TestR3ResourceBundleStackCountMatrices:
             genomic_unit="exon",
         )
         b = R3ResourceBundle(resources=[gene_res, exon_res])
-        with pytest.raises(CompatibilityError, match="Feature-level incompatibility"):
+        with pytest.raises(
+            CompatibilityError, match="Feature-level incompatibility"
+        ):
             b.stack_count_matrices(compat="feature")
 
     def test_raises_unknown_compat(self) -> None:
-        res = _mock_resource("count_files_gene_or_exon", loaded_data=_gene_df(), genomic_unit="gene")
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=_gene_df(),
+            genomic_unit="gene",
+        )
         b = R3ResourceBundle(resources=[res])
         with pytest.raises(ValueError, match="Unknown compat mode"):
             b.stack_count_matrices(compat="invalid")  # type: ignore[arg-type]
@@ -1657,8 +1829,12 @@ class TestR3ResourceBundleStackCountMatrices:
     def test_stacks_two_gene_resources(self) -> None:
         df1 = _gene_df(samples=["SRR001", "SRR002"])
         df2 = _gene_df(samples=["SRR003", "SRR004"])
-        res1 = _mock_resource("count_files_gene_or_exon", loaded_data=df1, genomic_unit="gene")
-        res2 = _mock_resource("count_files_gene_or_exon", loaded_data=df2, genomic_unit="gene")
+        res1 = _mock_resource(
+            "count_files_gene_or_exon", loaded_data=df1, genomic_unit="gene"
+        )
+        res2 = _mock_resource(
+            "count_files_gene_or_exon", loaded_data=df2, genomic_unit="gene"
+        )
         b = R3ResourceBundle(resources=[res1, res2])
         result = b.stack_count_matrices(autoload=False, axis=1)
         assert result.shape[1] == 4
@@ -1667,14 +1843,18 @@ class TestR3ResourceBundleStackCountMatrices:
 class TestR3ResourceBundleStackCountsFor:
     def test_stacks_gene_resources(self) -> None:
         df = _gene_df()
-        res = _mock_resource("count_files_gene_or_exon", loaded_data=df, genomic_unit="gene")
+        res = _mock_resource(
+            "count_files_gene_or_exon", loaded_data=df, genomic_unit="gene"
+        )
         b = R3ResourceBundle(resources=[res])
         result = b._stack_counts_for(genomic_unit="gene", autoload=False)
         assert isinstance(result, pd.DataFrame)
 
     def test_stacks_exon_resources(self) -> None:
         df = _gene_df()
-        res = _mock_resource("count_files_gene_or_exon", loaded_data=df, genomic_unit="exon")
+        res = _mock_resource(
+            "count_files_gene_or_exon", loaded_data=df, genomic_unit="exon"
+        )
         b = R3ResourceBundle(resources=[res])
         result = b._stack_counts_for(genomic_unit="exon", autoload=False)
         assert isinstance(result, pd.DataFrame)
@@ -1718,37 +1898,49 @@ class TestNormalizeSampleMetadata:
         assert list(result["external_id"]) == ["SRR001", "SRR002"]
 
     def test_with_metadata_frames(self) -> None:
-        meta_df = pd.DataFrame({
-            "external_id": pd.array(["SRR001", "SRR002"], dtype="string"),
-            "rail_id": pd.array(["1", "2"], dtype="string"),
-            "study": pd.array(["SRP001", "SRP001"], dtype="string"),
-            "score": [99.0, 88.0],
-        })
-        res = _mock_resource("metadata_files", loaded_data=meta_df, table_name="recount_qc")
+        meta_df = pd.DataFrame(
+            {
+                "external_id": pd.array(["SRR001", "SRR002"], dtype="string"),
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [99.0, 88.0],
+            }
+        )
+        res = _mock_resource(
+            "metadata_files", loaded_data=meta_df, table_name="recount_qc"
+        )
         b = R3ResourceBundle(resources=[res])
         result = b._normalize_sample_metadata(sample_ids=["SRR001", "SRR002"])
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 2
 
     def test_fills_missing_external_id(self) -> None:
-        meta_df = pd.DataFrame({
-            "external_id": pd.array([pd.NA, "SRR002"], dtype="string"),
-            "rail_id": pd.array(["1", "2"], dtype="string"),
-            "study": pd.array(["SRP001", "SRP001"], dtype="string"),
-        })
-        res = _mock_resource("metadata_files", loaded_data=meta_df, table_name="recount_qc")
+        meta_df = pd.DataFrame(
+            {
+                "external_id": pd.array([pd.NA, "SRR002"], dtype="string"),
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+            }
+        )
+        res = _mock_resource(
+            "metadata_files", loaded_data=meta_df, table_name="recount_qc"
+        )
         b = R3ResourceBundle(resources=[res])
         result = b._normalize_sample_metadata(sample_ids=["1", "SRR002"])
         assert result["external_id"].notna().all()
 
     def test_provenance_stored_in_attrs(self) -> None:
-        meta_df = pd.DataFrame({
-            "external_id": pd.array(["SRR001"], dtype="string"),
-            "rail_id": pd.array(["1"], dtype="string"),
-            "study": pd.array(["SRP001"], dtype="string"),
-            "score": [1.0],
-        })
-        res = _mock_resource("metadata_files", loaded_data=meta_df, table_name="qc_table")
+        meta_df = pd.DataFrame(
+            {
+                "external_id": pd.array(["SRR001"], dtype="string"),
+                "rail_id": pd.array(["1"], dtype="string"),
+                "study": pd.array(["SRP001"], dtype="string"),
+                "score": [1.0],
+            }
+        )
+        res = _mock_resource(
+            "metadata_files", loaded_data=meta_df, table_name="qc_table"
+        )
         b = R3ResourceBundle(resources=[res])
         result = b._normalize_sample_metadata(sample_ids=["SRR001"])
         assert "recount3_metadata_provenance" in result.attrs
@@ -1791,7 +1983,9 @@ class TestToSummarizedExperiment:
         )
         assert se is not None
 
-    def test_duplicate_feature_ids_made_unique(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_duplicate_feature_ids_made_unique(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         df = pd.DataFrame(
             [[1.0, 2.0], [3.0, 4.0]],
             index=["ENSG0001", "ENSG0001"],
@@ -1845,7 +2039,9 @@ class TestToRangedSummarizedExperiment:
         res_ann = MagicMock(spec=R3Resource)
         desc_ann = MagicMock()
         desc_ann.resource_type = "annotations"
-        desc_ann.url_path.return_value = "human/annotations/gene_sums/human.gene_sums.G026.gtf.gz"
+        desc_ann.url_path.return_value = (
+            "human/annotations/gene_sums/human.gene_sums.G026.gtf.gz"
+        )
         desc_ann.annotation_extension = "G026"
         desc_ann.genomic_unit = "gene"
         res_ann.description = desc_ann
@@ -1857,7 +2053,9 @@ class TestToRangedSummarizedExperiment:
     @pytest.mark.requires_biocpy
     def test_gene_with_gtf_annotation(self, _synthetic_gtf_gz: Path) -> None:
         b = self._bundle_with_gene_gtf(_synthetic_gtf_gz)
-        rse = b.to_ranged_summarized_experiment(genomic_unit="gene", autoload=False)
+        rse = b.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=False
+        )
         assert rse is not None
 
     @pytest.mark.requires_biocpy
@@ -2100,7 +2298,9 @@ class TestToRangedSummarizedExperiment:
         assert rse is not None
 
     @pytest.mark.requires_biocpy
-    def test_rr_without_strand_column_defaults_to_star(self, tmp_path: Path) -> None:
+    def test_rr_without_strand_column_defaults_to_star(
+        self, tmp_path: Path
+    ) -> None:
         rr_content = "seqnames\tstarts\tends\nchr1\t1\t100\nchr1\t200\t300\n"
         rr_df = pd.read_csv(io.StringIO(rr_content), sep="\t")
         mm_df = pd.DataFrame(
@@ -2134,7 +2334,9 @@ class TestToRangedSummarizedExperiment:
         assert rse is not None
 
     @pytest.mark.requires_biocpy
-    def test_duplicate_feature_ids_in_counts(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_duplicate_feature_ids_in_counts(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         df = pd.DataFrame(
             [[1.0], [2.0]],
             index=["GENE_DUP", "GENE_DUP"],
@@ -2262,48 +2464,60 @@ class TestParseGtfAttributesExtractedEmpty:
 
 class TestRangesFromGtfAdditional:
     def test_exon_with_dot_attrs_uses_coord_fallback(self) -> None:
-        gtf = pd.DataFrame([{
-            "seqname": "chr1",
-            "source": "ref",
-            "feature": "exon",
-            "start": 1,
-            "end": 100,
-            "score": ".",
-            "strand": "+",
-            "frame": ".",
-            "attributes": ".",
-        }])
+        gtf = pd.DataFrame(
+            [
+                {
+                    "seqname": "chr1",
+                    "source": "ref",
+                    "feature": "exon",
+                    "start": 1,
+                    "end": 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": ".",
+                }
+            ]
+        )
         result = _ranges_from_gtf(gtf, feature_kind="exon")
         assert len(result) == 1
         assert "chr1" in str(result["feature_id"].iloc[0])
 
     def test_gene_with_empty_attrs_uses_coord_fallback(self) -> None:
-        gtf = pd.DataFrame([{
-            "seqname": "chrX",
-            "source": "ref",
-            "feature": "gene",
-            "start": 500,
-            "end": 600,
-            "score": ".",
-            "strand": "-",
-            "frame": ".",
-            "attributes": ".",
-        }])
+        gtf = pd.DataFrame(
+            [
+                {
+                    "seqname": "chrX",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 500,
+                    "end": 600,
+                    "score": ".",
+                    "strand": "-",
+                    "frame": ".",
+                    "attributes": ".",
+                }
+            ]
+        )
         result = _ranges_from_gtf(gtf, feature_kind="gene")
         assert len(result) == 1
 
     def test_extra_attrs_joined_to_output(self) -> None:
-        gtf = pd.DataFrame([{
-            "seqname": "chr1",
-            "source": "ref",
-            "feature": "gene",
-            "start": 1,
-            "end": 100,
-            "score": ".",
-            "strand": "+",
-            "frame": ".",
-            "attributes": 'gene_id "G1"; gene_name "MYC"',
-        }])
+        gtf = pd.DataFrame(
+            [
+                {
+                    "seqname": "chr1",
+                    "source": "ref",
+                    "feature": "gene",
+                    "start": 1,
+                    "end": 100,
+                    "score": ".",
+                    "strand": "+",
+                    "frame": ".",
+                    "attributes": 'gene_id "G1"; gene_name "MYC"',
+                }
+            ]
+        )
         result = _ranges_from_gtf(gtf, feature_kind="gene")
         assert "gene_name" in result.columns
 
@@ -2312,8 +2526,7 @@ class TestPeekGtfShortLines:
     def test_line_with_two_fields_skipped(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "short.gtf.gz"
         content = (
-            "chr1\tref\n"
-            'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
+            "chr1\tref\n" 'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
         )
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write(content)
@@ -2346,7 +2559,9 @@ class TestSelectGtfResourceForUnitAdditional:
         )
         assert result is res
 
-    def test_resource_url_without_gtf_still_selected(self, tmp_path: Path) -> None:
+    def test_resource_url_without_gtf_still_selected(
+        self, tmp_path: Path
+    ) -> None:
         gz_path = tmp_path / "genes.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write('chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n')
@@ -2406,7 +2621,9 @@ class TestDiscoverDeduplicate:
             res.description = desc
             return [res]
 
-        with patch.object(search_module, "search_project_all", side_effect=search_side_effect):
+        with patch.object(
+            search_module, "search_project_all", side_effect=search_side_effect
+        ):
             b = R3ResourceBundle.discover(
                 organism="human",
                 data_source="sra",
@@ -2452,8 +2669,12 @@ class TestStackCountMatricesSkipsNonCount:
 
     def test_loaded_non_count_resource_skipped(self) -> None:
         gene_df = _gene_df()
-        gene_res = _mock_resource("count_files_gene_or_exon", loaded_data=gene_df, genomic_unit="gene")
-        meta_res = _mock_resource("metadata_files", loaded_data=pd.DataFrame({"a": [1]}))
+        gene_res = _mock_resource(
+            "count_files_gene_or_exon", loaded_data=gene_df, genomic_unit="gene"
+        )
+        meta_res = _mock_resource(
+            "metadata_files", loaded_data=pd.DataFrame({"a": [1]})
+        )
         b = R3ResourceBundle(resources=[gene_res, meta_res])
         result = b.stack_count_matrices(autoload=False)
         assert isinstance(result, pd.DataFrame)
@@ -2493,12 +2714,16 @@ class TestNormalizeSampleMetadataNonDataFrame:
 
 class TestNormalizeSampleMetadataExternalIdFillback:
     def test_aligned_without_external_id_gets_filled(self) -> None:
-        meta_df = pd.DataFrame({
-            "rail_id": pd.array(["1", "2"], dtype="string"),
-            "study": pd.array(["SRP001", "SRP001"], dtype="string"),
-            "score": [10.0, 20.0],
-        })
-        res = _mock_resource("metadata_files", loaded_data=meta_df, table_name="qc")
+        meta_df = pd.DataFrame(
+            {
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [10.0, 20.0],
+            }
+        )
+        res = _mock_resource(
+            "metadata_files", loaded_data=meta_df, table_name="qc"
+        )
         b = R3ResourceBundle(resources=[res])
         result = b._normalize_sample_metadata(sample_ids=["1", "2"])
         assert "external_id" in result.columns
@@ -2534,7 +2759,9 @@ class TestToRangedSEAutoload:
         res_ann = MagicMock(spec=R3Resource)
         desc_ann = MagicMock()
         desc_ann.resource_type = "annotations"
-        desc_ann.url_path.return_value = "human/annotations/gene_sums/human.gene_sums.G026.gtf.gz"
+        desc_ann.url_path.return_value = (
+            "human/annotations/gene_sums/human.gene_sums.G026.gtf.gz"
+        )
         desc_ann.annotation_extension = "G026"
         desc_ann.genomic_unit = "gene"
         res_ann.description = desc_ann
@@ -2542,22 +2769,20 @@ class TestToRangedSEAutoload:
         res_ann._cached_path.return_value = gz_path
 
         b = R3ResourceBundle(resources=[res_count, res_ann])
-        rse = b.to_ranged_summarized_experiment(genomic_unit="gene", autoload=True)
+        rse = b.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=True
+        )
         res_ann.download.assert_called()
         assert rse is not None
 
     @pytest.mark.requires_biocpy
     def test_enrich_cols_joined_to_row_data(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "genes_with_name.gtf.gz"
-        content = (
-            'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001"; gene_name "MYC"\n'
-        )
+        content = 'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001"; gene_name "MYC"\n'
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write(content)
 
-        counts_df = pd.DataFrame(
-            [[5.0]], index=["ENSG001"], columns=["SRR001"]
-        )
+        counts_df = pd.DataFrame([[5.0]], index=["ENSG001"], columns=["SRR001"])
         res_count = MagicMock(spec=R3Resource)
         desc_count = MagicMock()
         desc_count.resource_type = "count_files_gene_or_exon"
@@ -2580,7 +2805,9 @@ class TestToRangedSEAutoload:
         res_ann._cached_path.return_value = gz_path
 
         b = R3ResourceBundle(resources=[res_count, res_ann])
-        rse = b.to_ranged_summarized_experiment(genomic_unit="gene", autoload=False)
+        rse = b.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=False
+        )
         assert rse is not None
 
     def test_junction_prefer_rr_false(self) -> None:
@@ -2689,9 +2916,9 @@ class TestRealGtfFixtureIntegration:
         df = _read_gtf_dataframe(res)
         ranges = _ranges_from_gtf(df, feature_kind="gene")
         for gene_id in _REAL_GENE_IDS:
-            assert gene_id in ranges["feature_id"].values, (
-                f"{gene_id} not found in GTF ranges"
-            )
+            assert (
+                gene_id in ranges["feature_id"].values
+            ), f"{gene_id} not found in GTF ranges"
 
     def test_exon_gtf_recount_exon_id_parsed(self) -> None:
         """Exon GTF uses recount_exon_id as the feature_id."""
@@ -2737,7 +2964,9 @@ class TestRealGtfFixtureIntegration:
         res_ann._cached_path.return_value = _GENE_GTF_GZ
 
         b = R3ResourceBundle(resources=[res_count, res_ann])
-        rse = b.to_ranged_summarized_experiment(genomic_unit="gene", autoload=False)
+        rse = b.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=False
+        )
 
         assert rse is not None
         # Should have 5 aligned features (all 5 IDs exist in the real GTF)
@@ -2790,7 +3019,9 @@ class TestSelectGtfResourcePeekException:
 
         bundle = R3ResourceBundle(resources=[res])
 
-        with patch.object(bmod, "_peek_gtf_feature_counts", side_effect=OSError("peek fail")):
+        with patch.object(
+            bmod, "_peek_gtf_feature_counts", side_effect=OSError("peek fail")
+        ):
             result = _select_gtf_resource_for_unit(
                 bundle, genomic_unit="gene", annotation_extension=None
             )
@@ -2799,7 +3030,9 @@ class TestSelectGtfResourcePeekException:
 
 @pytest.mark.requires_biocpy
 class TestConstructSELengthGuards:
-    def test_raises_when_row_data_length_changed_by_unique_columns(self) -> None:
+    def test_raises_when_row_data_length_changed_by_unique_columns(
+        self,
+    ) -> None:
         counts = _gene_df()
         row_df = pd.DataFrame({"a": [1, 2]})
         col_df = pd.DataFrame({"b": ["x", "y"]})
@@ -2807,7 +3040,9 @@ class TestConstructSELengthGuards:
         original = bmod._ensure_unique_columns
         call_count: dict[str, int] = {"n": 0}
 
-        def patched(df: pd.DataFrame, *, empty_prefix: str = "col") -> pd.DataFrame:
+        def patched(
+            df: pd.DataFrame, *, empty_prefix: str = "col"
+        ) -> pd.DataFrame:
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return df.iloc[:1]
@@ -2822,7 +3057,9 @@ class TestConstructSELengthGuards:
                     assay_name="counts",
                 )
 
-    def test_raises_when_col_data_length_changed_by_unique_columns(self) -> None:
+    def test_raises_when_col_data_length_changed_by_unique_columns(
+        self,
+    ) -> None:
         counts = _gene_df()
         row_df = pd.DataFrame({"a": [1, 2]})
         col_df = pd.DataFrame({"b": ["x", "y"]})
@@ -2830,7 +3067,9 @@ class TestConstructSELengthGuards:
         original = bmod._ensure_unique_columns
         call_count: dict[str, int] = {"n": 0}
 
-        def patched(df: pd.DataFrame, *, empty_prefix: str = "col") -> pd.DataFrame:
+        def patched(
+            df: pd.DataFrame, *, empty_prefix: str = "col"
+        ) -> pd.DataFrame:
             call_count["n"] += 1
             if call_count["n"] == 2:
                 return df.iloc[:1]
@@ -2849,14 +3088,18 @@ class TestConstructSELengthGuards:
 @pytest.mark.requires_biocpy
 class TestConstructRSELengthGuards:
     def _ranges(self) -> pd.DataFrame:
-        return pd.DataFrame({
-            "seqnames": ["chr1", "chr1"],
-            "starts": [1, 200],
-            "ends": [100, 300],
-            "strand": ["+", "+"],
-        })
+        return pd.DataFrame(
+            {
+                "seqnames": ["chr1", "chr1"],
+                "starts": [1, 200],
+                "ends": [100, 300],
+                "strand": ["+", "+"],
+            }
+        )
 
-    def test_raises_when_row_data_length_changed_by_unique_columns(self) -> None:
+    def test_raises_when_row_data_length_changed_by_unique_columns(
+        self,
+    ) -> None:
         counts = _gene_df()
         row_df = pd.DataFrame({"a": [1, 2]})
         col_df = pd.DataFrame({"b": ["x", "y"]})
@@ -2864,7 +3107,9 @@ class TestConstructRSELengthGuards:
         original = bmod._ensure_unique_columns
         call_count: dict[str, int] = {"n": 0}
 
-        def patched(df: pd.DataFrame, *, empty_prefix: str = "col") -> pd.DataFrame:
+        def patched(
+            df: pd.DataFrame, *, empty_prefix: str = "col"
+        ) -> pd.DataFrame:
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return df.iloc[:1]
@@ -2880,7 +3125,9 @@ class TestConstructRSELengthGuards:
                     assay_name="raw_counts",
                 )
 
-    def test_raises_when_col_data_length_changed_by_unique_columns(self) -> None:
+    def test_raises_when_col_data_length_changed_by_unique_columns(
+        self,
+    ) -> None:
         counts = _gene_df()
         row_df = pd.DataFrame({"a": [1, 2]})
         col_df = pd.DataFrame({"b": ["x", "y"]})
@@ -2888,7 +3135,9 @@ class TestConstructRSELengthGuards:
         original = bmod._ensure_unique_columns
         call_count: dict[str, int] = {"n": 0}
 
-        def patched(df: pd.DataFrame, *, empty_prefix: str = "col") -> pd.DataFrame:
+        def patched(
+            df: pd.DataFrame, *, empty_prefix: str = "col"
+        ) -> pd.DataFrame:
             call_count["n"] += 1
             if call_count["n"] == 2:
                 return df.iloc[:1]
@@ -2908,7 +3157,9 @@ class TestConstructRSELengthGuards:
 class TestNormalizeSampleMetadataMissingAlignKey:
     def test_raises_when_collapse_drops_align_key(self) -> None:
         meta_df = pd.DataFrame({"external_id": ["SRR001", "SRR002"]})
-        res = _mock_resource("metadata_files", loaded_data=meta_df, table_name="qc")
+        res = _mock_resource(
+            "metadata_files", loaded_data=meta_df, table_name="qc"
+        )
         b = R3ResourceBundle(resources=[res])
 
         def drop_key(df: pd.DataFrame, *, key: str) -> pd.DataFrame:
@@ -2921,18 +3172,26 @@ class TestNormalizeSampleMetadataMissingAlignKey:
 
 class TestNormalizeSampleMetadataExternalIdAbsent:
     def test_external_id_set_when_absent_from_aligned(self) -> None:
-        merged_df = pd.DataFrame({
-            "rail_id": pd.array(["SRR001", "SRR002"], dtype="string"),
-            "study":   pd.array(["SRP001", "SRP001"], dtype="string"),
-            "extra":   ["a", "b"],
-        })
+        merged_df = pd.DataFrame(
+            {
+                "rail_id": pd.array(["SRR001", "SRR002"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "extra": ["a", "b"],
+            }
+        )
 
         meta_df = pd.DataFrame({"rail_id": ["SRR001", "SRR002"]})
-        res = _mock_resource("metadata_files", loaded_data=meta_df, table_name="qc")
+        res = _mock_resource(
+            "metadata_files", loaded_data=meta_df, table_name="qc"
+        )
         b = R3ResourceBundle(resources=[res])
 
-        with patch.object(bmod, "_outer_merge_metadata_frames", return_value=merged_df):
-            result = b._normalize_sample_metadata(sample_ids=["SRR001", "SRR002"])
+        with patch.object(
+            bmod, "_outer_merge_metadata_frames", return_value=merged_df
+        ):
+            result = b._normalize_sample_metadata(
+                sample_ids=["SRR001", "SRR002"]
+            )
 
         assert "external_id" in result.columns
         assert list(result["external_id"]) == ["SRR001", "SRR002"]
@@ -2948,7 +3207,9 @@ class TestAddBigwigUrls:
 
     def test_no_count_resources_sets_bigwig_na(self) -> None:
         b = R3ResourceBundle()
-        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        col_df = pd.DataFrame(
+            {"external_id": pd.array(["SRR001"], dtype="string")}
+        )
         result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
         assert pd.isna(result["BigWigURL"].iloc[0])
@@ -2956,7 +3217,9 @@ class TestAddBigwigUrls:
     def test_non_count_resource_skipped_then_returns_na(self) -> None:
         meta_res = _mock_resource("metadata_files")
         b = R3ResourceBundle(resources=[meta_res])
-        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        col_df = pd.DataFrame(
+            {"external_id": pd.array(["SRR001"], dtype="string")}
+        )
         result = b._add_bigwig_urls(col_df)
         assert pd.isna(result["BigWigURL"].iloc[0])
 
@@ -2968,7 +3231,9 @@ class TestAddBigwigUrls:
             project="SRP001",
         )
         b = R3ResourceBundle(resources=[res])
-        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        col_df = pd.DataFrame(
+            {"external_id": pd.array(["SRR001"], dtype="string")}
+        )
         result = b._add_bigwig_urls(col_df)
         assert pd.isna(result["BigWigURL"].iloc[0])
 
@@ -2980,7 +3245,9 @@ class TestAddBigwigUrls:
             project="SRP001",
         )
         b = R3ResourceBundle(resources=[res])
-        col_df = pd.DataFrame({"external_id": pd.array([pd.NA], dtype="string")})
+        col_df = pd.DataFrame(
+            {"external_id": pd.array([pd.NA], dtype="string")}
+        )
         result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
         assert result["BigWigURL"].iloc[0] is None
@@ -2993,10 +3260,12 @@ class TestAddBigwigUrls:
             project="SRP001",
         )
         b = R3ResourceBundle(resources=[res])
-        col_df = pd.DataFrame({
-            "external_id": pd.array(["SRR001"], dtype="string"),
-            "recount_seq_qc__file_source": ["some/path/sra"],
-        })
+        col_df = pd.DataFrame(
+            {
+                "external_id": pd.array(["SRR001"], dtype="string"),
+                "recount_seq_qc__file_source": ["some/path/sra"],
+            }
+        )
         result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
         assert result["BigWigURL"].iloc[0] is not None
@@ -3009,10 +3278,12 @@ class TestAddBigwigUrls:
             project="SRP001",
         )
         b = R3ResourceBundle(resources=[res])
-        col_df = pd.DataFrame({
-            "external_id": pd.array([pd.NA], dtype="string"),
-            "recount_seq_qc__file_source": [42],
-        })
+        col_df = pd.DataFrame(
+            {
+                "external_id": pd.array([pd.NA], dtype="string"),
+                "recount_seq_qc__file_source": [42],
+            }
+        )
         result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
 
@@ -3024,10 +3295,12 @@ class TestAddBigwigUrls:
             project="SRP001",
         )
         b = R3ResourceBundle(resources=[res])
-        col_df = pd.DataFrame({
-            "external_id": pd.array([pd.NA], dtype="string"),
-            "recount_seq_qc__file_source": ["/"],
-        })
+        col_df = pd.DataFrame(
+            {
+                "external_id": pd.array([pd.NA], dtype="string"),
+                "recount_seq_qc__file_source": ["/"],
+            }
+        )
         result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
 
@@ -3039,7 +3312,9 @@ class TestAddBigwigUrls:
             project="SRP001",
         )
         b = R3ResourceBundle(resources=[res])
-        col_df = pd.DataFrame({"external_id": pd.array(["SRR001"], dtype="string")})
+        col_df = pd.DataFrame(
+            {"external_id": pd.array(["SRR001"], dtype="string")}
+        )
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://duffel.example.com/recount3/"
         with patch("recount3.resource.default_config", return_value=mock_cfg):

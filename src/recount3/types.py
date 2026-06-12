@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -49,7 +49,7 @@ Attributes:
         * ``"family"``: all count resources must belong to the same
           high-level family (gene/exon versus junctions).
         * ``"feature"``: stricter: all resources must additionally share
-          an identical feature space: the same genomic unit for
+          an identical feature space -- the same genomic unit for
           gene/exon resources, or the same junction type and extension for
           junction resources. (Note: this does not constrain the annotation
           extension, so mixed-annotation gene/exon builds are not rejected.)

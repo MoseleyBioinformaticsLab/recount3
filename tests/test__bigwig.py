@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -102,8 +102,8 @@ def test_ensure_open_returns_cached_handle() -> None:
     with mock.patch.object(
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
-        h1 = bw._ensure_open()  # pylint: disable=protected-access
-        h2 = bw._ensure_open()  # pylint: disable=protected-access
+        h1 = bw._ensure_open()
+        h2 = bw._ensure_open()
     bw.close()
     assert h1 is h2
     assert mock_module.open.call_count == 1
@@ -115,7 +115,7 @@ def test_ensure_open_missing_path_raises_file_not_found(
     """FileNotFoundError is raised when the path does not exist on disk."""
     bw = BigWigFile(path=tmp_path / "nonexistent.bw")
     with pytest.raises(FileNotFoundError):
-        bw._ensure_open()  # pylint: disable=protected-access
+        bw._ensure_open()
 
 
 def test_ensure_open_pybigwig_returns_none_raises_runtime_error() -> None:
@@ -126,7 +126,7 @@ def test_ensure_open_pybigwig_returns_none_raises_runtime_error() -> None:
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
         with pytest.raises(RuntimeError, match="Failed to open BigWig file"):
-            bw._ensure_open()  # pylint: disable=protected-access
+            bw._ensure_open()
 
 
 def test_ensure_open_import_error_propagates() -> None:
@@ -138,7 +138,7 @@ def test_ensure_open_import_error_propagates() -> None:
         side_effect=ImportError("pyBigWig not found"),
     ):
         with pytest.raises(ImportError, match="pyBigWig not found"):
-            bw._ensure_open()  # pylint: disable=protected-access
+            bw._ensure_open()
 
 
 def test_close_idempotent_on_unopened_instance() -> None:
@@ -155,7 +155,7 @@ def test_close_calls_bw_close_and_clears_reference() -> None:
     with mock.patch.object(
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
-        bw._ensure_open()  # pylint: disable=protected-access
+        bw._ensure_open()
     bw.close()
     mock_handle.close.assert_called_once()
     assert not bw.is_open()
@@ -169,7 +169,7 @@ def test_close_clears_reference_when_bw_close_raises() -> None:
     with mock.patch.object(
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
-        bw._ensure_open()  # pylint: disable=protected-access
+        bw._ensure_open()
     with pytest.raises(OSError, match="handle gone"):
         bw.close()
     assert not bw.is_open()
@@ -187,7 +187,7 @@ def test_is_open_true_after_ensure_open() -> None:
     with mock.patch.object(
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
-        bw._ensure_open()  # pylint: disable=protected-access
+        bw._ensure_open()
         assert bw.is_open() is True
     bw.close()
 
@@ -199,7 +199,7 @@ def test_is_open_false_after_close() -> None:
     with mock.patch.object(
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
-        bw._ensure_open()  # pylint: disable=protected-access
+        bw._ensure_open()
     bw.close()
     assert bw.is_open() is False
 
@@ -239,7 +239,7 @@ def test_exit_passes_exception_info_and_closes() -> None:
     with mock.patch.object(
         _utils, "get_pybigwig_module", return_value=mock_module
     ):
-        bw._ensure_open()  # pylint: disable=protected-access
+        bw._ensure_open()
         bw.__exit__(TypeError, TypeError("e"), None)
     assert not bw.is_open()
 

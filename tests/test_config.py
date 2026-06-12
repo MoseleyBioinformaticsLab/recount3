@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -44,7 +44,6 @@ from recount3.config import (
     recount3_cache_files,
     recount3_cache_rm,
 )
-
 
 _BASE_URL = "https://example.org/recount3/"
 
@@ -145,7 +144,9 @@ class TestConfig:
 
 
 class TestDefaultConfig:
-    def test_url_absent_uses_builtin_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_url_absent_uses_builtin_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When RECOUNT3_URL is absent, the hard-coded duffel URL is used."""
         monkeypatch.delenv("RECOUNT3_URL", raising=False)
         cfg = default_config()
@@ -181,7 +182,9 @@ class TestDefaultConfig:
         """When RECOUNT3_CACHE_DIR is absent, a ~/.cache/recount3/files path is used."""
         monkeypatch.delenv("RECOUNT3_CACHE_DIR", raising=False)
         cfg = default_config()
-        expected = Path(os.path.expanduser("~")) / ".cache" / "recount3" / "files"
+        expected = (
+            Path(os.path.expanduser("~")) / ".cache" / "recount3" / "files"
+        )
         assert cfg.cache_dir == expected
 
     def test_cache_dir_present(
@@ -192,7 +195,9 @@ class TestDefaultConfig:
         cfg = default_config()
         assert cfg.cache_dir == tmp_path / "my_cache"
 
-    def test_timeout_absent_defaults_to_60(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_timeout_absent_defaults_to_60(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("RECOUNT3_HTTP_TIMEOUT", raising=False)
         cfg = default_config()
         assert cfg.timeout == 60
@@ -209,12 +214,16 @@ class TestDefaultConfig:
         assert isinstance(cfg.timeout, int)
         assert cfg.timeout == 45
 
-    def test_insecure_ssl_absent_is_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_insecure_ssl_absent_is_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("RECOUNT3_INSECURE_SSL", raising=False)
         cfg = default_config()
         assert cfg.insecure_ssl is False
 
-    def test_insecure_ssl_set_to_1_is_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_insecure_ssl_set_to_1_is_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("RECOUNT3_INSECURE_SSL", "1")
         cfg = default_config()
         assert cfg.insecure_ssl is True
@@ -228,7 +237,9 @@ class TestDefaultConfig:
             cfg = default_config()
             assert cfg.insecure_ssl is False, f"Expected False for {value!r}"
 
-    def test_max_retries_absent_defaults_to_3(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_max_retries_absent_defaults_to_3(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("RECOUNT3_MAX_RETRIES", raising=False)
         cfg = default_config()
         assert cfg.max_retries == 3
@@ -251,7 +262,9 @@ class TestDefaultConfig:
         assert "recount3" in cfg.user_agent.lower()
         assert cfg.user_agent.startswith("recount3-python/")
 
-    def test_user_agent_present_non_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_user_agent_present_non_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("RECOUNT3_USER_AGENT", "MyApp/3.1")
         cfg = default_config()
         assert cfg.user_agent == "MyApp/3.1"
@@ -268,12 +281,16 @@ class TestDefaultConfig:
         cfg = default_config()
         assert cfg.user_agent.startswith("recount3-python/")
 
-    def test_cache_disable_absent_is_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_cache_disable_absent_is_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("RECOUNT3_CACHE_DISABLE", raising=False)
         cfg = default_config()
         assert cfg.cache_disabled is False
 
-    def test_cache_disable_set_to_1_is_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_cache_disable_set_to_1_is_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("RECOUNT3_CACHE_DISABLE", "1")
         cfg = default_config()
         assert cfg.cache_disabled is True
@@ -333,7 +350,9 @@ class TestDefaultConfig:
 
 
 class TestRecount3Cache:
-    def test_with_explicit_config_returns_cache_dir(self, tmp_path: Path) -> None:
+    def test_with_explicit_config_returns_cache_dir(
+        self, tmp_path: Path
+    ) -> None:
         cfg = _minimal_cfg(tmp_path)
         result = recount3_cache(config=cfg)
         assert result == cfg.cache_dir
@@ -343,7 +362,9 @@ class TestRecount3Cache:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Passing config=None falls back to default_config()."""
-        monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(tmp_path / "default_cache"))
+        monkeypatch.setenv(
+            "RECOUNT3_CACHE_DIR", str(tmp_path / "default_cache")
+        )
         result = recount3_cache(config=None)
         assert result == tmp_path / "default_cache"
         assert result.is_dir()
@@ -389,7 +410,9 @@ class TestRecount3CacheFiles:
         result = recount3_cache_files(config=cfg)
         assert result == []
 
-    def test_cache_path_is_file_not_dir_returns_empty(self, tmp_path: Path) -> None:
+    def test_cache_path_is_file_not_dir_returns_empty(
+        self, tmp_path: Path
+    ) -> None:
         """When cache_dir is a regular file (not a directory), return []."""
         file_path = tmp_path / "i_am_a_file"
         file_path.write_text("data")
@@ -578,7 +601,9 @@ class TestRecount3CacheRm:
         result = recount3_cache_rm(config=cfg)
         assert result == []
 
-    def test_cache_path_is_file_not_dir_returns_empty(self, tmp_path: Path) -> None:
+    def test_cache_path_is_file_not_dir_returns_empty(
+        self, tmp_path: Path
+    ) -> None:
         """When cache_dir is a file (not a directory), return []."""
         file_path = tmp_path / "i_am_a_file"
         file_path.write_text("data")

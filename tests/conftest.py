@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -50,7 +50,9 @@ import pytest
 
 def _all_installed(*module_names: str) -> bool:
     """Return True only if every named module is importable on this platform."""
-    return all(importlib.util.find_spec(name) is not None for name in module_names)
+    return all(
+        importlib.util.find_spec(name) is not None for name in module_names
+    )
 
 
 HAS_PYBIGWIG = _all_installed("pyBigWig")

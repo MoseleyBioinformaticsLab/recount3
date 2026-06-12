@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -230,7 +230,9 @@ class TestResolveSraAttributesColumn:
 
     def test_no_match_returns_none(self) -> None:
         assert (
-            _resolve_sra_attributes_column(["unrelated"], "sra__sample_attributes")
+            _resolve_sra_attributes_column(
+                ["unrelated"], "sra__sample_attributes"
+            )
             is None
         )
 
@@ -325,7 +327,12 @@ class TestExpandSraAttributesDf:
 
     def test_multiple_rows(self) -> None:
         df = pd.DataFrame(
-            {"sra.sample_attributes": ["age;;30|disease;;Cancer", "age;;45|disease;;Control"]}
+            {
+                "sra.sample_attributes": [
+                    "age;;30|disease;;Cancer",
+                    "age;;45|disease;;Control",
+                ]
+            }
         )
         result = _expand_sra_attributes_df(df)
         assert result["sra_attribute.age"].tolist() == ["30", "45"]
@@ -340,8 +347,11 @@ class TestExpandSraAttributesDf:
 
     def test_namespaced_column_auto_detected(self) -> None:
         """A frame using the Python-namespaced 'sra__sample_attributes'
-        column name is also expanded when the default dotted name is requested."""
-        df = pd.DataFrame({"sra__sample_attributes": ["age;;30|disease;;Cancer"]})
+        column name is also expanded when the default dotted name is requested.
+        """
+        df = pd.DataFrame(
+            {"sra__sample_attributes": ["age;;30|disease;;Cancer"]}
+        )
         result = _expand_sra_attributes_df(df)
         assert "sra_attribute.age" in result.columns
         assert "sra_attribute.disease" in result.columns
@@ -657,7 +667,9 @@ class TestExpandSraAttributes:
         assert list(result.columns) == ["other"]
 
     def test_dataframe_with_column_expands(self) -> None:
-        df = pd.DataFrame({"sra.sample_attributes": ["age;;30|disease;;Cancer"]})
+        df = pd.DataFrame(
+            {"sra.sample_attributes": ["age;;30|disease;;Cancer"]}
+        )
         result = expand_sra_attributes(df)
         assert isinstance(result, pd.DataFrame)
         assert "sra_attribute.age" in result.columns
@@ -676,7 +688,9 @@ class TestExpandSraAttributes:
             _utils,
             get_biocframe_class=mock.MagicMock(return_value=_MockBiocFrame),
             get_summarizedexperiment_class=mock.MagicMock(return_value=_MockSE),
-            get_ranged_summarizedexperiment_class=mock.MagicMock(return_value=_MockRSE),
+            get_ranged_summarizedexperiment_class=mock.MagicMock(
+                return_value=_MockRSE
+            ),
         )
 
     def test_se_with_column_returns_expanded_se(self) -> None:
@@ -716,7 +730,9 @@ class TestExpandSraAttributes:
                 result = expand_sra_attributes(se)
 
         assert result is se
-        assert "not present" in caplog.text.lower() or "not present" in caplog.text
+        assert (
+            "not present" in caplog.text.lower() or "not present" in caplog.text
+        )
 
     def test_se_with_bad_col_data_raises_attribute_error(self) -> None:
         se = _MockSEWithBadColData(assays={})
@@ -916,7 +932,9 @@ class TestComputeTpm:
 
     def test_tpm_values_non_negative(self) -> None:
         widths = [500, 1000, 1500]
-        counts = np.array([[10.0, 20.0, 30.0], [40.0, 50.0, 60.0], [70.0, 80.0, 90.0]])
+        counts = np.array(
+            [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0], [70.0, 80.0, 90.0]]
+        )
         meta = _META.copy()
         rse = _make_rse(counts=counts, col_data_df=meta, widths=widths)
 
@@ -979,7 +997,9 @@ class TestIsPairedEnd:
         assert result.iloc[2] == True
 
     def test_indexed_by_external_id(self) -> None:
-        meta = self._meta([100.0, 200.0], [100.0, 100.0], external_ids=["ERR001", "ERR002"])
+        meta = self._meta(
+            [100.0, 200.0], [100.0, 100.0], external_ids=["ERR001", "ERR002"]
+        )
         result = is_paired_end(meta)
         assert list(result.index) == ["ERR001", "ERR002"]
 
@@ -1067,7 +1087,9 @@ class TestComputeScaleFactors:
             compute_scale_factors(meta, by="auc")
 
     def test_auc_scale_factors_correct(self) -> None:
-        result = compute_scale_factors(_META.copy(), by="auc", target_read_count=4e7)
+        result = compute_scale_factors(
+            _META.copy(), by="auc", target_read_count=4e7
+        )
         assert result.name == "scale_factor"
         assert result["S1"] == pytest.approx(4e7 / 4e9)
         assert result["S2"] == pytest.approx(4e7 / 8e9)
@@ -1087,7 +1109,7 @@ class TestComputeScaleFactors:
             paired_end_status=pe,
         )
         assert result.name == "scale_factor"
-        expected_s1 = 4e7 * 100.0 * 1.0 / (1e6 * (100.0 ** 2))
+        expected_s1 = 4e7 * 100.0 * 1.0 / (1e6 * (100.0**2))
         assert result.iloc[0] == pytest.approx(expected_s1)
 
     def test_mapped_reads_inferred_paired_end(self) -> None:
@@ -1098,8 +1120,8 @@ class TestComputeScaleFactors:
             target_read_count=4e7,
             target_read_length_bp=100.0,
         )
-        s1 = 4e7 * 100.0 * 1.0 / (1e6 * (100.0 ** 2))
-        s2 = 4e7 * 100.0 * 2.0 / (2e6 * (200.0 ** 2))
+        s1 = 4e7 * 100.0 * 1.0 / (1e6 * (100.0**2))
+        s2 = 4e7 * 100.0 * 2.0 / (2e6 * (200.0**2))
         assert result.iloc[0] == pytest.approx(s1)
         assert result.iloc[1] == pytest.approx(s2)
 
@@ -1162,7 +1184,9 @@ class TestTransformCounts:
     def test_basic_auc_scaling_rounded(self) -> None:
         rse = _make_rse()
         with self._patch_rse_class():
-            result = transform_counts(rse, by="auc", target_read_count=4e7, round_to_integers=True)
+            result = transform_counts(
+                rse, by="auc", target_read_count=4e7, round_to_integers=True
+            )
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape == (2, 3)
@@ -1171,7 +1195,9 @@ class TestTransformCounts:
     def test_basic_auc_scaling_unrounded(self) -> None:
         rse = _make_rse()
         with self._patch_rse_class():
-            result = transform_counts(rse, by="auc", target_read_count=4e7, round_to_integers=False)
+            result = transform_counts(
+                rse, by="auc", target_read_count=4e7, round_to_integers=False
+            )
 
         assert isinstance(result, pd.DataFrame)
         assert result.iloc[0, 0] == pytest.approx(1.0)

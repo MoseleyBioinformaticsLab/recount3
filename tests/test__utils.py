@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -44,7 +44,7 @@ from unittest import mock
 import pandas as pd
 import pytest
 
-import recount3._utils as _utils  # pylint: disable=protected-access
+import recount3._utils as _utils
 from recount3 import errors
 
 _DATA_DIR = Path(__file__).parent / "data"
@@ -84,7 +84,7 @@ _BASE_JXN_URL = (
 
 def test_weakreflock_context_manager_normal() -> None:
     """_WeakRefLock enters and exits without error in normal flow."""
-    lock = _utils._WeakRefLock()  # pylint: disable=protected-access
+    lock = _utils._WeakRefLock()
     entered = []
     with lock:
         entered.append(True)
@@ -93,85 +93,68 @@ def test_weakreflock_context_manager_normal() -> None:
 
 def test_weakreflock_context_manager_on_exception() -> None:
     """_WeakRefLock releases its inner lock even when body raises."""
-    lock = _utils._WeakRefLock()  # pylint: disable=protected-access
+    lock = _utils._WeakRefLock()
     with pytest.raises(RuntimeError, match="test error"):
         with lock:
             raise RuntimeError("test error")
-    acquired = lock._lock.acquire(  # pylint: disable=protected-access
-        blocking=False
-    )
+    acquired = lock._lock.acquire(blocking=False)
     assert acquired
-    lock._lock.release()  # pylint: disable=protected-access
+    lock._lock.release()
 
 
 def test_zip_lock_for_path_creates_lock(tmp_path: Path) -> None:
     """A new ZIP path gets its own _WeakRefLock."""
     zip_path = tmp_path / "archive.zip"
-    lock = _utils._zip_lock_for_path(  # pylint: disable=protected-access
-        zip_path
-    )
+    lock = _utils._zip_lock_for_path(zip_path)
     assert isinstance(
         lock,
-        _utils._WeakRefLock,  # pylint: disable=protected-access
+        _utils._WeakRefLock,
     )
 
 
 def test_zip_lock_for_path_reuses_lock(tmp_path: Path) -> None:
     """The same ZIP path always returns the identical lock object."""
     zip_path = tmp_path / "archive.zip"
-    lock_a = _utils._zip_lock_for_path(  # pylint: disable=protected-access
-        zip_path
-    )
-    lock_b = _utils._zip_lock_for_path(  # pylint: disable=protected-access
-        zip_path
-    )
+    lock_a = _utils._zip_lock_for_path(zip_path)
+    lock_b = _utils._zip_lock_for_path(zip_path)
     assert lock_a is lock_b
 
 
 def test_zip_lock_for_path_different_paths(tmp_path: Path) -> None:
     """Different ZIP paths produce independent lock objects."""
-    lock_a = _utils._zip_lock_for_path(  # pylint: disable=protected-access
-        tmp_path / "a.zip"
-    )
-    lock_b = _utils._zip_lock_for_path(  # pylint: disable=protected-access
-        tmp_path / "b.zip"
-    )
+    lock_a = _utils._zip_lock_for_path(tmp_path / "a.zip")
+    lock_b = _utils._zip_lock_for_path(tmp_path / "b.zip")
     assert lock_a is not lock_b
 
 
 def test_sha256_returns_64_char_hex_digest() -> None:
     """_sha256 returns a 64-character lowercase hex string."""
-    digest = _utils._sha256("hello")  # pylint: disable=protected-access
+    digest = _utils._sha256("hello")
     assert len(digest) == 64
     assert all(c in "0123456789abcdef" for c in digest)
 
 
 def test_sha256_deterministic() -> None:
     """Same input always produces the same digest."""
-    a = _utils._sha256("recount3")  # pylint: disable=protected-access
-    b = _utils._sha256("recount3")  # pylint: disable=protected-access
+    a = _utils._sha256("recount3")
+    b = _utils._sha256("recount3")
     assert a == b
 
 
 def test_sha256_differs_for_different_inputs() -> None:
     """Different inputs yield different digests."""
-    assert (
-        _utils._sha256("foo")  # pylint: disable=protected-access
-        != _utils._sha256("bar")  # pylint: disable=protected-access
-    )
+    assert _utils._sha256("foo") != _utils._sha256("bar")
 
 
 def test_sha256_empty_string() -> None:
     """_sha256 handles an empty string without error."""
-    digest = _utils._sha256("")  # pylint: disable=protected-access
+    digest = _utils._sha256("")
     assert len(digest) == 64
 
 
 def test_cache_key_for_url_format() -> None:
     """Key is '<16-hex>__<basename>' and basename matches the URL."""
-    key = _utils._cache_key_for_url(  # pylint: disable=protected-access
-        _SAMPLE_URL
-    )
+    key = _utils._cache_key_for_url(_SAMPLE_URL)
     prefix, basename = key.split("__", 1)
     assert len(prefix) == 16
     assert all(c in "0123456789abcdef" for c in prefix)
@@ -180,9 +163,7 @@ def test_cache_key_for_url_format() -> None:
 
 def test_cache_key_for_url_deterministic() -> None:
     """Same URL always produces the same key."""
-    assert _utils._cache_key_for_url(  # pylint: disable=protected-access
-        _SAMPLE_URL
-    ) == _utils._cache_key_for_url(  # pylint: disable=protected-access
+    assert _utils._cache_key_for_url(_SAMPLE_URL) == _utils._cache_key_for_url(
         _SAMPLE_URL
     )
 
@@ -191,12 +172,8 @@ def test_cache_key_for_url_different_urls_same_basename() -> None:
     """Two URLs sharing a basename but different paths produce different keys."""
     url_a = "https://host-a.example.com/path/A/file.gz"
     url_b = "https://host-b.example.com/path/B/file.gz"
-    key_a = _utils._cache_key_for_url(  # pylint: disable=protected-access
-        url_a
-    )
-    key_b = _utils._cache_key_for_url(  # pylint: disable=protected-access
-        url_b
-    )
+    key_a = _utils._cache_key_for_url(url_a)
+    key_b = _utils._cache_key_for_url(url_b)
     assert key_a != key_b
     assert key_a.endswith("__file.gz")
     assert key_b.endswith("__file.gz")
@@ -204,9 +181,7 @@ def test_cache_key_for_url_different_urls_same_basename() -> None:
 
 def test_cache_path_returns_path_under_root(tmp_path: Path) -> None:
     """Returned Path lives directly under the given cache root."""
-    p = _utils._cache_path(  # pylint: disable=protected-access
-        _SAMPLE_URL, tmp_path
-    )
+    p = _utils._cache_path(_SAMPLE_URL, tmp_path)
     assert p.parent == tmp_path
 
 
@@ -214,17 +189,13 @@ def test_cache_path_creates_cache_root(tmp_path: Path) -> None:
     """cache_root is created when it does not yet exist."""
     root = tmp_path / "new" / "cache"
     assert not root.exists()
-    _utils._cache_path(  # pylint: disable=protected-access
-        _SAMPLE_URL, root
-    )
+    _utils._cache_path(_SAMPLE_URL, root)
     assert root.is_dir()
 
 
 def test_cache_path_accepts_string_root(tmp_path: Path) -> None:
     """cache_root may be passed as a str."""
-    p = _utils._cache_path(  # pylint: disable=protected-access
-        _SAMPLE_URL, str(tmp_path)
-    )
+    p = _utils._cache_path(_SAMPLE_URL, str(tmp_path))
     assert isinstance(p, Path)
     assert p.parent == tmp_path
 
@@ -232,13 +203,13 @@ def test_cache_path_accepts_string_root(tmp_path: Path) -> None:
 def test_ensure_dir_creates_nested_directories(tmp_path: Path) -> None:
     """_ensure_dir creates a deeply nested directory tree."""
     target = tmp_path / "a" / "b" / "c"
-    _utils._ensure_dir(target)  # pylint: disable=protected-access
+    _utils._ensure_dir(target)
     assert target.is_dir()
 
 
 def test_ensure_dir_idempotent_on_existing_dir(tmp_path: Path) -> None:
     """_ensure_dir does not raise when the directory already exists."""
-    _utils._ensure_dir(tmp_path)  # pylint: disable=protected-access
+    _utils._ensure_dir(tmp_path)
     _utils._ensure_dir(tmp_path)  # Second call – must not raise.
 
 
@@ -249,9 +220,7 @@ def test_ensure_dir_raises_when_file_occupies_path(
     file_path = tmp_path / "regular_file"
     file_path.write_bytes(b"content")
     with pytest.raises(NotADirectoryError):
-        _utils._ensure_dir(  # pylint: disable=protected-access
-            file_path
-        )
+        _utils._ensure_dir(file_path)
 
 
 def test_atomic_replace_replaces_content(tmp_path: Path) -> None:
@@ -260,7 +229,7 @@ def test_atomic_replace_replaces_content(tmp_path: Path) -> None:
     dst = tmp_path / "final_file"
     src.write_bytes(b"new content")
     dst.write_bytes(b"old content")
-    _utils._atomic_replace(src, dst)  # pylint: disable=protected-access
+    _utils._atomic_replace(src, dst)
     assert dst.read_bytes() == b"new content"
     assert not src.exists()
 
@@ -270,16 +239,14 @@ def test_atomic_replace_creates_parent_directory(tmp_path: Path) -> None:
     src = tmp_path / "src"
     src.write_bytes(b"data")
     dst = tmp_path / "subdir" / "final"
-    _utils._atomic_replace(src, dst)  # pylint: disable=protected-access
+    _utils._atomic_replace(src, dst)
     assert dst.read_bytes() == b"data"
 
 
 def test_hardlink_or_copy_hardlink_success(tmp_path: Path) -> None:
     """_hardlink_or_copy creates a hardlink on the same filesystem."""
     dst = tmp_path / "dst.gtf.gz"
-    _utils._hardlink_or_copy(  # pylint: disable=protected-access
-        _GTF_GZ, dst
-    )
+    _utils._hardlink_or_copy(_GTF_GZ, dst)
     assert dst.exists()
     assert dst.read_bytes() == _GTF_GZ.read_bytes()
 
@@ -295,9 +262,7 @@ def test_hardlink_or_copy_cross_device_fallback(
         mock.Mock(side_effect=OSError(errno.EXDEV, "cross-device")),
     )
     dst = tmp_path / "dst.gtf.gz"
-    _utils._hardlink_or_copy(  # pylint: disable=protected-access
-        _GTF_GZ, dst
-    )
+    _utils._hardlink_or_copy(_GTF_GZ, dst)
     assert dst.read_bytes() == _GTF_GZ.read_bytes()
 
 
@@ -314,14 +279,10 @@ def test_hardlink_or_copy_permission_errors_fall_back_to_copy(
     monkeypatch.setattr(
         _utils.os,
         "link",
-        mock.Mock(
-            side_effect=OSError(err_no, os.strerror(err_no))
-        ),
+        mock.Mock(side_effect=OSError(err_no, os.strerror(err_no))),
     )
     dst = tmp_path / "dst.gtf.gz"
-    _utils._hardlink_or_copy(  # pylint: disable=protected-access
-        _GTF_GZ, dst
-    )
+    _utils._hardlink_or_copy(_GTF_GZ, dst)
     assert dst.read_bytes() == _GTF_GZ.read_bytes()
 
 
@@ -336,9 +297,7 @@ def test_hardlink_or_copy_unexpected_oserror_propagates(
         mock.Mock(side_effect=OSError(errno.EIO, "I/O error")),
     )
     with pytest.raises(OSError, match="I/O error"):
-        _utils._hardlink_or_copy(  # pylint: disable=protected-access
-            _GTF_GZ, tmp_path / "dst"
-        )
+        _utils._hardlink_or_copy(_GTF_GZ, tmp_path / "dst")
 
 
 def test_hardlink_or_copy_tmp_cleaned_up_on_replace_failure(
@@ -357,9 +316,7 @@ def test_hardlink_or_copy_tmp_cleaned_up_on_replace_failure(
         mock.Mock(side_effect=OSError("replace failed")),
     )
     with pytest.raises(OSError, match="replace failed"):
-        _utils._hardlink_or_copy(  # pylint: disable=protected-access
-            _GTF_GZ, tmp_path / "dst.gtf.gz"
-        )
+        _utils._hardlink_or_copy(_GTF_GZ, tmp_path / "dst.gtf.gz")
     assert list(tmp_path.glob(".*.tmp")) == []
 
 
@@ -381,9 +338,7 @@ def test_hardlink_or_copy_unlink_oserror_in_finally_swallowed(
 
     original_unlink = Path.unlink
 
-    def _raise_for_tmp(
-        self: Path, missing_ok: bool = False
-    ) -> None:
+    def _raise_for_tmp(self: Path, missing_ok: bool = False) -> None:
         if ".tmp" in self.name:
             raise OSError("cannot unlink tmp")
         original_unlink(self, missing_ok=missing_ok)
@@ -391,14 +346,12 @@ def test_hardlink_or_copy_unlink_oserror_in_finally_swallowed(
     monkeypatch.setattr(Path, "unlink", _raise_for_tmp)
 
     with pytest.raises(OSError, match="replace failed"):
-        _utils._hardlink_or_copy(  # pylint: disable=protected-access
-            _GTF_GZ, tmp_path / "dst"
-        )
+        _utils._hardlink_or_copy(_GTF_GZ, tmp_path / "dst")
 
 
 def test_ssl_insecure_context_disables_verification() -> None:
     """_ssl_insecure_context returns a context with verification off."""
-    ctx = _utils._ssl_insecure_context()  # pylint: disable=protected-access
+    ctx = _utils._ssl_insecure_context()
     assert isinstance(ctx, ssl.SSLContext)
     assert not ctx.check_hostname
     assert ctx.verify_mode == ssl.CERT_NONE
@@ -496,9 +449,7 @@ def test_http_open_adds_https_handler_for_insecure_ssl(
     # The handler is added via opener.add_handler(), not build_opener().
     mock_opener.add_handler.assert_called_once()
     handler = mock_opener.add_handler.call_args[0][0]
-    assert isinstance(
-        handler, _utils.urllib.request.HTTPSHandler
-    )
+    assert isinstance(handler, _utils.urllib.request.HTTPSHandler)
 
 
 def test_with_retries_success_first_attempt() -> None:
@@ -534,9 +485,7 @@ def test_with_retries_all_attempts_exhausted_reraises(
     monkeypatch.setattr(_utils.time, "sleep", mock.Mock())
     with pytest.raises(urllib.error.URLError, match="always fails"):
         _utils.with_retries(
-            mock.Mock(
-                side_effect=urllib.error.URLError("always fails")
-            ),
+            mock.Mock(side_effect=urllib.error.URLError("always fails")),
             attempts=2,
         )
 
@@ -594,9 +543,7 @@ def test_stream_copy_empty_source_returns_zero() -> None:
     """_stream_copy returns 0 bytes for an empty source."""
     src = io.BytesIO(b"")
     dst = io.BytesIO()
-    n = _utils._stream_copy(  # pylint: disable=protected-access
-        src, dst, chunk_size=1024
-    )
+    n = _utils._stream_copy(src, dst, chunk_size=1024)
     assert n == 0
     assert dst.getvalue() == b""
 
@@ -606,9 +553,7 @@ def test_stream_copy_single_chunk(tmp_path: Path) -> None:
     data = _GTF_GZ.read_bytes()
     src = io.BytesIO(data)
     dst = io.BytesIO()
-    n = _utils._stream_copy(  # pylint: disable=protected-access
-        src, dst, chunk_size=len(data) + 1
-    )
+    n = _utils._stream_copy(src, dst, chunk_size=len(data) + 1)
     assert n == len(data)
     assert dst.getvalue() == data
 
@@ -618,9 +563,7 @@ def test_stream_copy_multiple_chunks(tmp_path: Path) -> None:
     data = _EXON_GZ.read_bytes()
     src = io.BytesIO(data)
     dst = io.BytesIO()
-    n = _utils._stream_copy(  # pylint: disable=protected-access
-        src, dst, chunk_size=64
-    )
+    n = _utils._stream_copy(src, dst, chunk_size=64)
     assert n == len(data)
     assert dst.getvalue() == data
 
@@ -629,9 +572,7 @@ def test_stream_copy_returns_total_byte_count() -> None:
     """Return value exactly equals the number of bytes copied."""
     payload = b"x" * 500
     assert (
-        _utils._stream_copy(  # pylint: disable=protected-access
-            io.BytesIO(payload), io.BytesIO(), chunk_size=128
-        )
+        _utils._stream_copy(io.BytesIO(payload), io.BytesIO(), chunk_size=128)
         == 500
     )
 
@@ -750,9 +691,7 @@ def test_download_to_file_tmp_unlink_error_swallowed(
 
     original_unlink = Path.unlink
 
-    def _raise_for_downloading(
-        self: Path, missing_ok: bool = False
-    ) -> None:
+    def _raise_for_downloading(self: Path, missing_ok: bool = False) -> None:
         if ".downloading" in self.name:
             raise OSError("unlink refused")
         original_unlink(self, missing_ok=missing_ok)
@@ -780,7 +719,7 @@ def test_write_or_replace_in_zip_creates_new_zip(
 ) -> None:
     """Writing to a nonexistent ZIP creates the archive."""
     zip_path = tmp_path / "archive.zip"
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "data/gene.gtf.gz", overwrite=False
     )
     assert zip_path.exists()
@@ -793,10 +732,10 @@ def test_write_or_replace_in_zip_appends_new_member(
 ) -> None:
     """A new member is appended to an existing ZIP."""
     zip_path = tmp_path / "archive.zip"
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "gene.gtf.gz", overwrite=False
     )
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _EXON_GZ, "exon.gz", overwrite=False
     )
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -811,10 +750,10 @@ def test_write_or_replace_in_zip_noop_when_exists_no_overwrite(
     """overwrite=False is a no-op when the member already exists."""
     zip_path = tmp_path / "archive.zip"
     original = _GTF_GZ.read_bytes()
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "member.gz", overwrite=False
     )
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _EXON_GZ, "member.gz", overwrite=False
     )
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -827,10 +766,10 @@ def test_write_or_replace_in_zip_overwrites_existing_member(
 ) -> None:
     """overwrite=True replaces the existing member without duplicates."""
     zip_path = tmp_path / "archive.zip"
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "member.gz", overwrite=False
     )
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _EXON_GZ, "member.gz", overwrite=True
     )
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -847,7 +786,7 @@ def test_write_or_replace_in_zip_invalid_zip_raises_download_error(
     zip_path = tmp_path / "bad.zip"
     zip_path.write_bytes(b"not a zip file at all")
     with pytest.raises(errors.DownloadError, match="not a valid ZIP"):
-        _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+        _utils._write_or_replace_in_zip(
             zip_path, _GTF_GZ, "member.gz", overwrite=False
         )
 
@@ -857,13 +796,13 @@ def test_write_or_replace_in_zip_preserves_other_members_on_overwrite(
 ) -> None:
     """Overwriting one member leaves all other members intact."""
     zip_path = tmp_path / "archive.zip"
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "gene.gz", overwrite=False
     )
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "exon.gz", overwrite=False
     )
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _EXON_GZ, "gene.gz", overwrite=True
     )
     with zipfile.ZipFile(zip_path, "r") as zf:
@@ -877,7 +816,7 @@ def test_write_or_replace_in_zip_tmpzip_cleaned_up_on_replace_fail(
 ) -> None:
     """Temp ZIP is removed even when _atomic_replace fails."""
     zip_path = tmp_path / "archive.zip"
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "member.gz", overwrite=False
     )
 
@@ -888,7 +827,7 @@ def test_write_or_replace_in_zip_tmpzip_cleaned_up_on_replace_fail(
     )
 
     with pytest.raises(OSError, match="disk full"):
-        _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+        _utils._write_or_replace_in_zip(
             zip_path, _EXON_GZ, "member.gz", overwrite=True
         )
 
@@ -901,7 +840,7 @@ def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
 ) -> None:
     """OSError from tmp-ZIP unlink in finally is silently ignored."""
     zip_path = tmp_path / "archive.zip"
-    _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+    _utils._write_or_replace_in_zip(
         zip_path, _GTF_GZ, "member.gz", overwrite=False
     )
 
@@ -913,9 +852,7 @@ def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
 
     original_unlink = Path.unlink
 
-    def _raise_for_tmpzip(
-        self: Path, missing_ok: bool = False
-    ) -> None:
+    def _raise_for_tmpzip(self: Path, missing_ok: bool = False) -> None:
         if ".tmpzip" in self.name:
             raise OSError("unlink refused")
         original_unlink(self, missing_ok=missing_ok)
@@ -923,7 +860,7 @@ def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
     monkeypatch.setattr(Path, "unlink", _raise_for_tmpzip)
 
     with pytest.raises(OSError, match="replace fail"):
-        _utils._write_or_replace_in_zip(  # pylint: disable=protected-access
+        _utils._write_or_replace_in_zip(
             zip_path, _EXON_GZ, "member.gz", overwrite=True
         )
 
@@ -1138,9 +1075,7 @@ def test_download_stream_to_zip_tmp_unlink_error_swallowed(
 
     original_unlink = Path.unlink
 
-    def _raise_for_r3dl(
-        self: Path, missing_ok: bool = False
-    ) -> None:
+    def _raise_for_r3dl(self: Path, missing_ok: bool = False) -> None:
         if ".r3_dl_" in self.name:
             raise OSError("cannot unlink r3 tmp")
         original_unlink(self, missing_ok=missing_ok)
@@ -1209,15 +1144,11 @@ def test_write_cached_file_to_zip_delegates_to_write_or_replace(
 ) -> None:
     """write_cached_file_to_zip is a thin wrapper over _write_or_replace."""
     zip_path = tmp_path / "out.zip"
-    with mock.patch(
-        "recount3._utils._write_or_replace_in_zip"
-    ) as mock_inner:
+    with mock.patch("recount3._utils._write_or_replace_in_zip") as mock_inner:
         _utils.write_cached_file_to_zip(
             _GTF_GZ, zip_path, "gene.gz", overwrite=True
         )
-    mock_inner.assert_called_once_with(
-        zip_path, _GTF_GZ, "gene.gz", True
-    )
+    mock_inner.assert_called_once_with(zip_path, _GTF_GZ, "gene.gz", True)
 
 
 @pytest.mark.parametrize(
@@ -1231,13 +1162,9 @@ def test_write_cached_file_to_zip_delegates_to_write_or_replace(
         ("JUNCTION", "junction"),
     ],
 )
-def test_normalize_genomic_unit_valid_values(
-    value: str, expected: str
-) -> None:
+def test_normalize_genomic_unit_valid_values(value: str, expected: str) -> None:
     """Valid genomic units are returned in lowercase / stripped."""
-    result = _utils._normalize_genomic_unit(  # pylint: disable=protected-access
-        value
-    )
+    result = _utils._normalize_genomic_unit(value)
     assert result == expected
 
 
@@ -1248,19 +1175,14 @@ def test_normalize_genomic_unit_valid_values(
 def test_normalize_genomic_unit_invalid_raises(value: str) -> None:
     """Invalid genomic units raise ValueError."""
     with pytest.raises(ValueError, match="Invalid genomic_unit"):
-        _utils._normalize_genomic_unit(  # pylint: disable=protected-access
-            value
-        )
+        _utils._normalize_genomic_unit(value)
 
 
 def test_resolve_counts_assay_name_preferred_present() -> None:
     """Preferred assay is returned when it is present."""
     se = mock.MagicMock()
     se.assay_names = ["raw_counts", "counts"]
-    assert (
-        _utils._resolve_counts_assay_name(se)  # pylint: disable=protected-access
-        == "raw_counts"
-    )
+    assert _utils._resolve_counts_assay_name(se) == "raw_counts"
 
 
 def test_resolve_counts_assay_name_falls_back_to_legacy(
@@ -1272,9 +1194,7 @@ def test_resolve_counts_assay_name_falls_back_to_legacy(
     se = mock.MagicMock()
     se.assay_names = ["counts"]
     with caplog.at_level(logging.WARNING):
-        result = _utils._resolve_counts_assay_name(  # pylint: disable=protected-access
-            se
-        )
+        result = _utils._resolve_counts_assay_name(se)
     assert result == "counts"
     assert "falling back" in caplog.text
 
@@ -1284,21 +1204,21 @@ def test_resolve_counts_assay_name_raises_when_neither_present() -> None:
     se = mock.MagicMock()
     se.assay_names = ["other_assay"]
     with pytest.raises(ValueError, match="raw_counts"):
-        _utils._resolve_counts_assay_name(se)  # pylint: disable=protected-access
+        _utils._resolve_counts_assay_name(se)
 
 
 def test_resolve_counts_assay_name_raises_when_assay_names_absent() -> None:
     """ValueError when the object exposes no assay_names attribute."""
     se = mock.MagicMock(spec=[])  # No attributes at all.
     with pytest.raises(ValueError):
-        _utils._resolve_counts_assay_name(se)  # pylint: disable=protected-access
+        _utils._resolve_counts_assay_name(se)
 
 
 def test_resolve_counts_assay_name_custom_names() -> None:
     """Custom preferred and fallback names are respected."""
     se = mock.MagicMock()
     se.assay_names = ["my_counts"]
-    result = _utils._resolve_counts_assay_name(  # pylint: disable=protected-access
+    result = _utils._resolve_counts_assay_name(
         se,
         preferred_assay_name="my_counts",
         fallback_assay_name="other",
@@ -1309,9 +1229,7 @@ def test_resolve_counts_assay_name_custom_names() -> None:
 def test_coerce_col_data_to_pandas_passthrough_dataframe() -> None:
     """A pandas DataFrame is returned unchanged."""
     df = pd.DataFrame({"a": [1, 2]})
-    result = _utils._coerce_col_data_to_pandas(  # pylint: disable=protected-access
-        df
-    )
+    result = _utils._coerce_col_data_to_pandas(df)
     assert result is df
 
 
@@ -1320,35 +1238,27 @@ def test_coerce_col_data_to_pandas_se_like_object() -> None:
     df = pd.DataFrame({"sample": ["s1", "s2"]})
     se_like = mock.MagicMock()
     se_like.col_data.to_pandas.return_value = df
-    result = _utils._coerce_col_data_to_pandas(  # pylint: disable=protected-access
-        se_like
-    )
+    result = _utils._coerce_col_data_to_pandas(se_like)
     assert result is df
 
 
 def test_coerce_col_data_to_pandas_raises_for_unsupported_type() -> None:
     """TypeError is raised for types that cannot be coerced."""
     with pytest.raises(TypeError, match="pandas.DataFrame"):
-        _utils._coerce_col_data_to_pandas(  # pylint: disable=protected-access
-            [1, 2, 3]
-        )
+        _utils._coerce_col_data_to_pandas([1, 2, 3])
 
 
 def test_coerce_numeric_column_all_numeric() -> None:
     """A purely numeric Series is returned as float64."""
     s = pd.Series(["1.0", "2.5", "3"])
-    result = _utils._coerce_numeric_column(  # pylint: disable=protected-access
-        s, "score"
-    )
+    result = _utils._coerce_numeric_column(s, "score")
     assert list(result) == pytest.approx([1.0, 2.5, 3.0])
 
 
 def test_coerce_numeric_column_empty_strings_become_na() -> None:
     """Whitespace-only values are coerced to NA."""
     s = pd.Series(["1.0", "  ", "", "4.0"])
-    result = _utils._coerce_numeric_column(  # pylint: disable=protected-access
-        s, "score"
-    )
+    result = _utils._coerce_numeric_column(s, "score")
     assert result.isna().sum() == 2
     assert result.dropna().tolist() == pytest.approx([1.0, 4.0])
 
@@ -1356,9 +1266,7 @@ def test_coerce_numeric_column_empty_strings_become_na() -> None:
 def test_coerce_numeric_column_preserves_na_values() -> None:
     """Explicit NA / NaN values propagate through."""
     s = pd.Series([1.0, None, 3.0])
-    result = _utils._coerce_numeric_column(  # pylint: disable=protected-access
-        s, "score"
-    )
+    result = _utils._coerce_numeric_column(s, "score")
     assert result.isna().sum() == 1
 
 
@@ -1366,35 +1274,27 @@ def test_coerce_numeric_column_raises_for_non_numeric_values() -> None:
     """Non-numeric, non-NA values raise ValueError."""
     s = pd.Series(["1.0", "abc", "3.0"])
     with pytest.raises(ValueError, match="non-numeric"):
-        _utils._coerce_numeric_column(  # pylint: disable=protected-access
-            s, "score"
-        )
+        _utils._coerce_numeric_column(s, "score")
 
 
 def test_resolve_metadata_column_exact_match() -> None:
     """An exact column name match returns the correct Series."""
     df = pd.DataFrame({"recount_qc.star.reads": [100, 200]})
-    result = _utils._resolve_metadata_column(  # pylint: disable=protected-access
-        df, "recount_qc.star.reads"
-    )
+    result = _utils._resolve_metadata_column(df, "recount_qc.star.reads")
     assert list(result) == [100, 200]
 
 
 def test_resolve_metadata_column_case_insensitive_match() -> None:
     """Column lookup is case-insensitive."""
     df = pd.DataFrame({"RECOUNT_QC.Star.Reads": [1, 2]})
-    result = _utils._resolve_metadata_column(  # pylint: disable=protected-access
-        df, "recount_qc.star.reads"
-    )
+    result = _utils._resolve_metadata_column(df, "recount_qc.star.reads")
     assert list(result) == [1, 2]
 
 
 def test_resolve_metadata_column_dot_to_dunder_fallback() -> None:
     """First '.' separator falls back to '__' when exact match fails."""
     df = pd.DataFrame({"recount_qc__star.reads": [10, 20]})
-    result = _utils._resolve_metadata_column(  # pylint: disable=protected-access
-        df, "recount_qc.star.reads"
-    )
+    result = _utils._resolve_metadata_column(df, "recount_qc.star.reads")
     assert list(result) == [10, 20]
 
 
@@ -1402,25 +1302,19 @@ def test_resolve_metadata_column_raises_when_not_found() -> None:
     """ValueError is raised when the column cannot be resolved."""
     df = pd.DataFrame({"other_col": [1]})
     with pytest.raises(ValueError, match="not found"):
-        _utils._resolve_metadata_column(  # pylint: disable=protected-access
-            df, "missing.column"
-        )
+        _utils._resolve_metadata_column(df, "missing.column")
 
 
 def test_resolve_metadata_column_no_dot_raises_directly() -> None:
     """A column with no '.' and no match raises ValueError immediately."""
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(ValueError, match="not found"):
-        _utils._resolve_metadata_column(  # pylint: disable=protected-access
-            df, "b"
-        )
+        _utils._resolve_metadata_column(df, "b")
 
 
 def test_format_optional_dep_error_known_module() -> None:
     """Known modules use a pre-configured install command."""
-    msg = _utils._format_optional_dependency_import_error(  # pylint: disable=protected-access
-        "biocframe"
-    )
+    msg = _utils._format_optional_dependency_import_error("biocframe")
     assert "biocframe" in msg
     assert 'pip install "recount3[biocpy]"' in msg
     assert "Original import error" not in msg
@@ -1428,36 +1322,28 @@ def test_format_optional_dep_error_known_module() -> None:
 
 def test_format_optional_dep_error_unknown_module() -> None:
     """Unknown modules fall back to 'pip install <name>'."""
-    msg = _utils._format_optional_dependency_import_error(  # pylint: disable=protected-access
-        "some_unknown_pkg"
-    )
+    msg = _utils._format_optional_dependency_import_error("some_unknown_pkg")
     assert "pip install some_unknown_pkg" in msg
 
 
 def test_format_optional_dep_error_with_exception() -> None:
     """When exc is provided, the original error appears in the message."""
     exc = ImportError("no module named x")
-    msg = _utils._format_optional_dependency_import_error(  # pylint: disable=protected-access
-        "mymod", exc
-    )
+    msg = _utils._format_optional_dependency_import_error("mymod", exc)
     assert "Original import error" in msg
     assert "no module named x" in msg
 
 
 def test_format_optional_dep_error_without_exception() -> None:
     """When exc is None the error detail section is absent."""
-    msg = _utils._format_optional_dependency_import_error(  # pylint: disable=protected-access
-        "mymod"
-    )
+    msg = _utils._format_optional_dependency_import_error("mymod")
     assert "Original import error" not in msg
 
 
 def test_format_optional_dep_failure_shows_exc_and_guidance() -> None:
     """Failure message includes the exception repr and install guidance."""
     exc = RuntimeError("shared library missing")
-    msg = _utils._format_optional_dependency_import_failure(  # pylint: disable=protected-access
-        "pyBigWig", exc
-    )
+    msg = _utils._format_optional_dependency_import_failure("pyBigWig", exc)
     assert "could not be imported" in msg
     assert repr(exc) in msg
     assert "pip install" in msg
@@ -1474,9 +1360,7 @@ def test_import_optional_module_returns_real_module() -> None:
 def test_import_optional_module_not_found_raises_import_error() -> None:
     """A missing module raises ImportError with install guidance."""
     with pytest.raises(ImportError, match="pip install"):
-        _utils.import_optional_module(
-            "__r3test_definitely_absent_xyz__"
-        )
+        _utils.import_optional_module("__r3test_definitely_absent_xyz__")
 
 
 def test_import_optional_module_load_failure_raises_import_error(
@@ -1498,7 +1382,7 @@ def test_get_module_attribute_returns_existing_attribute() -> None:
     """An existing attribute is returned directly."""
     import pandas
 
-    result = _utils._get_module_attribute(  # pylint: disable=protected-access
+    result = _utils._get_module_attribute(
         pandas, "DataFrame", module_name="pandas"
     )
     assert result is pandas.DataFrame
@@ -1508,7 +1392,7 @@ def test_get_module_attribute_missing_raises_import_error() -> None:
     """A missing attribute raises ImportError with guidance."""
     fake_mod = types.ModuleType("fake_module")
     with pytest.raises(ImportError, match="pip install fake_module"):
-        _utils._get_module_attribute(  # pylint: disable=protected-access
+        _utils._get_module_attribute(
             fake_mod,
             "NonExistentClass",
             module_name="fake_module",
@@ -1524,12 +1408,15 @@ def test_get_biocframe_class_returns_biocframe() -> None:
 
 def test_get_biocframe_class_propagates_import_error() -> None:
     """ImportError from _get_module_attribute propagates unchanged."""
-    with mock.patch(
-        "recount3._utils.import_optional_module",
-        return_value=types.ModuleType("biocframe"),
-    ), mock.patch(
-        "recount3._utils._get_module_attribute",
-        side_effect=ImportError("no BiocFrame"),
+    with (
+        mock.patch(
+            "recount3._utils.import_optional_module",
+            return_value=types.ModuleType("biocframe"),
+        ),
+        mock.patch(
+            "recount3._utils._get_module_attribute",
+            side_effect=ImportError("no BiocFrame"),
+        ),
     ):
         with pytest.raises(ImportError, match="no BiocFrame"):
             _utils.get_biocframe_class()
@@ -1544,12 +1431,15 @@ def test_get_genomicranges_class_returns_genomicranges() -> None:
 
 def test_get_genomicranges_class_propagates_import_error() -> None:
     """ImportError from _get_module_attribute propagates."""
-    with mock.patch(
-        "recount3._utils.import_optional_module",
-        return_value=types.ModuleType("genomicranges"),
-    ), mock.patch(
-        "recount3._utils._get_module_attribute",
-        side_effect=ImportError("no GenomicRanges"),
+    with (
+        mock.patch(
+            "recount3._utils.import_optional_module",
+            return_value=types.ModuleType("genomicranges"),
+        ),
+        mock.patch(
+            "recount3._utils._get_module_attribute",
+            side_effect=ImportError("no GenomicRanges"),
+        ),
     ):
         with pytest.raises(ImportError, match="no GenomicRanges"):
             _utils.get_genomicranges_class()
@@ -1564,12 +1454,15 @@ def test_get_summarizedexperiment_class_returns_class() -> None:
 
 def test_get_summarizedexperiment_class_propagates_import_error() -> None:
     """ImportError from _get_module_attribute propagates."""
-    with mock.patch(
-        "recount3._utils.import_optional_module",
-        return_value=types.ModuleType("summarizedexperiment"),
-    ), mock.patch(
-        "recount3._utils._get_module_attribute",
-        side_effect=ImportError("no SE"),
+    with (
+        mock.patch(
+            "recount3._utils.import_optional_module",
+            return_value=types.ModuleType("summarizedexperiment"),
+        ),
+        mock.patch(
+            "recount3._utils._get_module_attribute",
+            side_effect=ImportError("no SE"),
+        ),
     ):
         with pytest.raises(ImportError, match="no SE"):
             _utils.get_summarizedexperiment_class()
@@ -1584,12 +1477,15 @@ def test_get_ranged_summarizedexperiment_class_returns_class() -> None:
 
 def test_get_ranged_summarizedexperiment_class_propagates_error() -> None:
     """ImportError from _get_module_attribute propagates."""
-    with mock.patch(
-        "recount3._utils.import_optional_module",
-        return_value=types.ModuleType("summarizedexperiment"),
-    ), mock.patch(
-        "recount3._utils._get_module_attribute",
-        side_effect=ImportError("no RSE"),
+    with (
+        mock.patch(
+            "recount3._utils.import_optional_module",
+            return_value=types.ModuleType("summarizedexperiment"),
+        ),
+        mock.patch(
+            "recount3._utils._get_module_attribute",
+            side_effect=ImportError("no RSE"),
+        ),
     ):
         with pytest.raises(ImportError, match="no RSE"):
             _utils.get_ranged_summarizedexperiment_class()
@@ -1613,9 +1509,7 @@ def test_get_pybigwig_module_propagates_import_error() -> None:
         "recount3._utils.import_optional_module",
         side_effect=ImportError("pyBigWig not installed"),
     ):
-        with pytest.raises(
-            ImportError, match="pyBigWig not installed"
-        ):
+        with pytest.raises(ImportError, match="pyBigWig not installed"):
             _utils.get_pybigwig_module()
 
 
@@ -1637,9 +1531,7 @@ def test_derive_junction_sidecar_url_swaps_extension(
 ) -> None:
     """Extension suffix is swapped correctly for all valid combinations."""
     url = f"{_BASE_JXN_URL}.{orig_ext}.gz"
-    result = _utils._derive_junction_sidecar_url(  # pylint: disable=protected-access
-        url, new_ext
-    )
+    result = _utils._derive_junction_sidecar_url(url, new_ext)
     assert result.endswith(expected_suffix)
     assert result.startswith(_BASE_JXN_URL)
 
@@ -1647,40 +1539,32 @@ def test_derive_junction_sidecar_url_swaps_extension(
 def test_derive_junction_sidecar_url_case_insensitive_source() -> None:
     """Lowercase extension in the source URL is matched."""
     url = f"{_BASE_JXN_URL}.mm.gz"
-    result = _utils._derive_junction_sidecar_url(  # pylint: disable=protected-access
-        url, "ID"
-    )
+    result = _utils._derive_junction_sidecar_url(url, "ID")
     assert result.endswith(".ID.gz")
 
 
 def test_derive_junction_sidecar_url_new_ext_uppercased() -> None:
     """new_ext is uppercased regardless of input case."""
     url = f"{_BASE_JXN_URL}.MM.gz"
-    result = _utils._derive_junction_sidecar_url(  # pylint: disable=protected-access
-        url, "id"
-    )
+    result = _utils._derive_junction_sidecar_url(url, "id")
     assert result.endswith(".ID.gz")
 
 
 def test_derive_junction_sidecar_url_empty_url_raises() -> None:
     """Empty URL raises ValueError."""
     with pytest.raises(ValueError, match="non-empty"):
-        _utils._derive_junction_sidecar_url(  # pylint: disable=protected-access
-            "", "MM"
-        )
+        _utils._derive_junction_sidecar_url("", "MM")
 
 
 def test_derive_junction_sidecar_url_invalid_ext_raises() -> None:
     """new_ext not in {MM, ID, RR} raises ValueError."""
     with pytest.raises(ValueError, match="MM/ID/RR"):
-        _utils._derive_junction_sidecar_url(  # pylint: disable=protected-access
-            f"{_BASE_JXN_URL}.MM.gz", "XY"
-        )
+        _utils._derive_junction_sidecar_url(f"{_BASE_JXN_URL}.MM.gz", "XY")
 
 
 def test_derive_junction_sidecar_url_no_pattern_raises() -> None:
     """URL without a recognised .{MM,ID,RR}.gz suffix raises ValueError."""
     with pytest.raises(ValueError, match="Cannot derive"):
-        _utils._derive_junction_sidecar_url(  # pylint: disable=protected-access
+        _utils._derive_junction_sidecar_url(
             "https://example.com/file.tsv.gz", "MM"
         )

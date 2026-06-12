@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -31,7 +31,7 @@
 #
 """Resource descriptions and duffel URL-path construction.
 
-This module defines a small set of resource description dataclasses for 
+This module defines a small set of resource description dataclasses for
 recount3. A description is a validated, immutable-ish bundle of parameters
 (organism, project, etc.) that can deterministically construct the relative
 path to a resource in the repository.
@@ -282,7 +282,7 @@ class R3ResourceDescription:
             subcls: type[R3ResourceDescription],
         ) -> type[R3ResourceDescription]:
             cls._TYPE_REGISTRY[resource_type] = subcls
-            subcls._RESOURCE_TYPE = resource_type  # pylint: disable=protected-access
+            subcls._RESOURCE_TYPE = resource_type
             return subcls
 
         return _decorator
@@ -418,7 +418,8 @@ class R3GeneOrExonCounts(_R3CommonFields, R3ResourceDescription):
     def url_path(self) -> str:
         return (
             f"{self.organism}/data_sources/{self.data_source}/"
-            f"{self.genomic_unit}_sums/{_project_shard(self.project)}/{self.project}/"
+            f"{self.genomic_unit}_sums/"
+            f"{_project_shard(self.project)}/{self.project}/"
             f"{self.data_source}.{self.genomic_unit}_sums.{self.project}."
             f"{self.annotation_extension}.gz"
         )
@@ -439,7 +440,8 @@ class R3JunctionCounts(_R3CommonFields, R3ResourceDescription):
     Duffel layout:
       {organism}/data_sources/{data_source}/junctions/
         {_project_shard(project)}/{project}/
-        {data_source}.junctions.{project}.{junction_type}.{junction_extension}.gz
+        {data_source}.junctions.{project}.{junction_type}.
+        {junction_extension}.gz
     """
 
     def __post_init__(self) -> None:
@@ -505,7 +507,8 @@ class R3BigWig(_R3CommonFields, R3ResourceDescription):
 
     Duffel layout:
       {organism}/data_sources/{data_source}/base_sums/
-        {_project_shard(project)}/{project}/{_sample_shard(sample, data_source)}/
+        {_project_shard(project)}/{project}/
+        {_sample_shard(sample, data_source)}/
         {data_source}.base_sums.{project}_{sample}.ALL.bw
 
     The sample shard subdirectory uses a different offset for GTEx samples

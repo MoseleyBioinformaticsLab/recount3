@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -145,7 +145,7 @@ def _make(resource_type: str, cfg: Config, **kw: object) -> R3Resource:
 
 def _seed(resource: R3Resource, src: Path) -> Path:
     """Copy src to the cache location expected for resource."""
-    dest = resource._cached_path()  # pylint: disable=protected-access
+    dest = resource._cached_path()
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dest)
     return dest
@@ -195,7 +195,7 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
 
     # Simulate another thread creating the file between outer and inner checks.
     class _SeedOnEnter:
-        def __enter__(self) -> _SeedOnEnter:
+        def __enter__(self) -> "_SeedOnEnter":
             cache_p.touch()
             return self
 
@@ -203,9 +203,7 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
             return False
 
     with mock.patch.object(res_module, "_FILE_LOCK", _SeedOnEnter()):
-        with mock.patch(
-            "recount3.resource.download_to_file"
-        ) as mock_dl:
+        with mock.patch("recount3.resource.download_to_file") as mock_dl:
             result = _ensure_cached_url(
                 url=url,
                 cache_root=cfg.cache_dir,
@@ -219,9 +217,7 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
 def test_ensure_cached_url_downloads_missing_file(cfg: Config) -> None:
     """Calls download_to_file when file is absent on both checks."""
     url = "https://example.org/recount3/human/thing3.tsv.gz"
-    with mock.patch(
-        "recount3.resource.download_to_file"
-    ) as mock_dl:
+    with mock.patch("recount3.resource.download_to_file") as mock_dl:
         result = _ensure_cached_url(
             url=url,
             cache_root=cfg.cache_dir,
@@ -289,9 +285,7 @@ def test_read_id_rail_ids_empty_list_raises_load_error(
     mock_df.columns = ["rail_id"]
     mock_df.__getitem__ = mock.Mock(return_value=mock_series)
 
-    with mock.patch(
-        "recount3.resource.pd.read_csv", return_value=mock_df
-    ):
+    with mock.patch("recount3.resource.pd.read_csv", return_value=mock_df):
         with pytest.raises(LoadError, match="has no rail IDs"):
             _read_id_rail_ids(p)
 
@@ -380,9 +374,7 @@ def test_post_init_derives_url_from_description(cfg: Config) -> None:
 
 def test_post_init_preserves_explicit_url(cfg: Config) -> None:
     """An explicitly-provided URL is kept unchanged."""
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     res = R3Resource(
         description=desc,
         url="https://custom.host/file.gz",
@@ -395,13 +387,9 @@ def test_post_init_config_none_calls_default_config(
     tmp_path: Path,
 ) -> None:
     """default_config() is called when config=None in __post_init__."""
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
-    with mock.patch(
-        "recount3.resource.default_config", return_value=fc
-    ):
+    with mock.patch("recount3.resource.default_config", return_value=fc):
         res = R3Resource(description=desc)
     assert res.url is not None
     assert res.url.startswith("https://fallback.org/recount3/")
@@ -429,23 +417,16 @@ def test_arcname_has_no_leading_slash(cfg: Config) -> None:
 def test_cache_root_uses_config(cfg: Config) -> None:
     """_cache_root() returns cfg.cache_dir when config is set."""
     res = _make("data_sources", cfg, organism="human")
-    assert (
-        res._cache_root()  # pylint: disable=protected-access
-        == cfg.cache_dir
-    )
+    assert res._cache_root() == cfg.cache_dir
 
 
 def test_cache_root_calls_default_config(tmp_path: Path) -> None:
     """_cache_root() calls default_config() when config=None."""
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
-    with mock.patch(
-        "recount3.resource.default_config", return_value=fc
-    ):
+    with mock.patch("recount3.resource.default_config", return_value=fc):
         res = R3Resource(description=desc)
-        root = res._cache_root()  # pylint: disable=protected-access
+        root = res._cache_root()
     assert root == tmp_path / "dc"
 
 
@@ -460,7 +441,7 @@ def test_cached_path_filename_contains_url_basename(cfg: Config) -> None:
         project="SRP014565",
         annotation_extension="G026",
     )
-    cp = res._cached_path()  # pylint: disable=protected-access
+    cp = res._cached_path()
     assert "sra.gene_sums.SRP014565.G026.gz" in cp.name
 
 
@@ -473,9 +454,7 @@ def test_ensure_cached_disable_raises(cfg: Config) -> None:
     """_ensure_cached('disable') raises ValueError."""
     res = _make("data_sources", cfg, organism="human")
     with pytest.raises(ValueError, match="disable.*mode"):
-        res._ensure_cached(  # pylint: disable=protected-access
-            mode="disable", chunk_size=1024
-        )
+        res._ensure_cached(mode="disable", chunk_size=1024)
 
 
 def test_ensure_cached_enable_calls_ensure_cached_url(
@@ -487,9 +466,7 @@ def test_ensure_cached_enable_calls_ensure_cached_url(
         "recount3.resource._ensure_cached_url",
         return_value=Path("/fake"),
     ) as mock_ecu:
-        result = res._ensure_cached(  # pylint: disable=protected-access
-            mode="enable", chunk_size=512
-        )
+        result = res._ensure_cached(mode="enable", chunk_size=512)
     mock_ecu.assert_called_once()
     assert result == Path("/fake")
 
@@ -499,12 +476,8 @@ def test_ensure_cached_update_calls_download_to_file(
 ) -> None:
     """_ensure_cached('update') calls download_to_file under the lock."""
     res = _make("data_sources", cfg, organism="human")
-    with mock.patch(
-        "recount3.resource.download_to_file"
-    ) as mock_dl:
-        res._ensure_cached(  # pylint: disable=protected-access
-            mode="update", chunk_size=256
-        )
+    with mock.patch("recount3.resource.download_to_file") as mock_dl:
+        res._ensure_cached(mode="update", chunk_size=256)
     mock_dl.assert_called_once()
     assert mock_dl.call_args.kwargs["chunk_size"] == 256
 
@@ -513,7 +486,7 @@ def test_ensure_cached_unknown_mode_raises(cfg: Config) -> None:
     """_ensure_cached raises ValueError for an unknown mode string."""
     res = _make("data_sources", cfg, organism="human")
     with pytest.raises(ValueError, match="Unknown cache mode"):
-        res._ensure_cached(  # pylint: disable=protected-access
+        res._ensure_cached(
             mode="bogus",  # type: ignore[arg-type]
             chunk_size=1024,
         )
@@ -523,18 +496,12 @@ def test_ensure_cached_config_none_calls_default_config(
     tmp_path: Path,
 ) -> None:
     """_ensure_cached calls default_config() when config=None."""
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
-    with mock.patch(
-        "recount3.resource.default_config", return_value=fc
-    ):
+    with mock.patch("recount3.resource.default_config", return_value=fc):
         res = R3Resource(description=desc)
         with mock.patch("recount3.resource.download_to_file"):
-            res._ensure_cached(  # pylint: disable=protected-access
-                mode="update", chunk_size=512
-            )
+            res._ensure_cached(mode="update", chunk_size=512)
 
 
 # ===========================================================================
@@ -562,15 +529,11 @@ def test_download_cache_disabled_forces_disable_mode(
         cache_dir=cfg.cache_dir,
         cache_disabled=True,
     )
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     res = R3Resource(description=desc, config=disabled_cfg)
     dest_dir = tmp_path / "out"
     dest_dir.mkdir()
-    with mock.patch(
-        "recount3.resource.download_to_file"
-    ) as mock_dl:
+    with mock.patch("recount3.resource.download_to_file") as mock_dl:
         res.download(str(dest_dir))
     mock_dl.assert_called_once()
 
@@ -579,14 +542,10 @@ def test_download_config_none_calls_default_config(
     tmp_path: Path,
 ) -> None:
     """download() calls default_config() when config=None."""
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
     (tmp_path / "out").mkdir()
-    with mock.patch(
-        "recount3.resource.default_config", return_value=fc
-    ):
+    with mock.patch("recount3.resource.default_config", return_value=fc):
         res = R3Resource(description=desc)
         with mock.patch("recount3.resource.download_to_file"):
             with mock.patch("recount3.resource._hardlink_or_copy"):
@@ -672,9 +631,7 @@ def test_download_to_zip_disable_streams_directly(
     """ZIP + disable: calls download_stream_to_zip without caching."""
     res = _make("data_sources", cfg, organism="human")
     zip_path = tmp_path / "out.zip"
-    with mock.patch(
-        "recount3.resource.download_stream_to_zip"
-    ) as mock_ds:
+    with mock.patch("recount3.resource.download_stream_to_zip") as mock_ds:
         result = res.download(str(zip_path), cache_mode="disable")
     mock_ds.assert_called_once()
     assert result is None
@@ -736,9 +693,7 @@ def test_download_to_dir_disable_calls_download_to_file(
     res = _make("data_sources", cfg, organism="human")
     dest_dir = tmp_path / "out"
     dest_dir.mkdir()
-    with mock.patch(
-        "recount3.resource.download_to_file"
-    ) as mock_dl:
+    with mock.patch("recount3.resource.download_to_file") as mock_dl:
         result = res.download(str(dest_dir), cache_mode="disable")
     mock_dl.assert_called_once()
     assert result is not None
@@ -758,9 +713,7 @@ def test_download_to_dir_enable_hardlinks_from_cache(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch(
-            "recount3.resource._hardlink_or_copy"
-        ) as mock_hl:
+        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
             result = res.download(str(dest_dir), cache_mode="enable")
     mock_hl.assert_called_once()
     assert result is not None
@@ -780,9 +733,7 @@ def test_download_to_dir_dest_exists_no_overwrite_returns_early(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch(
-            "recount3.resource._hardlink_or_copy"
-        ) as mock_hl:
+        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
             result = res.download(
                 str(dest_dir), cache_mode="enable", overwrite=False
             )
@@ -804,9 +755,7 @@ def test_download_to_dir_dest_exists_overwrite_relinks(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch(
-            "recount3.resource._hardlink_or_copy"
-        ) as mock_hl:
+        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
             result = res.download(
                 str(dest_dir), cache_mode="enable", overwrite=True
             )
@@ -841,7 +790,7 @@ def test_load_returns_cached_without_force(cfg: Config) -> None:
     """load() returns _cached_data without disk I/O when force=False."""
     res = _make("data_sources", cfg, organism="human")
     sentinel = object()
-    res._cached_data = sentinel  # pylint: disable=protected-access
+    res._cached_data = sentinel
     assert res.load() is sentinel
 
 
@@ -855,7 +804,7 @@ def test_load_force_bypasses_in_memory_cache(cfg: Config) -> None:
         project="SRP014565",
         table_name="recount_qc",
     )
-    res._cached_data = "stale"  # pylint: disable=protected-access
+    res._cached_data = "stale"
     _seed(res, _META_MD_GZ)
     result = res.load(force=True)
     assert isinstance(result, pd.DataFrame)
@@ -1019,9 +968,7 @@ def test_load_exon_counts_uses_exon_id_index(
     assert result.index.name == "exon_id"  # type: ignore
 
 
-def test_load_counts_uses_feature_id_index(
-    cfg: Config, tmp_path: Path
-) -> None:
+def test_load_counts_uses_feature_id_index(cfg: Config, tmp_path: Path) -> None:
     """feature_id is used as index when gene_id and exon_id are absent."""
     p = tmp_path / "feat.tsv.gz"
     df_src = pd.DataFrame({"feature_id": ["f1", "f2"], "SRR001": [5, 15]})
@@ -1123,9 +1070,7 @@ def _make_jxn(cfg: Config, ext: str) -> R3Resource:
     )
 
 
-def _seed_jxn_mm_and_id(
-    res: R3Resource, cfg: Config
-) -> None:
+def _seed_jxn_mm_and_id(res: R3Resource, cfg: Config) -> None:
     """Pre-seed the MM cache file and its ID sidecar."""
     _seed(res, _JXN_MM_GZ)
     id_url = _derive_junction_sidecar_url(res.url or "", "ID")
@@ -1216,9 +1161,7 @@ def test_load_junctions_mm_config_none_calls_default_config(
         junction_type="ALL",
         junction_extension="MM",
     )
-    with mock.patch(
-        "recount3.resource.default_config", return_value=fc
-    ):
+    with mock.patch("recount3.resource.default_config", return_value=fc):
         res = R3Resource(description=desc)
         _seed(res, _JXN_MM_GZ)
         id_url = _derive_junction_sidecar_url(res.url or "", "ID")
@@ -1301,9 +1244,7 @@ def test_load_generic_tsv_gz_returns_dataframe(
         pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_csv(
             fh, sep="\t", index=False
         )
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     res = R3Resource(
         description=desc,
         url="https://example.org/recount3/human/thing.tsv.gz",
@@ -1320,9 +1261,7 @@ def test_load_generic_tsv_returns_dataframe(
     """load() for a plain .tsv URL uses read_table via the generic path."""
     p = tmp_path / "data.tsv"
     pd.DataFrame({"a": [1, 2]}).to_csv(p, sep="\t", index=False)
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     res = R3Resource(
         description=desc,
         url="https://example.org/recount3/human/thing.tsv",
@@ -1339,9 +1278,7 @@ def test_load_generic_unsupported_extension_raises(
     """LoadError for a cached file whose name has an unsupported extension."""
     p = tmp_path / "data.xyz"
     p.write_bytes(b"dummy")
-    desc = R3ResourceDescription(
-        resource_type="data_sources", organism="human"
-    )
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     res = R3Resource(
         description=desc,
         url="https://example.org/recount3/human/thing.xyz",
@@ -1394,9 +1331,7 @@ def test_is_loaded_true_after_load(cfg: Config) -> None:
 
 def test_get_loaded_returns_none_before_load(cfg: Config) -> None:
     """get_loaded() returns None when nothing has been loaded."""
-    assert (
-        _make("data_sources", cfg, organism="human").get_loaded() is None
-    )
+    assert _make("data_sources", cfg, organism="human").get_loaded() is None
 
 
 def test_get_loaded_returns_object_after_load(cfg: Config) -> None:
@@ -1463,7 +1398,7 @@ def test_clear_loaded_sets_none_even_if_close_raises(cfg: Config) -> None:
     mock_bw = mock.MagicMock(spec=BigWigFile)
     mock_bw.close.side_effect = OSError("handle gone")
     res = _make("data_sources", cfg, organism="human")
-    res._cached_data = mock_bw  # pylint: disable=protected-access
+    res._cached_data = mock_bw
     with pytest.raises(OSError, match="handle gone"):
         res.clear_loaded()
     assert not res.is_loaded()

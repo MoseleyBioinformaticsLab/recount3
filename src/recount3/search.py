@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -52,14 +52,17 @@ Tier 2: Discovery helpers
   All are part of the public top-level surface (re-exported from
   :mod:`recount3`):
 
-  * :func:`available_samples`: DataFrame of samples available across data sources
+  * :func:`available_samples`: DataFrame of samples available across data
+    sources
   * :func:`available_projects`: DataFrame of projects with sample counts
-  * :func:`project_homes`: DataFrame mapping projects to their data-source home URLs
+  * :func:`project_homes`: DataFrame mapping projects to their data-source
+    home URLs
   * :func:`samples_for_project`: sample IDs for a specific project
   * :func:`create_sample_project_lists`: build per-data-source sample/project
     lists (backs the ``ids`` CLI command)
   * :func:`annotation_options`: mapping of annotation names to extension codes
-  * :func:`annotation_ext`: resolve a name or code to a canonical extension string
+  * :func:`annotation_ext`: resolve a name or code to a canonical extension
+    string
 
 StringOrIterable and the Cartesian product pattern
   All Tier 1 functions accept :data:`~recount3.types.StringOrIterable` for
@@ -194,7 +197,9 @@ def _make_resources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Build :class:`~recount3.R3Resource` objects from parameter dicts, optionally deduplicating.
+    """Build :class:`~recount3.R3Resource` objects from parameter dicts.
+
+    Optionally deduplicates the result.
 
     Args:
         param_dicts: An iterable of parameter dictionaries, each containing at
@@ -305,8 +310,9 @@ def search_count_files_gene_or_exon(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return :class:`~recount3.R3Resource` objects for per-project gene or exon count matrices.
+    """Return gene/exon count :class:`~recount3.R3Resource` objects.
 
+    Each resource points to a per-project gene or exon count matrix.
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
 
@@ -339,7 +345,8 @@ def search_count_files_gene_or_exon(
                 project="SRP009615",
             )
 
-        Multiple projects: returns one resource per project (Cartesian product)::
+        Multiple projects return one resource per project
+        (Cartesian product)::
 
             resources = search_count_files_gene_or_exon(
                 organism="human",
@@ -369,8 +376,9 @@ def search_count_files_junctions(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return :class:`~recount3.R3Resource` objects for per-project junction count files.
+    """Return junction count :class:`~recount3.R3Resource` objects.
 
+    Each resource points to a per-project junction count file.
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination. Junction
     files are distributed as a triplet of sidecar files sharing a common stem:
@@ -420,8 +428,9 @@ def search_metadata_files(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return :class:`~recount3.R3Resource` objects for per-project metadata tables.
+    """Return project metadata :class:`~recount3.R3Resource` objects.
 
+    Each resource points to a per-project metadata table.
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
 
@@ -461,8 +470,9 @@ def search_bigwig_files(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return :class:`~recount3.R3Resource` objects for per-sample BigWig coverage files.
+    """Return BigWig coverage :class:`~recount3.R3Resource` objects.
 
+    Each resource points to a per-sample BigWig coverage file.
     Constructs the Cartesian product of all provided values and returns one
     :class:`~recount3.resource.R3Resource` per unique combination.
 
@@ -471,7 +481,8 @@ def search_bigwig_files(
         data_source: One or more data-source identifiers
             (e.g. ``"sra"``, ``"gtex"``).
         project: One or more project identifiers (e.g. ``"SRP009615"``).
-        sample: One or more sample identifiers (e.g. a rail_id or SRR accession).
+        sample: One or more sample identifiers (e.g. a rail_id or SRR
+            accession).
         strict: If ``True`` (default), re-raise any exception encountered while
             constructing a resource. If ``False``, silently skip invalid
             combinations.
@@ -498,7 +509,7 @@ def search_data_sources(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return :class:`~recount3.R3Resource` objects for the organism-level data-source index.
+    """Return data-source index :class:`~recount3.R3Resource` objects.
 
     Each resource resolves to the ``homes_index`` file for one organism,
     which lists the available data sources for that organism.
@@ -526,7 +537,7 @@ def search_data_source_metadata(
     strict: bool = True,
     deduplicate: bool = True,
 ) -> list[R3Resource]:
-    """Return :class:`~recount3.R3Resource` objects for data-source-level metadata listings.
+    """Return data-source metadata :class:`~recount3.R3Resource` objects.
 
     Each resource resolves to the ``recount_project`` metadata file for one
     (organism, data_source) pair, which enumerates all projects within that
@@ -582,9 +593,7 @@ def create_sample_project_lists(
         sample_frames: list[pd.DataFrame] = []
         project_frames: list[pd.DataFrame] = []
         for org in sorted(VALID_ORGANISMS):
-            sample_frames.append(
-                available_samples(organism=org, strict=False)
-            )
+            sample_frames.append(available_samples(organism=org, strict=False))
             project_frames.append(
                 available_projects(organism=org, strict=False)
             )
@@ -611,12 +620,7 @@ def create_sample_project_lists(
         ):
             if col in samples_df.columns:
                 sample_ids = sorted(
-                    {
-                        str(x)
-                        for x in samples_df[col]
-                        .dropna()
-                        .astype(str)
-                    }
+                    {str(x) for x in samples_df[col].dropna().astype(str)}
                 )
                 break
 
@@ -624,12 +628,7 @@ def create_sample_project_lists(
     project_ids: list[str] = []
     if not projects_df.empty and "project" in projects_df.columns:
         project_ids = sorted(
-            {
-                str(x)
-                for x in projects_df["project"]
-                .dropna()
-                .astype(str)
-            }
+            {str(x) for x in projects_df["project"].dropna().astype(str)}
         )
 
     return sample_ids, project_ids
@@ -817,8 +816,10 @@ def available_samples(
     samples.columns = [str(c) for c in samples.columns]
 
     if "organism" in samples.columns:
-        samples["organism"] = samples["organism"].astype(str).replace(
-            {"Homo sapiens": "human", "Mus musculus": "mouse"}
+        samples["organism"] = (
+            samples["organism"]
+            .astype(str)
+            .replace({"Homo sapiens": "human", "Mus musculus": "mouse"})
         )
     else:
         samples["organism"] = org
@@ -949,11 +950,7 @@ def available_projects(
         sample_keys = df[key_cols].astype(str).agg("_".join, axis=1)
         counts = sample_keys.value_counts()
 
-        project_keys = (
-            projects[key_cols]
-            .astype(str)
-            .agg("_".join, axis=1)
-        )
+        project_keys = projects[key_cols].astype(str).agg("_".join, axis=1)
         projects["n_samples"] = project_keys.map(counts).astype("Int64")
     else:
         projects["n_samples"] = pd.Series(dtype="Int64")

@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -77,7 +77,8 @@ Note:
     :meth:`~R3Resource.load` returns different types depending on the
     resource type:
 
-    * Gene/exon count resources -> :class:`pandas.DataFrame` (features x samples).
+    * Gene/exon count resources -> :class:`pandas.DataFrame`
+      (features x samples).
     * Junction MM resources -> a sparse-backed :class:`pandas.DataFrame`
       (built via :meth:`pandas.DataFrame.sparse.from_spmatrix`).
     * Junction ID/RR resources -> :class:`pandas.DataFrame`.
@@ -190,7 +191,7 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
             engine="c",
             low_memory=False,
         )
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         df = pd.read_csv(
             id_path,
             compression="infer",
@@ -238,7 +239,9 @@ def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_matrix:
         else:
             mat = scipy.io.mmread(str(mm_path))
     except Exception as exc:
-        raise LoadError(f"Failed to read MatrixMarket from {mm_path.name!r}.") from exc
+        raise LoadError(
+            f"Failed to read MatrixMarket from {mm_path.name!r}."
+        ) from exc
 
     if getattr(mat, "ndim", None) != 2:
         raise LoadError(f"MatrixMarket {mm_path.name!r} is not 2-dimensional.")
@@ -283,7 +286,7 @@ def build_url(
 
 @dataclass(slots=True)
 class R3Resource:
-    """Resource that manages URL resolution, caching, materialization, and loading.
+    """Manage one recount3 file: URL, cache, materialization, loading.
 
     Attributes:
         description: An instance of `R3ResourceDescription` that specifies the
@@ -293,10 +296,11 @@ class R3Resource:
             not explicitly provided during initialization, it is derived by
             joining the configured base URL with the description's relative URL.
         filepath: An optional string representing the absolute local path where
-            the resource was successfully materialized (either copied or linked).
+            the resource was successfully materialized (either copied
+            or linked).
         config: An optional `Config` instance dictating strict network and cache
-            behaviors. If omitted, the global default configuration is dynamically
-            applied.
+            behaviors. If omitted, the global default configuration is
+            dynamically applied.
     """
 
     description: R3ResourceDescription
@@ -304,13 +308,17 @@ class R3Resource:
     filepath: str | None = None
     config: Config | None = None
 
-    _cached_data: object | None = dataclasses.field(default=None, init=False, repr=False)
+    _cached_data: object | None = dataclasses.field(
+        default=None, init=False, repr=False
+    )
 
     def __post_init__(self) -> None:
         """Initialize derived fields after dataclass instantiation."""
         cfg = self.config or default_config()
         if self.url is None:
-            self.url = urllib.parse.urljoin(cfg.base_url, self.description.url_path())
+            self.url = urllib.parse.urljoin(
+                cfg.base_url, self.description.url_path()
+            )
 
     @classmethod
     def from_mapping(
@@ -321,8 +329,9 @@ class R3Resource:
     ) -> R3Resource:
         """Rehydrate an :class:`R3Resource` from a serialized mapping.
 
-        Builds the resource's :class:`~recount3._descriptions.R3ResourceDescription`
-        from the mapping's description fields and returns a configured resource.
+        Builds the resource's
+        :class:`~recount3._descriptions.R3ResourceDescription` from the
+        mapping's description fields and returns a configured resource.
         Derived convenience keys this class emits when serialized (``url``,
         ``arcname``) are ignored; the canonical URL is recomputed from the
         description and configuration.
@@ -366,7 +375,8 @@ class R3Resource:
 
         Returns:
             The fully resolved absolute path indicating exactly where this
-            resource's data persistently resides within the local cache hierarchy.
+            resource's data persistently resides within the local cache
+            hierarchy.
         """
         return _cache_path(self.url or "", self._cache_root())
 
@@ -376,7 +386,7 @@ class R3Resource:
         Args:
             mode: The primary caching strategy to employ. Must be 'enable' to
                 use pre-existing cached files (downloading only if absent),
-                or 'update' to force a fresh network download, overriding 
+                or 'update' to force a fresh network download, overriding
                 any previously existing files.
             chunk_size: The fixed size in bytes utilized for reading and
             writing active network streams.
@@ -437,16 +447,16 @@ class R3Resource:
             path: Target destination. If None, performs a cache-only download.
                 If a directory path, links or copies the file there. If a
                 '.zip' path, injects the file into the archive using `arcname`.
-            cache_mode: Caching behavior. 'enable' uses existing cache, 'disable'
-                streams directly to `path` without caching, 'update' forces a
-                cache refresh before materialization.
+            cache_mode: Caching behavior. 'enable' uses existing cache,
+                'disable' streams directly to `path` without caching, 'update'
+                forces a cache refresh before materialization.
             overwrite: If True, replaces existing files at the destination.
             chunk_size: Byte size for streaming operations. Defaults to the
                 configured chunk size.
 
         Returns:
-            The final file path if materialized to a directory. None if performing
-            a cache-only download or appending to a ZIP archive.
+            The final file path if materialized to a directory. None if
+            performing a cache-only download or appending to a ZIP archive.
 
         Raises:
             ValueError: Combinations are invalid (e.g., path=None with
@@ -491,7 +501,9 @@ class R3Resource:
         is_zip = path_p.suffix.lower() == ".zip"
         is_dir = path_p.suffix == "" or path_p.is_dir()
         if not (is_zip or is_dir):
-            raise ValueError(f"path must be a directory or a .zip file, got: {path!r}")
+            raise ValueError(
+                f"path must be a directory or a .zip file, got: {path!r}"
+            )
 
         # Case 2: .zip archive materialization
         if is_zip:
@@ -510,7 +522,9 @@ class R3Resource:
                 )
                 return None
             cached = self._ensure_cached(mode=cache_mode, chunk_size=cs)
-            write_cached_file_to_zip(cached, path_p, arcname, overwrite=overwrite)
+            write_cached_file_to_zip(
+                cached, path_p, arcname, overwrite=overwrite
+            )
             return None
 
         # Case 3: directory materialization
@@ -541,8 +555,9 @@ class R3Resource:
     def load(self, *, force: bool = False) -> object:
         """Parse the resource into an appropriate in-memory Python object.
 
-        Downloads and caches the resource if missing. Uses the resource description
-        to determine the parsing strategy (e.g., BigWig, tabular counts, junctions).
+        Downloads and caches the resource if missing. Uses the resource
+        description to determine the parsing strategy (e.g., BigWig, tabular
+        counts, junctions).
         Caches the resulting object internally to prevent redundant disk I/O.
 
         Args:
@@ -604,7 +619,7 @@ class R3Resource:
                     engine="c",
                     low_memory=False,
                 )
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
                 df = pd.read_csv(
                     cached,
                     compression="infer",
@@ -633,7 +648,9 @@ class R3Resource:
             return df
 
         if rtype == "count_files_junctions":
-            jxn_ext = str(getattr(self.description, "junction_extension", "MM")).upper()
+            jxn_ext = str(
+                getattr(self.description, "junction_extension", "MM")
+            ).upper()
 
             cfg = self.config or default_config()
             self.download(path=None, cache_mode="enable")
@@ -661,7 +678,9 @@ class R3Resource:
 
                 mat_shape = mat.shape
                 if mat_shape is None:
-                    raise LoadError(f"MatrixMarket {mm_cached.name!r} has undefined shape.")
+                    raise LoadError(
+                        f"MatrixMarket {mm_cached.name!r} has undefined shape."
+                    )
                 if mat_shape[1] != len(rail_ids):
                     raise LoadError(
                         "Junction MM column count does not match ID length: "
@@ -682,7 +701,8 @@ class R3Resource:
                 return obj
 
             raise LoadError(
-                f"Unsupported junction_extension {jxn_ext!r} for {mm_cached.name!r}."
+                f"Unsupported junction_extension {jxn_ext!r} "
+                f"for {mm_cached.name!r}."
             )
 
         self.download(path=None, cache_mode="enable")
@@ -691,15 +711,19 @@ class R3Resource:
             raise FileNotFoundError(str(cached))
 
         name = cached.name.lower()
-        if name.endswith(".tsv") or name.endswith(".tsv.gz") or name.endswith(".md.gz"):
+        if (
+            name.endswith(".tsv")
+            or name.endswith(".tsv.gz")
+            or name.endswith(".md.gz")
+        ):
             obj = pd.read_table(cached, compression="infer")
             self._cached_data = obj
             return obj
 
+        resource_type = getattr(self.description, "resource_type", None)
         raise LoadError(
             "Unsupported load() for resource type "
-            f"{getattr(self.description, 'resource_type', None)!r} "
-            f"with file {cached.name!r}"
+            f"{resource_type!r} with file {cached.name!r}"
         )
 
     def is_loaded(self) -> bool:
@@ -719,7 +743,7 @@ class R3Resource:
         return self._cached_data
 
     def clear_loaded(self) -> None:
-        """Evict the in-memory object cache and close file handles if applicable.
+        """Evict the in-memory cache and close file handles if open.
 
         Does not delete or modify the on-disk file cache.
         """
@@ -733,4 +757,7 @@ class R3Resource:
     def __repr__(self) -> str:
         """Return a string representation of the instance."""
         cls = self.__class__.__name__
-        return f"{cls}(url={self.url!r}, arcname={self.arcname!r}, filepath={self.filepath!r})"
+        return (
+            f"{cls}(url={self.url!r}, arcname={self.arcname!r}, "
+            f"filepath={self.filepath!r})"
+        )

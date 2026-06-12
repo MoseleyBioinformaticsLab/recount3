@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -75,8 +75,8 @@ class BigWigFile:
     for subsequent calls and can be explicitly released with :meth:`close`.
 
     Attributes:
-        path: Filesystem path to a BigWig file (typically ``.bw``). The file must
-          exist when the handle is opened.
+        path: Filesystem path to a BigWig file (typically ``.bw``). The
+          file must exist when the handle is opened.
         mode: File mode passed to ``pyBigWig.open``. Reading is the default
           (``"r"``).
     """
@@ -184,9 +184,10 @@ class BigWigFile:
               return a NumPy array depending on its configuration.
 
         Returns:
-            Values returned by ``pyBigWig.values``. When ``numpy`` is not True, this is
-            typically a ``list[float]``. When ``numpy`` is True, ``pyBigWig`` may
-            return a NumPy array depending on its configuration.
+            Values returned by ``pyBigWig.values``. When ``numpy`` is not
+            True, this is typically a ``list[float]``. When ``numpy`` is
+            True, ``pyBigWig`` may return a NumPy array depending on its
+            configuration.
         """
         bw = self._ensure_open()
         return bw.values(chrom, int(start), int(end), numpy=numpy)
@@ -211,7 +212,8 @@ class BigWigFile:
               computed over the whole chromosome.
             type: Statistic name understood by ``pyBigWig.stats`` (for example,
               ``"mean"``, ``"min"``, ``"max"``, ``"coverage"``).
-            n_bins: If provided, request binned stats via the ``nBins`` argument.
+            n_bins: If provided, request binned stats via the ``nBins``
+              argument.
             exact: If provided, forward to the ``exact`` argument.
 
         Returns:
@@ -246,9 +248,9 @@ class BigWigFile:
               the entire chromosome may be returned.
 
         Returns:
-            Intervals returned by ``pyBigWig.intervals``. This is often a list of
-            ``(start, end, value)`` tuples. ``None`` may be returned when no intervals
-            overlap the requested region.
+            Intervals returned by ``pyBigWig.intervals``. This is often a
+            list of ``(start, end, value)`` tuples. ``None`` may be returned
+            when no intervals overlap the requested region.
         """
         bw = self._ensure_open()
         if start is None or end is None:

@@ -13,8 +13,8 @@
 #   display the following acknowledgement: This product includes software
 #   developed by the copyright holder.
 # * Neither the name of the copyright holder nor the names of its contributors
-#   may be used to endorse or promote products derived from this software without
-#   specific prior written permission.
+#   may be used to endorse or promote products derived from this software
+#   without specific prior written permission.
 # * If the source code is used in a published work, then proper citation of the
 #   source code must be included with the published work.
 #
@@ -124,8 +124,9 @@ def _ensure_unique_columns(
     """Return a copy with unique, non-empty string column names.
 
     Many recount3 metadata tables share column names (for example,
-    ``external_id``) and concatenation can introduce duplicates. :class:`~biocframe.BiocFrame`
-    drops duplicated names, which then breaks downstream validation. This
+    ``external_id``) and concatenation can introduce duplicates.
+    :class:`~biocframe.BiocFrame` drops duplicated names, which then breaks
+    downstream validation. This
     helper ensures that:
 
     * All column names are strings (``None`` becomes an empty string).
@@ -309,7 +310,7 @@ def _choose_alignment_key(
 
 
 def _collapse_rows_by_key(df: pd.DataFrame, *, key: str) -> pd.DataFrame:
-    """Collapse duplicated keys by taking the first non-null value per column."""
+    """Collapse duplicated keys, keeping the first non-null per column."""
     if key not in df.columns:
         return df
 
@@ -388,7 +389,7 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
         pass
 
     try:
-        path = res._cached_path()  # pylint: disable=protected-access
+        path = res._cached_path()
     except Exception as exc:
         raise ValueError(
             f"Cannot resolve cached RR path for: {res.url}"
@@ -502,7 +503,9 @@ def _coerce_gtf_bp_length(
     width = (ends_num - starts_num + 1).astype("Int64")
 
     score_str = (
-        score.astype("string").str.strip().replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
+        score.astype("string")
+        .str.strip()
+        .replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
     )  # pyright: ignore[reportArgumentType]
     score_num = pd.to_numeric(score_str, errors="coerce")
 
@@ -564,8 +567,9 @@ def _align_ranges_to_features(
       `ranges` except for 'feature_id' (which is used as the index).
 
     Raises:
-      ValueError: If required coordinate columns are missing from `ranges`, or if
-        version-stripped matching is ambiguous (conflicting coordinates).
+      ValueError: If required coordinate columns are missing from `ranges`,
+        or if version-stripped matching is ambiguous (conflicting
+        coordinates).
     """
     required = {"feature_id", "seqnames", "starts", "ends", "strand"}
     missing_cols = required - set(ranges.columns)
@@ -599,8 +603,9 @@ def _align_ranges_to_features(
         if conflicting.any():
             bad = list(nunique[conflicting].index[:10])
             raise ValueError(
-                "After stripping Ensembl versions, multiple annotation rows map to "
-                "the same ID but with conflicting coordinates. Example IDs: "
+                "After stripping Ensembl versions, multiple annotation "
+                "rows map to the same ID but with conflicting "
+                "coordinates. Example IDs: "
                 f"{bad!r}"
             )
         ranges_uv = ranges_uv.drop_duplicates(
@@ -647,7 +652,7 @@ def _read_gtf_dataframe(res: resource.R3Resource) -> pd.DataFrame:
       ValueError: If the cached path for the resource cannot be resolved.
     """
     try:
-        path = res._cached_path()  # pylint: disable=protected-access
+        path = res._cached_path()
     except Exception as exc:
         raise ValueError(
             f"Cannot resolve cached GTF path for: {res.url}"
@@ -797,12 +802,12 @@ def _ranges_from_gtf(
 def _peek_gtf_feature_counts(
     res: resource.R3Resource, *, max_lines: int = 50000
 ) -> Counter[str]:
-    """Quickly scan the GTF and count feature types without loading the whole file."""
+    """Scan the GTF and count feature types without loading it fully."""
     try:
-        path = res._cached_path()  # pylint: disable=protected-access
+        path = res._cached_path()
     except Exception:  # pylint: disable=broad-exception-caught
         res.download(path=None, cache_mode="enable")
-        path = res._cached_path()  # pylint: disable=protected-access
+        path = res._cached_path()
 
     opener = gzip.open if str(path).endswith(".gz") else open
     counts: Counter[str] = Counter()
@@ -864,7 +869,8 @@ def _select_gtf_resource_for_unit(
             feats = _peek_gtf_feature_counts(res, max_lines=50000)
             if feats.get(feature_kind, 0) > 0:
                 logging.info(
-                    "Selected annotation resource for %s: %s (peek features=%s)",
+                    "Selected annotation resource for %s: %s "
+                    "(peek features=%s)",
                     genomic_unit,
                     res.description.url_path(),
                     dict(feats.most_common(5)),
@@ -879,7 +885,7 @@ def _select_gtf_resource_for_unit(
 
 
 def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
-    """Construct a :class:`~genomicranges.GenomicRanges` object from a :class:`~pandas.DataFrame`.
+    """Construct a :class:`~genomicranges.GenomicRanges` from a DataFrame.
 
     Args:
       ranges_df: DataFrame with at least ``seqnames``, ``starts``,
@@ -903,14 +909,16 @@ def _construct_summarized_experiment(
     assay_name: str,
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> summarizedexperiment.SummarizedExperiment:
-    """Construct a :class:`~summarizedexperiment.SummarizedExperiment` using the latest BiocPy API.
+    """Construct a :class:`~summarizedexperiment.SummarizedExperiment`.
 
     This function targets the modern `summarizedexperiment.SummarizedExperiment`
     constructor that accepts:
 
       - assays: dict[str, 2D matrix]
-      - row_data: feature metadata (coerced to :class:`~biocframe.BiocFrame` by BiocPy)
-      - column_data: sample metadata (coerced to :class:`~biocframe.BiocFrame` by BiocPy)
+      - row_data: feature metadata (coerced to
+        :class:`~biocframe.BiocFrame` by BiocPy)
+      - column_data: sample metadata (coerced to
+        :class:`~biocframe.BiocFrame` by BiocPy)
       - row_names / column_names: optional but provided explicitly here
       - metadata: optional experiment-level metadata
 
@@ -922,7 +930,7 @@ def _construct_summarized_experiment(
     Args:
       counts_df: Feature-by-sample counts matrix.
       row_df: Feature metadata DataFrame (will be reindexed to counts_df.index).
-      col_df: Sample metadata DataFrame (will be reindexed to counts_df.columns).
+      col_df: Sample metadata DataFrame (reindexed to counts_df.columns).
       assay_name: Name of the assay (e.g. "raw_counts").
       metadata: Optional experiment-level metadata.
 
@@ -1005,14 +1013,15 @@ def _construct_ranged_summarized_experiment(
     assay_name: str,
     metadata: Optional[Mapping[str, Any]] = None,
 ) -> summarizedexperiment.RangedSummarizedExperiment:
-    """Construct a :class:`~summarizedexperiment.RangedSummarizedExperiment` using the latest BiocPy API.
+    """Construct a :class:`~summarizedexperiment.RangedSummarizedExperiment`.
 
     This targets the modern `summarizedexperiment.RangedSummarizedExperiment`
     constructor with kwargs:
 
       - assays: dict[str, 2D matrix]
       - row_ranges: :class:`~genomicranges.GenomicRanges`
-      - row_data / column_data: pandas DataFrames (coerced to :class:`~biocframe.BiocFrame` by BiocPy)
+      - row_data / column_data: pandas DataFrames (coerced to
+        :class:`~biocframe.BiocFrame` by BiocPy)
       - row_names / column_names: provided explicitly for stability
       - metadata: optional experiment metadata
 
@@ -1025,8 +1034,9 @@ def _construct_ranged_summarized_experiment(
       counts_df: Feature-by-sample counts matrix.
       row_df: Feature metadata (reindexed to counts_df.index).
       col_df: Sample metadata (reindexed to counts_df.columns).
-      ranges_df: DataFrame with at least ["seqnames", "starts", "ends", "strand"].
-        Must have the same number/order of rows as counts_df.
+      ranges_df: DataFrame with at least
+        ["seqnames", "starts", "ends", "strand"]. Must have the same
+        number/order of rows as counts_df.
       assay_name: Name of the assay (e.g. "raw_counts").
       metadata: Optional experiment-level metadata.
 
@@ -1992,9 +2002,9 @@ class R3ResourceBundle:
         """Return a wide counts DataFrame for the requested feature family.
 
         This is a bundle-scoped helper used by the
-        :class:`~summarizedexperiment.SummarizedExperiment` builders. It enforces
-        appropriate compatibility within the
-        gene/exon family or the junctions family.
+        :class:`~summarizedexperiment.SummarizedExperiment` builders. It
+        enforces appropriate compatibility within the gene/exon family or
+        the junctions family.
 
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
@@ -2120,7 +2130,11 @@ class R3ResourceBundle:
                 file_source_col = col
                 break
         if file_source_col is not None:
-            first_source = out[file_source_col].dropna().iloc[0] if not out[file_source_col].dropna().empty else None
+            first_source = (
+                out[file_source_col].dropna().iloc[0]
+                if not out[file_source_col].dropna().empty
+                else None
+            )
             if first_source and isinstance(first_source, str):
                 resolved = first_source.strip().rstrip("/").rsplit("/", 1)[-1]
                 if resolved:
@@ -2133,13 +2147,15 @@ class R3ResourceBundle:
                 urls.append(None)
                 continue
             try:
-                urls.append(resource.build_url(
-                    "bigwig_files",
-                    organism=organism,
-                    data_source=data_source,
-                    project=project,
-                    sample=ext_id_str,
-                ))
+                urls.append(
+                    resource.build_url(
+                        "bigwig_files",
+                        organism=organism,
+                        data_source=data_source,
+                        project=project,
+                        sample=ext_id_str,
+                    )
+                )
             except Exception:  # pylint: disable=broad-except
                 urls.append(None)
 
@@ -2271,7 +2287,7 @@ class R3ResourceBundle:
                 annotation_extension=annotation_extension,
             )
 
-        counts_df = working._stack_counts_for(  # pylint: disable=protected-access
+        counts_df = working._stack_counts_for(
             genomic_unit=genomic_unit,
             join_policy=join_policy,
             autoload=autoload,
@@ -2297,8 +2313,9 @@ class R3ResourceBundle:
         row_names = original_feature_ids
         if dup_count:
             logging.warning(
-                "Counts contain %d duplicate feature IDs; generating unique row_names "
-                "and preserving originals in row_data['feature_id'].",
+                "Counts contain %d duplicate feature IDs; generating "
+                "unique row_names and preserving originals in "
+                "row_data['feature_id'].",
                 dup_count,
             )
             row_names = _make_unique_names(original_feature_ids)
@@ -2373,7 +2390,7 @@ class R3ResourceBundle:
         last_ranges_error: Exception | None = None
 
         working = self
-        counts_df = working._stack_counts_for(  # pylint: disable=protected-access
+        counts_df = working._stack_counts_for(
             genomic_unit=genomic_unit,
             join_policy=join_policy,
             autoload=autoload,
@@ -2399,8 +2416,9 @@ class R3ResourceBundle:
         row_names = original_feature_ids
         if dup_count:
             logging.warning(
-                "Counts contain %d duplicate feature IDs; generating unique row_names "
-                "and preserving originals in row_data['feature_id'].",
+                "Counts contain %d duplicate feature IDs; generating "
+                "unique row_names and preserving originals in "
+                "row_data['feature_id'].",
                 dup_count,
             )
             row_names = _make_unique_names(original_feature_ids)
@@ -2450,10 +2468,13 @@ class R3ResourceBundle:
                             if m
                         ][:10]
                         raise ValueError(
-                            "Annotation does not contain ranges for some feature IDs present in "
-                            "the counts matrix. Example missing feature_ids: "
-                            f"{missing_ids}. This usually indicates an annotation mismatch; try "
-                            "setting annotation_extension to match the counts resource."
+                            "Annotation does not contain ranges for some "
+                            "feature IDs present in the counts matrix. "
+                            "Example missing feature_ids: "
+                            f"{missing_ids}. This usually indicates an "
+                            "annotation mismatch; try setting "
+                            "annotation_extension to match the counts "
+                            "resource."
                         )
 
                     ranges_df = idxed[
@@ -2541,7 +2562,8 @@ class R3ResourceBundle:
 
                 if len(std) != n_features:
                     raise ValueError(
-                        f"RR row count {len(std)} != MM feature count {n_features}; cannot build junction ranges."
+                        f"RR row count {len(std)} != MM feature count "
+                        f"{n_features}; cannot build junction ranges."
                     )
 
                 id_candidates = ("junction_id", "jxn_id", "jid", "id", "name")
@@ -2581,7 +2603,8 @@ class R3ResourceBundle:
 
             except Exception as exc:  # pylint: disable=broad-except
                 logging.warning(
-                    "Falling back: failed to derive junction ranges from RR (reason: %r).",
+                    "Falling back: failed to derive junction ranges from "
+                    "RR (reason: %r).",
                     exc,
                 )
                 last_ranges_error = exc
@@ -2661,9 +2684,7 @@ class R3ResourceBundle:
             return
 
         workers = min(max_workers, len(resources))
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=workers
-        ) as pool:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [
                 pool.submit(
                     res.download,
