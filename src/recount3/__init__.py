@@ -71,10 +71,10 @@ Note:
       required for :func:`create_rse`,
       :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`,
       and the compute utilities in :mod:`recount3.se`.
-      Install with ``pip install biocframe summarizedexperiment genomicranges``.
-    * pyBigWig: required for BigWig file access via
+      Install with ``pip install "recount3[biocpy]"``.
+    * ``pyBigWig``: required for BigWig file access via
       :class:`~recount3._bigwig.BigWigFile`. Install with
-      ``pip install pyBigWig``.
+      ``pip install "recount3[bigwig]"``.
 """
 
 from __future__ import annotations
