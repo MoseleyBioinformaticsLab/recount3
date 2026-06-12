@@ -23,26 +23,24 @@ recount3
 
 |
 
-The ``recount3`` package is a Python library and command-line tool for
-interacting with the `recount3`_ data repository, a uniformly processed
-collection of RNA-seq studies covering human and mouse samples from SRA,
-GTEx, and TCGA.
+``recount3`` is a typed Python library and command-line tool for the `recount3`_
+data repository, a uniformly processed collection of RNA-seq studies spanning
+tens of thousands of human and mouse samples from SRA, GTEx, and TCGA. It
+discovers, downloads, and assembles recount3 resources into analysis-ready
+objects. These resources include gene, exon, and junction count matrices,
+sample metadata, genome annotations, and BigWig coverage files.
 
-The package provides a typed API for discovering, downloading, and assembling
-recount3 resources into analysis-ready objects.  A companion CLI implements a
-discover -> manifest -> materialize workflow suitable for use in scripts and
-pipelines.
+The package provides two interfaces:
 
-The ``recount3`` package can be used in two ways:
-
-   * As a Python library for searching, downloading, and assembling
-     recount3 gene/exon/junction count matrices, sample metadata, genome
-     annotations, and BigWig coverage files into
-     ``SummarizedExperiment`` / ``RangedSummarizedExperiment`` objects via
-     the BiocPy stack.
-   * As a command-line tool (``recount3``) to search the mirror, produce
-     JSONL manifests, and materialize resources to disk or into a ``.zip``
-     archive.
+* A Python library that assembles count matrices, sample metadata, and
+  genomic coordinates into BiocPy ``SummarizedExperiment`` and
+  ``RangedSummarizedExperiment`` objects, with recount3-compatible scaling and
+  normalization utilities (approximate read counts, AUC- and
+  mapped-reads-based scaling, and TPM).
+* A command-line tool (``recount3``) that implements a
+  discover -> manifest -> materialize workflow for scripts and pipelines. It
+  emits JSONL/TSV manifests and materializes resources to a directory or a
+  ``.zip`` archive with parallel downloads.
 
 
 Links
@@ -58,57 +56,46 @@ Installation
 ~~~~~~~~~~~~
 
 The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy.  Optional extras unlock BiocPy integration and BigWig support.
-
-Install on Linux, Mac OS X
---------------------------
+and SciPy. Two optional extras enable additional features:
 
 .. code:: bash
 
-   python3 -m pip install recount3
+   python3 -m pip install recount3                   # core
+   python3 -m pip install "recount3[biocpy]"         # + SummarizedExperiment builders
+   python3 -m pip install "recount3[bigwig]"         # + BigWig coverage access
+   python3 -m pip install "recount3[biocpy,bigwig]"  # everything
 
-Install on Windows
-------------------
+* ``biocpy`` (``biocframe``, ``genomicranges``, ``summarizedexperiment``) is
+  required for ``create_rse`` and every helper that returns or operates on a
+  BiocPy object.
+* ``bigwig`` (``pyBigWig``) is required only for BigWig coverage access.
 
-.. code:: bash
+On Windows, substitute ``py -3 -m pip install ...``. Upgrade an existing
+installation with ``python3 -m pip install --upgrade recount3``.
 
-   py -3 -m pip install recount3
+**Note:** The optional extras have platform constraints. The ``bigwig`` extra
+can be difficult or impossible to install on Windows and macOS. The ``biocpy``
+extra can be difficult or impossible to install on Windows. The core package and
+the command-line workflow do not depend on either extra and work on all
+supported platforms.
 
-Optional extras
----------------
 
-Install with BiocPy support (``SummarizedExperiment``, ``RangedSummarizedExperiment``,
-``GenomicRanges``):
+The three-layer API
+~~~~~~~~~~~~~~~~~~~~~
 
-.. code:: bash
+``recount3`` exposes the same workflow at three levels of abstraction, so a
+single project can be assembled in one call while multi-project or custom
+workflows retain full control:
 
-   python3 -m pip install "recount3[biocpy]"
+* **High level.** ``create_rse()`` builds one project into a
+  ``RangedSummarizedExperiment`` and performs discovery, downloading, metadata
+  merging, and range assembly in a single call.
+* **Mid level.** ``R3ResourceBundle`` is a filterable container of resources
+  for combining multiple projects, selecting subsets, and stacking matrices.
+* **Low level.** ``R3Resource`` represents a single file and manages its URL,
+  cache entry, and parser.
 
-Install with BigWig support (``pybigwig``):
-
-.. code:: bash
-
-   python3 -m pip install "recount3[bigwig]"
-
-Install all optional extras:
-
-.. code:: bash
-
-   python3 -m pip install "recount3[biocpy,bigwig]"
-
-Upgrade on Linux, Mac OS X
----------------------------
-
-.. code:: bash
-
-   python3 -m pip install recount3 --upgrade
-
-Upgrade on Windows
-------------------
-
-.. code:: bash
-
-   py -3 -m pip install recount3 --upgrade
+See the Tutorial_ for a complete walkthrough.
 
 
 Quickstart
@@ -117,30 +104,47 @@ Quickstart
 Python API
 ----------
 
-Discover all resources for a project, stack the gene-level count matrices
-across samples, and build a ``RangedSummarizedExperiment``:
+Assemble a project into a ``RangedSummarizedExperiment`` (requires the
+``recount3[biocpy]`` extra):
+
+.. code:: python
+
+   >>> from recount3 import create_rse
+   >>>
+   >>> rse = create_rse(
+   ...     project="SRP009615",
+   ...     organism="human",
+   ...     annotation_label="gencode_v26",
+   ... )
+   >>> rse.shape
+   (63856, 12)
+
+For multi-project or custom workflows, use the bundle layer to filter
+resources and stack matrices directly:
 
 .. code:: python
 
    >>> from recount3 import R3ResourceBundle
    >>>
-   >>> # Discover every resource for a human SRA project.
    >>> bundle = R3ResourceBundle.discover(
    ...     organism="human",
    ...     data_source="sra",
    ...     project="SRP009615",
    ... )
+   >>> print(f"Found {len(bundle.resources)} resources.")
+   Found 10 resources.
    >>>
-   >>> # Stack raw gene-count matrices across all samples.
-   >>> counts = bundle.only_counts().stack_count_matrices(genomic_unit="gene")
-   >>>
-   >>> # Build a RangedSummarizedExperiment (requires recount3[biocpy]).
-   >>> rse = bundle.to_ranged_summarized_experiment(genomic_unit="gene")
+   >>> gene_counts = bundle.filter(
+   ...     resource_type="count_files_gene_or_exon",
+   ...     genomic_unit="gene",
+   ... ).stack_count_matrices(compat="feature")
+   >>> gene_counts.shape
+   (63856, 12)
 
 Command-line tool
 -----------------
 
-Discover resources, save a JSONL manifest, and download in parallel:
+Discover resources, write a JSONL manifest, and download in parallel:
 
 .. code:: bash
 
@@ -152,7 +156,8 @@ Discover resources, save a JSONL manifest, and download in parallel:
    # Materialize all resources from the manifest (8 parallel jobs).
    recount3 download --from=manifest.jsonl --dest=./downloads --jobs=8
 
-Stream search output directly into download without an intermediate file:
+Because both subcommands operate on JSONL via standard streams, search and
+download compose into a single pipeline without an intermediate file:
 
 .. code:: bash
 
@@ -161,8 +166,35 @@ Stream search output directly into download without an intermediate file:
        --format=jsonl | \
    recount3 download --from=- --dest=./annotations
 
-.. note:: Read the full documentation on Pages_ for the complete API reference,
-          CLI guide, and worked examples.
+The ``bundle`` subcommands assemble analysis-ready outputs without a Python
+session. Supported outputs are a stacked count matrix (TSV, gzip-compressed
+TSV, or Parquet) and a pickled ``SummarizedExperiment`` or
+``RangedSummarizedExperiment``:
+
+.. code:: bash
+
+   recount3 bundle rse --from=manifest.jsonl --genomic-unit=gene --out=rse.pkl
+
+**Note:** Read the full documentation on Pages_ for the complete API reference,
+the CLI guide, and worked examples.
+
+
+Data mirrors
+~~~~~~~~~~~~
+
+recount3 publishes the same relative file layout on several interchangeable
+public mirrors. ``recount3`` targets this layout rather than any single host, so
+selecting a different mirror requires only a change to the base URL (the
+``RECOUNT3_URL`` environment variable, the ``--base-url`` CLI flag, or the
+``base_url`` field of ``recount3.config.Config``):
+
+==============================  =======================================================
+Mirror                          Base URL
+==============================  =======================================================
+Duffel load balancer (default)  ``http://duffel.rail.bio/recount3/``
+AWS Open Data                   ``https://recount-opendata.s3.amazonaws.com/recount3/release/``
+JHU IDIES (Dataverse)           ``https://data.idies.jhu.edu/recount3/data/``
+==============================  =======================================================
 
 
 Dependencies
@@ -192,7 +224,7 @@ Optional: BigWig support (``recount3[bigwig]``):
 
 
 Questions, Feature Requests, and Bug Reports
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Please submit questions, feature requests, and bug reports on Issues_.
 
@@ -208,5 +240,6 @@ This package is distributed under the BSD_ license.
 .. _GitHub: https://github.com/MoseleyBioinformaticsLab/recount3
 .. _PyPI: https://pypi.org/project/recount3
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/
+.. _Tutorial: https://moseleybioinformaticslab.github.io/recount3/tutorial.html
 .. _Issues: https://github.com/MoseleyBioinformaticsLab/recount3/issues
 .. _BSD: https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE
