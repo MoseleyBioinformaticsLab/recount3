@@ -38,7 +38,7 @@ GTFs, BigWig coverage files, junction counts) is represented as an
 
 1. Description -> URL: a :class:`~recount3._descriptions.R3ResourceDescription`
    provides the structured parameters (organism, project, genomic unit, …) that
-   are used to construct the deterministic duffel-mirror URL.
+   are used to construct the deterministic recount3 mirror URL.
 2. URL -> cache: :meth:`~R3Resource.download` fetches the file over HTTP
    and stores it in a persistent on-disk cache keyed by URL hash.
 3. Cache -> materialization: the cached file can be hard-linked or copied

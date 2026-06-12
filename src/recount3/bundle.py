@@ -47,8 +47,8 @@ are ``None`` to avoid misrepresenting the identity.
 
 Filtering with FieldSpec
   :meth:`~R3ResourceBundle.filter` accepts a
-  :data:`~recount3.types.FieldSpec` for each description field. Three
-  forms are accepted:
+  :data:`~recount3.types.FieldSpec` for each description field. The
+  following forms are accepted:
 
   * A string: exact match (e.g. ``genomic_unit="gene"``).
   * An iterable of strings: keep if the field is any of the given values.
@@ -82,7 +82,7 @@ Note:
     require the BiocPy package ``summarizedexperiment``, which might be
     difficult to install on Windows. Install with::
 
-        pip install summarizedexperiment
+        pip install "recount3[biocpy]"
 """
 
 from __future__ import annotations
@@ -1286,10 +1286,9 @@ class R3ResourceBundle:
     ) -> R3ResourceBundle:
         """Discover resources for one or more projects and return a bundle.
 
-        This is a generalized version of
-        :meth:`recount3.project.R3Project.discover`. It can operate on a
-        single ``(organism, data_source, project)`` triple or on the
-        Cartesian product of multiple values for each identifier.
+        It can operate on a single ``(organism, data_source, project)``
+        triple or on the Cartesian product of multiple values for each
+        identifier.
 
         When discovery spans more than one project, the returned bundle
         will contain resources from all projects and the bundle-level
@@ -1721,16 +1720,14 @@ class R3ResourceBundle:
     def counts(self) -> R3ResourceBundle:
         """Return a sub-bundle containing only count-file resources.
 
-        This is a convenience alias for :meth:`only_counts` maintained
-        for API continuity with :class:`recount3.project.R3Project`.
+        This is a convenience alias for :meth:`only_counts`.
         """
         return self.only_counts()
 
     def metadata(self) -> R3ResourceBundle:
         """Return a sub-bundle containing only metadata resources.
 
-        This is a convenience alias for :meth:`only_metadata` maintained
-        for compatibility with :class:`recount3.project.R3Project`.
+        This is a convenience alias for :meth:`only_metadata`.
         """
         return self.only_metadata()
 
@@ -1898,7 +1895,8 @@ class R3ResourceBundle:
                     genomic_unit="gene",
                 ).stack_count_matrices()
 
-            Require identical feature sets (faster; fails if annotations differ)::
+            Require an identical feature space; fails if gene and exon are
+            mixed (the annotation build is not constrained)::
 
                 df = bundle.filter(
                     resource_type="count_files_gene_or_exon"
@@ -2079,8 +2077,8 @@ class R3ResourceBundle:
         """Add a ``BigWigURL`` column to sample metadata.
 
         For each sample (identified by ``external_id`` in ``col_df``), this
-        method constructs the duffel URL for its BigWig coverage file by
-        inspecting the bundle's count resources to infer ``organism``,
+        method constructs the recount3 mirror URL for its BigWig coverage file
+        by inspecting the bundle's count resources to infer ``organism``,
         ``data_source``, and ``project``.
 
         This matches the R reference behavior in ``create_rse_manual()``

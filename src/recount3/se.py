@@ -67,15 +67,15 @@ Typical usage example::
       organism="human",
       annotation_label="gencode_v26",
   )
-  sf = compute_scale_factors(rse)
-  scaled = transform_counts(rse, scale_factors=sf)
+  sf = compute_scale_factors(rse)            # per-sample factors (for inspection)
+  scaled = transform_counts(rse, by="auc")   # apply scaling to the count matrix
 
 Note:
     Most functions in this module require BiocPy packages
     (``biocframe``, ``summarizedexperiment``, ``genomicranges``).
     Install them with::
 
-        pip install summarizedexperiment
+        pip install "recount3[biocpy]"
 """
 
 from __future__ import annotations
@@ -695,10 +695,11 @@ def compute_read_counts(
       preserved when available.
 
     Raises:
-      ValueError: If `rse` is not a :class:`~summarizedexperiment.RangedSummarizedExperiment`, if the
-        "raw_counts" assay is missing, if `avg_mapped_read_length_column` is missing
-        from `col_data`, or if the assay and metadata dimensions do not align.
-      TypeError: If `round_to_integers` is not a bool.
+      TypeError: If `rse` is not a :class:`~summarizedexperiment.RangedSummarizedExperiment`,
+        or if `round_to_integers` is not a bool.
+      ValueError: If the "raw_counts" assay is missing, if
+        `avg_mapped_read_length_column` is missing from `col_data`, or if the
+        assay and metadata dimensions do not align.
     """
     ranged_summarized_experiment_cls = (
         _utils.get_ranged_summarizedexperiment_class()
@@ -978,8 +979,8 @@ def compute_scale_factors(
     Examples:
         AUC-based scaling (default)::
 
-            sf = compute_scale_factors(rse)
-            scaled = transform_counts(rse, scale_factors=sf)
+            sf = compute_scale_factors(rse)            # inspect per-sample factors
+            scaled = transform_counts(rse, by="auc")   # apply scaling to the matrix
 
         Mapped-reads-based scaling::
 

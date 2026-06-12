@@ -853,11 +853,11 @@ def _resolve_metadata_column(
 
 _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
     {
-        "biocframe": "pip install biocframe genomicranges summarizedexperiment",
-        "genomicranges": "pip install biocframe genomicranges summarizedexperiment",
-        "summarizedexperiment": "pip install biocframe genomicranges summarizedexperiment",
+        "biocframe": 'pip install "recount3[biocpy]"',
+        "genomicranges": 'pip install "recount3[biocpy]"',
+        "summarizedexperiment": 'pip install "recount3[biocpy]"',
         "pyBigWig": (
-            "pip install pyBigWig\n"
+            'pip install "recount3[bigwig]"\n'
             "  conda install -c conda-forge -c bioconda pybigwig"
         ),
     }
@@ -908,7 +908,7 @@ def _format_optional_dependency_import_failure(
         exc: The underlying exception raised during import.
 
     Returns:
-        A detailed message suitable for raising as a :exc:`~recount3.errors.CompatibilityError`.
+        A detailed message suitable for raising as an :exc:`ImportError`.
     """
     return (
         f"Optional dependency {module_name!r} could not be imported.\n"

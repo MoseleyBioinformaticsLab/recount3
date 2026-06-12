@@ -46,170 +46,159 @@ Use ``recount3`` to:
 
 Quick start
 -----------
-Discover a handful of gene-level count files, save a manifest, and download:
+Discover a handful of gene-level count files, save a manifest, and download::
 
-  $ recount3 search gene-exon \\
-        organism=human data_source=sra genomic_unit=gene project=SRP012345 \\
+    recount3 search gene-exon \\
+        organism=human data_source=sra genomic_unit=gene project=SRP009615 \\
         --format=jsonl > manifest.jsonl
 
-  $ recount3 download --from=manifest.jsonl --dest=./downloads --jobs=8
+    recount3 download --from=manifest.jsonl --dest=./downloads --jobs=8
 
-Or stream directly, without an intermediate file:
+Or stream directly, without an intermediate file::
 
-  $ recount3 search annotations \\
+    recount3 search annotations \\
         organism=human genomic_unit=gene annotation_extension=G026 \\
         --format=jsonl | \\
         recount3 download --from=- --dest=./annots
 
 Commands
 --------
-ids
-  Emit unique ID lists. By default prints to stdout.
+::
 
-  Flags:
-    --organism=human|mouse|""   Empty means all organisms.
-    --samples-out=<file>        Write samples to plain text file (else stdout).
-    --projects-out=<file>       Write projects to plain text file (else stdout).
+    ids
+      Emit unique ID lists. By default prints to stdout.
 
-search
-  Discover resources and print a manifest (JSONL or TSV). Filters are passed
-  as space-separated key=value tokens.
+      Flags:
+        --organism=human|mouse|""   Empty means all organisms.
+        --samples-out=<file>        Write samples to a text file (else stdout).
+        --projects-out=<file>       Write projects to a text file (else stdout).
 
-  Output:
-    By default results are written to stdout (pipe-friendly). Use
-    ``--output <file>`` to write a specific file, or ``--outdir <dir>`` to
-    create a timestamped filename in that directory.  
+    search
+      Discover resources and print a manifest (JSONL or TSV). Filters are passed
+      as space-separated key=value tokens.
 
-  Modes and required filters:
-    annotations   organism, genomic_unit, annotation_extension
-    gene-exon     organism, data_source, genomic_unit, project
+      Output:
+        By default results are written to stdout (pipe-friendly). Use
+        --output <file> to write a specific file, or --outdir <dir> to
+        create a timestamped filename in that directory.
 
-                  (optional: annotation_extension; default G026)
+      Modes and required filters:
+        annotations   organism, genomic_unit, annotation_extension
+        gene-exon     organism, data_source, genomic_unit, project
+                      (optional: annotation_extension; default G026)
+        junctions     organism, data_source, project
+                      (optional: junction_type=ALL, junction_extension=MM)
+        metadata      organism, data_source, table_name, project
+        bigwig        organism, data_source, project, sample
+        project       organism, data_source, project
+                      (optional: genomic_unit=gene,exon;
+                      annotation=default|all|gencode_v26,gencode_v29
+                        Human-readable name or convenience alias.
+                        'default' -> primary annotation (G026 for
+                        human, M023 for mouse). 'all' -> every
+                        available annotation. A comma list of
+                        names (e.g. gencode_v26) or raw extension
+                        codes (e.g. G026) also works.
+                      annotation_extension=G026,G029
+                        Raw annotation file-extension codes. When
+                        set, overrides 'annotation' completely.
+                        Use this when you already know the exact
+                        code(s) you need.
+                      junction_type=ALL;
+                      junction_extension=MM,RR,ID;
+                      include_metadata=true|false;
+                      include_bigwig=true|false)
+        sources       organism
+        source-meta   organism, data_source
 
-    junctions     organism, data_source, project
+      Example:
+        recount3 search junctions \\
+            organism=human data_source=sra project=SRP009615 \\
+            junction_type=ALL junction_extension=MM --format=tsv
 
-                  (optional: junction_type=ALL, junction_extension=MM)
+    download
+      Materialize resources from a manifest file or one inline JSON object.
+      Writes one JSONL progress event per resource to stdout.
 
-    metadata      organism, data_source, table_name, project
-    bigwig        organism, data_source, project, sample
-    project       organism, data_source, project
+      Source:
+        --from=<path>|-       Read JSONL manifest from file or stdin ('-').
+        --inline='<json>'     One JSON object for a single resource.
 
-                  (optional: genomic_unit=gene,exon;
-                  annotation=default|all|gencode_v26,gencode_v29
-                    Human-readable name or convenience alias.
-                    'default' → primary annotation (G026 for
-                    human, M023 for mouse). 'all' → every
-                    available annotation. A comma list of
-                    names (e.g. gencode_v26) or raw extension
-                    codes (e.g. G026) also works.
-                  annotation_extension=G026,G029
-                    Raw annotation file-extension codes. When
-                    set, overrides 'annotation' completely.
-                    Use this when you already know the exact
-                    code(s) you need.
-                  junction_type=ALL;
-                  junction_extension=MM,RR,ID;
-                  include_metadata=true|false;
-                  include_bigwig=true|false)
+      Destination:
+        --dest=<dir-or-zip>   Directory or .zip file path.
+        --overwrite           Overwrite existing files (dir mode only).
 
-    sources       organism
-    source-meta   organism, data_source
+      Behavior:
+        --jobs=<n>            Max parallel downloads (default 8).
+        --cache=MODE          Cache behavior (default: enable). MODE is one of:
+                              enable - use cache; disable - bypass cache;
+                              update - force re-download then cache.
 
-  Example:
-    $ recount3 search junctions \\
-          organism=human data_source=sra project=SRP000000 \\
-          junction_type=ALL junction_extension=MM --format=tsv
+    bundle stack-counts
+      Concatenate compatible count matrices (gene/exon or junctions).
 
-download
-  Materialize resources from a manifest file or one inline JSON object.
-  Writes one JSONL progress event per resource to stdout.
+      Required:
+        --from=<manifest>     JSONL manifest (or '-' for stdin).
+        --out=<path>          Output file (.csv, .tsv, .tsv.gz, or .parquet).
 
-  Source:
-    --from=<path>|-      Read JSONL manifest from file or stdin ('-').
-    --inline='<json>'     One JSON object for a single resource.
+      Options:
+        --compat=family|feature    Compatibility mode (default: family).
+        --join=inner|outer         Pandas join type (default: inner).
+        --axis=0|1                 Concatenate rows (0) or columns (1).
+        --verify-integrity         Fail on duplicate index after concat.
 
-  Destination:
-    --dest=<dir-or-zip>   Directory or .zip file path.
-    --overwrite           Overwrite existing files (dir mode only).
+    smoke-test
+      Download a few tiny files to verify connectivity and configuration.
 
-  Behavior:
-    --jobs=<n>            Max parallel downloads (default 8).
-    --cache=MODE          Cache behavior (default: enable). MODE is one of:
-                          enable - use cache; disable - bypass cache;
-                          update - force re-download then cache.
-
-bundle stack-counts
-  Concatenate compatible count matrices (gene/exon or junctions).
-
-  Required:
-    --from=<manifest>     JSONL manifest (or '-' for stdin).
-    --out=<path>          Output file (.csv, .tsv, .tsv.gz, or .parquet).
-
-  Options:
-    --compat=family|feature    Compatibility mode (default: family).
-    --join=inner|outer         Pandas join type (default: inner).
-    --axis=0|1                 Concatenate rows (0) or columns (1).
-    --verify-integrity         Fail on duplicate index after concat.
-
-smoke-test
-  Download a few tiny files to verify connectivity and configuration.
-
-  Options:
-    --dest=<dir>          Destination directory (default ./recount3-smoke).
-    --limit=<n>           Number of resources to attempt (default 1).
+      Options:
+        --dest=<dir>          Destination directory (default ./recount3-smoke).
+        --limit=<n>           Number of resources to attempt (default 1).
 
 Input and output formats
 ------------------------
-JSONL (a.k.a. NDJSON)
-  One JSON object per line. Great for streaming, grepping, and piping.
+**JSONL** (a.k.a. NDJSON) -- one JSON object per line; ideal for streaming,
+grepping, and piping. Used for both ``search`` output and ``download`` input.
 
-  * Search output / Download input (manifest):
-    Each line contains all resource description fields plus two convenience
-    keys:
+Each manifest line contains all resource description fields plus two
+convenience keys: ``url`` (the fully qualified HTTP URL) and ``arcname`` (the
+destination path inside a ``.zip`` archive). For example (one record, wrapped
+for readability)::
 
-      - ``url``: the fully qualified HTTP URL.
-      - ``arcname``: the destination path inside a .zip archive.
+    {"resource_type":"count_files_gene_or_exon","organism":"human",
+     "data_source":"sra","genomic_unit":"gene","project":"SRP009615",
+     "sample":null,"annotation_extension":"G026","junction_type":null,
+     "junction_extension":null,"table_name":null,
+     "url":".../sra/gene_sums/15/SRP009615/sra.gene_sums.SRP009615.G026.gz",
+     "arcname":"human/data_sources/sra/gene_sums/15/SRP009615/sra.gene_sums.SRP009615.G026.gz"}
 
-    Example (one line, wrapped for readability):
+``download`` writes one progress event per resource to stdout::
 
-      {"resource_type":"gene_exon_counts",
-       "organism":"human","data_source":"sra","genomic_unit":"gene",
-       "project":"SRP012345","sample":"SRR999000","table_name":"gene",
-       "url":"https://.../gene/SRR999000.gz",
-       "arcname":"gene/SRR999000.gz"}
+    {"url":"...","status":"ok","dest":"/path/to/file"}
+    {"url":"...","status":"skipped","dest":"/existing/file"}
+    {"url":"...","status":"error","dest":null,"error":"<repr>"}
 
-  * Download progress events (stdout):
-    One event per resource:
-
-      {"url":"...","status":"ok","dest":"/path/to/file"}
-      {"url":"...","status":"skipped","dest":"/existing/file"}
-      {"url":"...","status":"error","dest":null,"error":"<repr>"}
-
-TSV
-  Tab-separated text for quick human scanning or spreadsheet import. TSV is
-  available for ``search --format=tsv`` only; ``download`` expects JSONL.
+**TSV** -- tab-separated text for quick human scanning or spreadsheet import.
+TSV is available for ``search --format=tsv`` only; ``download`` expects JSONL.
 
 Configuration
 -------------
-Configuration is centralized in :class:`Config`. Values come from:
+Configuration is centralized in :class:`Config`. Values come from, in order of
+decreasing precedence: CLI flags, environment variables, then library defaults.
+The relevant environment variables are::
 
-  1) CLI flags (highest precedence)
-  2) Environment variables
-  3) Library defaults (lowest precedence)
+    RECOUNT3_URL               Base URL (trailing slash added automatically)
+    RECOUNT3_CACHE_DIR         Directory for the on-disk cache
+    RECOUNT3_CACHE_DISABLE     "1" disables cache, anything else enables
+    RECOUNT3_HTTP_TIMEOUT      HTTP timeout in seconds (int)
+    RECOUNT3_MAX_RETRIES       Max retry attempts for transient errors (int)
+    RECOUNT3_INSECURE_SSL      "1" to disable TLS verification (unsafe; https
+                               base URLs only, no-op for the default http mirror)
+    RECOUNT3_USER_AGENT        Custom HTTP User-Agent string
+    RECOUNT3_CHUNK_SIZE        Streaming chunk size in bytes
 
-Relevant environment variables (if set):
-  RECOUNT3_URL               Base URL (trailing slash added automatically)
-  RECOUNT3_CACHE_DIR         Directory for on-disk cache
-  RECOUNT3_CACHE_DISABLE     "1" disables cache, anything else enables
-  RECOUNT3_HTTP_TIMEOUT      HTTP timeout in seconds (int)
-  RECOUNT3_MAX_RETRIES       Max retry attempts for transient errors (int)
-  RECOUNT3_INSECURE_SSL      "1" to disable TLS verification (unsafe; https
-                             base URLs only, no-op for the default http mirror)
-  RECOUNT3_USER_AGENT        Custom HTTP User-Agent string
-
-Global flags mirror these settings:
-  --base-url, --cache-dir, --timeout, --retries, --insecure-ssl,
-  --user-agent, --chunk-size
+Global flags mirror these settings: ``--base-url``, ``--cache-dir``,
+``--timeout``, ``--retries``, ``--insecure-ssl``, ``--user-agent``,
+``--chunk-size``.
 
 Logging
 -------
@@ -219,12 +208,14 @@ Google guide, and include greppable context (e.g., ``url=...``, ``dest=...``).
 
 Exit codes
 ----------
-  0  Success
-  1  Malformed ``--inline`` JSON in ``download``
-  2  Fatal error (missing filters, I/O failures, bad configuration;
-     also argparse validation errors such as unrecognized flags)
-  3  Partial failure in ``download`` (some items failed)
-  130  Interrupted (Ctrl-C)
+::
+
+    0    Success
+    1    Malformed --inline JSON in download
+    2    Fatal error (missing filters, I/O failures, bad configuration; also
+         argparse validation errors such as unrecognized flags)
+    3    Partial failure in download (some items failed)
+    130  Interrupted (Ctrl-C)
 
 Security and safety
 -------------------
@@ -245,21 +236,19 @@ Performance tips
 
 Example recipes
 ---------------
-List human SRA data sources, then download their metadata:
+List human SRA data sources, then download their metadata::
 
-  $ recount3 search sources organism=human --format=jsonl > sources.jsonl
-  $ recount3 search source-meta organism=human data_source=sra --format=jsonl \\
-        > meta.jsonl
+    recount3 search sources organism=human --format=jsonl > sources.jsonl
+    recount3 search source-meta organism=human data_source=sra \\
+        --format=jsonl > meta.jsonl
+    recount3 download --from=meta.jsonl --dest=./meta
 
-  $ recount3 download --from=meta.jsonl --dest=./meta
+Stack gene-level matrices across samples and write Parquet::
 
-Stack gene-level matrices across samples and write Parquet:
-
-  $ recount3 search gene-exon \\
-        organism=human data_source=sra genomic_unit=gene project=SRP012345 \\
+    recount3 search gene-exon \\
+        organism=human data_source=sra genomic_unit=gene project=SRP009615 \\
         --format=jsonl > counts.jsonl
-
-  $ recount3 bundle stack-counts --from=counts.jsonl --compat=family \\
+    recount3 bundle stack-counts --from=counts.jsonl --compat=family \\
         --join=inner --axis=1 --out=counts.parquet
 
 Troubleshooting

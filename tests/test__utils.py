@@ -1422,7 +1422,7 @@ def test_format_optional_dep_error_known_module() -> None:
         "biocframe"
     )
     assert "biocframe" in msg
-    assert "pip install biocframe" in msg
+    assert 'pip install "recount3[biocpy]"' in msg
     assert "Original import error" not in msg
 
 
