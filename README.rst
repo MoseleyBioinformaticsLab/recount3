@@ -3,7 +3,7 @@ recount3
 
 .. image:: https://img.shields.io/pypi/l/recount3.svg
    :target: https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE
-   :alt: Clear BSD License with extra clauses
+   :alt: The Clear BSD License with Extra Clause
 
 .. image:: https://img.shields.io/pypi/v/recount3.svg
    :target: https://pypi.org/project/recount3
@@ -232,7 +232,8 @@ Please submit questions, feature requests, and bug reports on Issues_.
 License
 ~~~~~~~
 
-This package is distributed under the BSD_ license.
+This package is distributed under `The Clear BSD License with Extra Clause
+<https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE>`_.
 
 
 .. _recount3: https://rna.recount.bio
@@ -242,4 +243,3 @@ This package is distributed under the BSD_ license.
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/
 .. _Tutorial: https://moseleybioinformaticslab.github.io/recount3/tutorial.html
 .. _Issues: https://github.com/MoseleyBioinformaticsLab/recount3/issues
-.. _BSD: https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE
