@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recount3"
 dynamic = ["version"]
-description = "CLI and API for searching, manifesting, and downloading recount3 resources."
+description = "API and CLI to discover, download, and assemble recount3 resources."
 dependencies = [
   "numpy>=2.0,<3.0",
   "pandas>=2.2,<3.0",
@@ -56,6 +56,7 @@ Homepage = "https://github.com/MoseleyBioinformaticsLab/recount3"
 Repository = "https://github.com/MoseleyBioinformaticsLab/recount3"
 Issues = "https://github.com/MoseleyBioinformaticsLab/recount3/issues"
 Documentation = "https://moseleybioinformaticslab.github.io/recount3/"
+Changelog = "https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/CHANGELOG.rst"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -92,12 +93,14 @@ dev = [
   "pylint>=3.2,<4",
   "build>=1.2",
   "twine>=5",
-  "commitizen>=3.29",
 ]
 
 all = [
   "recount3[bigwig,biocpy,docs,dev]"
 ]
+
+[tool.black]
+line-length = 80
 
 [tool.pytest.ini_options]
 minversion = "8.0"
@@ -116,11 +119,3 @@ exclude_lines = [
   "pragma: no cover",
   "if __name__ == .__main__.:",
 ]
-
-[tool.commitizen]
-name = "cz_conventional_commits"
-version = "1.0.0"
-version_files = ["src/recount3/version.py:__version__"]
-tag_format = "v$version"
-changelog_file = "CHANGELOG.rst"
-update_changelog_on_bump = true

@@ -44,7 +44,7 @@ def test_version_is_string() -> None:
 
 def test_version_matches_expected_value() -> None:
     """The pinned version value should match the package source."""
-    assert recount3.version.__version__ == "1.0.0"
+    assert recount3.version.__version__ == "1.1.0"
 
 
 def test_version_is_semver_like() -> None:
