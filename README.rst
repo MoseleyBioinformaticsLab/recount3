@@ -236,6 +236,22 @@ This package is distributed under `The Clear BSD License with Extra Clause
 <https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE>`_.
 
 
+Citation
+~~~~~~~~
+
+When using the ``recount3`` Python package in published work, please cite:
+
+* Alexander Alsalihi, Robert M Flight, and Hunter N.B. Moseley. “The recount3
+  Python package for programmatic access to uniformly processed RNA-seq data.”
+  *bioRxiv* (2026). doi: `10.64898/2026.06.17.732943`_
+
+If your work uses the recount3 data resource, please also cite the original
+recount3 publication:
+
+* Wilks, C., Zheng, S.C., Chen, F.Y. et al. “recount3: summaries and queries
+  for large-scale RNA-seq expression and splicing.” *Genome Biology* 22, 323
+  (2021). doi: `10.1186/s13059-021-02533-6`_
+
 .. _recount3: https://rna.recount.bio
 .. _BiocPy: https://github.com/BiocPy
 .. _GitHub: https://github.com/MoseleyBioinformaticsLab/recount3
@@ -243,3 +259,5 @@ This package is distributed under `The Clear BSD License with Extra Clause
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/
 .. _Tutorial: https://moseleybioinformaticslab.github.io/recount3/tutorial.html
 .. _Issues: https://github.com/MoseleyBioinformaticsLab/recount3/issues
+.. _10.64898/2026.06.17.732943: https://doi.org/10.64898/2026.06.17.732943
+.. _10.1186/s13059-021-02533-6: https://doi.org/10.1186/s13059-021-02533-6
