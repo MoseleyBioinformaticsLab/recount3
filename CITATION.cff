@@ -1,7 +1,8 @@
 cff-version: 1.2.0
 message: >
-  If you use this software, please cite the preprint below.
-  This file will be updated when a peer-reviewed version is available.
+  If you use this software, please cite the preprint (see preferred-citation).
+  If you use recount3 data, please also cite the original recount3 publication (see references).
+  This file will be updated when a peer-reviewed version of the package paper is available.
 authors:
   - family-names: "Alsalihi"
     given-names: "Alexander"
@@ -33,3 +34,44 @@ preferred-citation:
   journal: "bioRxiv"
   month: 6
   year: 2026
+references:
+  - type: article
+    authors:
+      - family-names: "Wilks"
+        given-names: "Christopher"
+      - family-names: "Zheng"
+        given-names: "Shijie"
+      - family-names: "Chen"
+        given-names: "Feng Yong"
+      - family-names: "Charles"
+        given-names: "Rone"
+      - family-names: "Solomon"
+        given-names: "Brad"
+      - family-names: "Ling"
+        given-names: "Jonathan"
+      - family-names: "Imada"
+        given-names: "Eddie Luidy"
+      - family-names: "Zhang"
+        given-names: "David"
+      - family-names: "Joseph"
+        given-names: "Lance"
+      - family-names: "Leek"
+        given-names: "Jeffrey"
+      - family-names: "Jaffe"
+        given-names: "Andrew"
+      - family-names: "Nellore"
+        given-names: "Abhinav"
+      - family-names: "Collado-Torres"
+        given-names: "Leonardo"
+      - family-names: "Hansen"
+        given-names: "Kasper"
+      - family-names: "Langmead"
+        given-names: "Ben"
+        orcid: "https://orcid.org/0000-0003-2437-1976"
+    title: "recount3: summaries and queries for large-scale RNA-seq expression and splicing"
+    journal: "Genome Biology"
+    volume: 22
+    article-number: 323
+    month: 11
+    year: 2021
+    doi: "10.1186/s13059-021-02533-6"
