@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: >
+  If you use this software, please cite the preprint below.
+  This file will be updated when a peer-reviewed version is available.
+authors:
+  - family-names: "Alsalihi"
+    given-names: "Alexander"
+    orcid: "https://orcid.org/0009-0003-3715-9779"
+  - family-names: "Flight"
+    given-names: "Robert"
+    orcid: "https://orcid.org/0000-0001-8141-7788"
+  - family-names: "Moseley"
+    given-names: "Hunter"
+    orcid: "https://orcid.org/0000-0003-3995-5368"
+title: "recount3"
+version: 1.2.0
+date-released: 2026-06-12
+url: "https://github.com/MoseleyBioinformaticsLab/recount3"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Alsalihi"
+      given-names: "Alexander"
+      orcid: "https://orcid.org/0009-0003-3715-9779"
+    - family-names: "Flight"
+      given-names: "Robert"
+      orcid: "https://orcid.org/0000-0001-8141-7788"
+    - family-names: "Moseley"
+      given-names: "Hunter"
+      orcid: "https://orcid.org/0000-0003-3995-5368"
+  title: "The recount3 Python package for programmatic access to uniformly processed RNA-seq data"
+  doi: "10.64898/2026.06.17.732943"
+  journal: "bioRxiv"
+  month: 6
+  year: 2026
