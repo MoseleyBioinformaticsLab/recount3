@@ -1,6 +1,23 @@
 Changelog
 =========
 
+Unreleased
+----------
+
+Changed
+~~~~~~~
+
+- MatrixMarket junction files are now parsed into a ``scipy.sparse.csr_array``
+  instead of a ``scipy.sparse.csr_matrix``. SciPy 1.18 deprecated the implicit
+  sparse-matrix return of ``scipy.io.mmread`` ahead of flipping the default in
+  SciPy 1.20; ``recount3`` now requests the new behaviour explicitly where the
+  installed SciPy supports it and normalises the result, so the parsed type is
+  identical across the whole supported SciPy range. The keyword is
+  feature-detected, keeping SciPy releases older than 1.18 (the newest
+  installable on Python 3.10 and 3.11) working unchanged.
+- Deprecation warnings originating in ``recount3`` modules now fail the test
+  suite, so upstream deprecations surface before they become breaking changes.
+
 1.1.0 (2026-06-12)
 ------------------
 

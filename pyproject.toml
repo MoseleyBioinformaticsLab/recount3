@@ -107,6 +107,10 @@ minversion = "8.0"
 addopts = "-ra"
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+  "error::DeprecationWarning:recount3.*",
+  "error::PendingDeprecationWarning:recount3.*",
+]
 
 [tool.coverage.run]
 branch = true

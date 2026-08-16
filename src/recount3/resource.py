@@ -89,6 +89,7 @@ from __future__ import annotations
 
 import dataclasses
 import gzip
+import inspect
 import threading
 import urllib.parse
 from collections.abc import Mapping
@@ -116,6 +117,31 @@ from recount3.errors import LoadError
 from recount3.types import CacheMode
 
 _FILE_LOCK = threading.Lock()
+
+
+def _detect_mmread_kwargs() -> dict[str, Any]:
+    """Build the version-appropriate keyword arguments for ``scipy.io.mmread``.
+
+    SciPy 1.18 added an ``spmatrix`` keyword to :func:`scipy.io.mmread` and
+    warns whenever it is omitted, because the default flips from ``True``
+    (return ``coo_matrix``) to ``False`` (return ``coo_array``) in SciPy 1.20.
+    The keyword does not exist on older SciPy releases, and this package
+    supports Python 3.10 and 3.11, where the newest installable SciPy predates
+    1.18. Passing it unconditionally would therefore raise ``TypeError`` on
+    those interpreters, so support is detected once at import time.
+
+    Returns:
+        ``{"spmatrix": False}`` when the running SciPy understands the keyword,
+        otherwise an empty mapping.
+    """
+    try:
+        params = inspect.signature(scipy.io.mmread).parameters
+    except (TypeError, ValueError):  # pragma: no cover (exotic)
+        return {}
+    return {"spmatrix": False} if "spmatrix" in params else {}
+
+
+_MMREAD_KWARGS = _detect_mmread_kwargs()
 
 
 def _ensure_cached_url(
@@ -216,16 +242,21 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
     return rail_ids
 
 
-def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_matrix:
-    """Read a MatrixMarket file into a SciPy CSR sparse matrix.
+def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_array:
+    """Read a MatrixMarket file into a SciPy CSR sparse array.
+
+    The parsed object is always normalised to a :class:`scipy.sparse.csr_array`
+    so that the return type stays identical across the supported SciPy range,
+    regardless of whether the installed SciPy hands back a sparse matrix or a
+    sparse array from :func:`scipy.io.mmread`.
 
     Args:
         mm_path: The local file system path pointing to the MatrixMarket
             file (typically ending in .MM or .MM.gz).
 
     Returns:
-        A 2-dimensional sparse matrix accurately representing the data parsed
-        from the file, formatted as a SciPy CSR matrix.
+        A 2-dimensional sparse array accurately representing the data parsed
+        from the file, formatted as a SciPy CSR array.
 
     Raises:
         LoadError: If the file cannot be opened, fails to parse as a valid
@@ -235,9 +266,9 @@ def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_matrix:
     try:
         if mm_path.suffix.lower() == ".gz":
             with gzip.open(mm_path, "rb") as fh:
-                mat = scipy.io.mmread(fh)
+                mat = scipy.io.mmread(fh, **_MMREAD_KWARGS)
         else:
-            mat = scipy.io.mmread(str(mm_path))
+            mat = scipy.io.mmread(str(mm_path), **_MMREAD_KWARGS)
     except Exception as exc:
         raise LoadError(
             f"Failed to read MatrixMarket from {mm_path.name!r}."
@@ -245,7 +276,7 @@ def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_matrix:
 
     if getattr(mat, "ndim", None) != 2:
         raise LoadError(f"MatrixMarket {mm_path.name!r} is not 2-dimensional.")
-    return scipy.sparse.csr_matrix(mat)
+    return scipy.sparse.csr_array(mat)
 
 
 def build_url(

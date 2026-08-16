@@ -34,7 +34,9 @@
 from __future__ import annotations
 
 import gzip
+import inspect
 import shutil
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -51,6 +53,7 @@ from recount3.config import Config
 from recount3.errors import LoadError
 from recount3.resource import (
     R3Resource,
+    _detect_mmread_kwargs,
     _ensure_cached_url,
     _read_id_rail_ids,
     _read_mm_matrix,
@@ -320,9 +323,9 @@ def test_read_id_rail_ids_python_engine_fallback(tmp_path: Path) -> None:
 
 
 def test_read_mm_matrix_gz_file() -> None:
-    """Reads a .MM.gz file into a CSR sparse matrix."""
+    """Reads a .MM.gz file into a CSR sparse array."""
     mat = _read_mm_matrix(_JXN_MM_GZ)
-    assert isinstance(mat, scipy.sparse.csr_matrix)
+    assert isinstance(mat, scipy.sparse.csr_array)
     assert mat.ndim == 2
 
 
@@ -333,8 +336,43 @@ def test_read_mm_matrix_plain_file(tmp_path: Path) -> None:
     mm_file = tmp_path / "test.mtx"
     scipy.io.mmwrite(str(mm_file), scipy.sparse.eye(4, k=1, format="coo"))
     mat = _read_mm_matrix(mm_file)
-    assert isinstance(mat, scipy.sparse.csr_matrix)
+    assert isinstance(mat, scipy.sparse.csr_array)
     assert mat.shape == (4, 4)
+
+
+def test_read_mm_matrix_emits_no_deprecation_warning() -> None:
+    """Reading a MatrixMarket file is free of SciPy deprecation warnings."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        mat = _read_mm_matrix(_JXN_MM_GZ)
+    assert isinstance(mat, scipy.sparse.csr_array)
+
+
+def test_read_mm_matrix_without_spmatrix_support(tmp_path: Path) -> None:
+    """Older SciPy releases lack ``spmatrix=`` and must still be supported."""
+    mm_file = tmp_path / "legacy.mtx"
+    scipy.io.mmwrite(str(mm_file), scipy.sparse.eye(3, format="coo"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        with mock.patch.object(res_module, "_MMREAD_KWARGS", {}):
+            mat = _read_mm_matrix(mm_file)
+    assert isinstance(mat, scipy.sparse.csr_array)
+    assert mat.shape == (3, 3)
+
+
+def test_detect_mmread_kwargs_matches_installed_scipy() -> None:
+    """Keyword detection agrees with the installed SciPy signature."""
+    supported = "spmatrix" in inspect.signature(scipy.io.mmread).parameters
+    expected = {"spmatrix": False} if supported else {}
+    assert _detect_mmread_kwargs() == expected
+
+
+def test_detect_mmread_kwargs_handles_unintrospectable_mmread() -> None:
+    """Detection degrades to no keywords when the signature is unavailable."""
+    with mock.patch.object(
+        inspect, "signature", side_effect=ValueError("no signature")
+    ):
+        assert _detect_mmread_kwargs() == {}
 
 
 def test_read_mm_matrix_bad_file_raises_load_error(tmp_path: Path) -> None:
