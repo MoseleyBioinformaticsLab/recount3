@@ -1102,6 +1102,45 @@ def test_download_stream_to_zip_tmp_unlink_error_swallowed(
         assert zf.read("gene.gz") == content
 
 
+def test_download_stream_to_zip_tmp_already_removed_on_success(
+    tmp_path: Path,
+) -> None:
+    """Cleanup is a no-op when the temp file is gone after successful write."""
+    zip_path = tmp_path / "out.zip"
+    content = _GTF_GZ.read_bytes()
+    real_write = _utils._write_or_replace_in_zip
+
+    def _write_then_remove_source(
+        zp: Path, source: Path, arc: str, ow: bool
+    ) -> None:
+        real_write(zp, source, arc, ow)
+        source.unlink()
+
+    with mock.patch(
+        "recount3._utils.http_open",
+        return_value=io.BytesIO(content),
+    ):
+        with mock.patch(
+            "recount3._utils._write_or_replace_in_zip",
+            side_effect=_write_then_remove_source,
+        ):
+            _utils.download_stream_to_zip(
+                "http://example.com/f.gz",
+                zip_path,
+                "gene.gz",
+                chunk_size=512,
+                overwrite=False,
+                timeout=30,
+                insecure_ssl=False,
+                user_agent="test",
+                attempts=1,
+            )
+
+    assert list(tmp_path.glob(".r3_dl_*.tmp")) == []
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        assert zf.read("gene.gz") == content
+
+
 def test_download_stream_to_zip_invalid_zip_on_disk_raises(
     tmp_path: Path,
 ) -> None:
