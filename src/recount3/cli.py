@@ -1307,106 +1307,114 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             )
 
     found: list[R3Resource]
-    if mode == "annotations":
-        _require("organism", "genomic_unit", "annotation_extension")
-        found = r3_search.search_annotations(
-            organism=filters["organism"],
-            genomic_unit=filters["genomic_unit"],
-            annotation_extension=filters["annotation_extension"],
-        )
+    match mode:
+        case "annotations":
+            _require("organism", "genomic_unit", "annotation_extension")
+            found = r3_search.search_annotations(
+                organism=filters["organism"],
+                genomic_unit=filters["genomic_unit"],
+                annotation_extension=filters["annotation_extension"],
+            )
 
-    elif mode == "gene-exon":
-        _require("organism", "data_source", "genomic_unit", "project")
-        ann_ext = filters.get("annotation_extension", ("G026",))
-        found = r3_search.search_count_files_gene_or_exon(
-            organism=filters["organism"],
-            data_source=filters["data_source"],
-            genomic_unit=filters["genomic_unit"],
-            project=filters["project"],
-            annotation_extension=ann_ext,
-        )
+        case "gene-exon":
+            _require("organism", "data_source", "genomic_unit", "project")
+            ann_ext = filters.get("annotation_extension", ("G026",))
+            found = r3_search.search_count_files_gene_or_exon(
+                organism=filters["organism"],
+                data_source=filters["data_source"],
+                genomic_unit=filters["genomic_unit"],
+                project=filters["project"],
+                annotation_extension=ann_ext,
+            )
 
-    elif mode == "junctions":
-        _require("organism", "data_source", "project")
-        found = r3_search.search_count_files_junctions(
-            organism=filters["organism"],
-            data_source=filters["data_source"],
-            project=filters["project"],
-            junction_type=filters.get("junction_type", "ALL"),
-            junction_extension=filters.get("junction_extension", "MM"),
-        )
+        case "junctions":
+            _require("organism", "data_source", "project")
+            found = r3_search.search_count_files_junctions(
+                organism=filters["organism"],
+                data_source=filters["data_source"],
+                project=filters["project"],
+                junction_type=filters.get("junction_type", "ALL"),
+                junction_extension=filters.get("junction_extension", "MM"),
+            )
 
-    elif mode == "metadata":
-        _require("organism", "data_source", "table_name", "project")
-        found = r3_search.search_metadata_files(
-            organism=filters["organism"],
-            data_source=filters["data_source"],
-            table_name=filters["table_name"],
-            project=filters["project"],
-        )
+        case "metadata":
+            _require("organism", "data_source", "table_name", "project")
+            found = r3_search.search_metadata_files(
+                organism=filters["organism"],
+                data_source=filters["data_source"],
+                table_name=filters["table_name"],
+                project=filters["project"],
+            )
 
-    elif mode == "bigwig":
-        _require("organism", "data_source", "project", "sample")
-        found = r3_search.search_bigwig_files(
-            organism=filters["organism"],
-            data_source=filters["data_source"],
-            project=filters["project"],
-            sample=filters["sample"],
-        )
+        case "bigwig":
+            _require("organism", "data_source", "project", "sample")
+            found = r3_search.search_bigwig_files(
+                organism=filters["organism"],
+                data_source=filters["data_source"],
+                project=filters["project"],
+                sample=filters["sample"],
+            )
 
-    elif mode == "project":
-        _require("organism", "data_source", "project")
+        case "project":
+            _require("organism", "data_source", "project")
 
-        def _as_bool(s: str | None, default: bool = False) -> bool:
-            if s is None:
-                return default
-            return s.lower() in ("1", "true", "t", "yes", "y", "on")
+            def _as_bool(s: str | None, default: bool = False) -> bool:
+                if s is None:
+                    return default
+                return s.lower() in ("1", "true", "t", "yes", "y", "on")
 
-        def _csv_or_default(
-            s: str | None, default: tuple[str, ...]
-        ) -> tuple[str, ...]:
-            if not s:
-                return default
-            return tuple(p.strip() for p in s.split(",") if p.strip())
+            def _csv_or_default(
+                s: str | None, default: tuple[str, ...]
+            ) -> tuple[str, ...]:
+                if not s:
+                    return default
+                return tuple(p.strip() for p in s.split(",") if p.strip())
 
-        gu = _csv_or_default(filters.get("genomic_unit"), ("gene", "exon"))
-        # 'annotation' is a human-readable name or alias ("default",
-        # "all", "gencode_v26", or a raw code like "G026").
-        # 'annotation_extension' is the raw file-extension code
-        # (e.g. "G026").  When both are provided the explicit
-        # extension wins, mirroring the library's two-tier API
-        # (see search._resolve_annotation_exts).
-        annotations = filters.get("annotation", "default")
-        ann_ext = _csv_or_default(filters.get("annotation_extension"), tuple())
-        jext = _csv_or_default(filters.get("junction_extension"), ("MM",))
-        jtype = filters.get("junction_type", "ALL")
-        inc_meta = _as_bool(filters.get("include_metadata"), True)
-        inc_bw = _as_bool(filters.get("include_bigwig"), False)
+            gu = _csv_or_default(
+                filters.get("genomic_unit"), ("gene", "exon")
+            )
+            # 'annotation' is a human-readable name or alias ("default",
+            # "all", "gencode_v26", or a raw code like "G026").
+            # 'annotation_extension' is the raw file-extension code
+            # (e.g. "G026").  When both are provided the explicit
+            # extension wins, mirroring the library's two-tier API
+            # (see search._resolve_annotation_exts).
+            annotations = filters.get("annotation", "default")
+            ann_ext = _csv_or_default(
+                filters.get("annotation_extension"), tuple()
+            )
+            jext = _csv_or_default(
+                filters.get("junction_extension"), ("MM",)
+            )
+            jtype = filters.get("junction_type", "ALL")
+            inc_meta = _as_bool(filters.get("include_metadata"), True)
+            inc_bw = _as_bool(filters.get("include_bigwig"), False)
 
-        found = r3_search.search_project_all(
-            organism=filters["organism"],
-            data_source=filters["data_source"],
-            project=filters["project"],
-            genomic_units=gu,
-            annotations=ann_ext if ann_ext else annotations,
-            junction_type=jtype,
-            junction_extension=jext,
-            include_metadata=inc_meta,
-            include_bigwig=inc_bw,
-        )
+            found = r3_search.search_project_all(
+                organism=filters["organism"],
+                data_source=filters["data_source"],
+                project=filters["project"],
+                genomic_units=gu,
+                annotations=ann_ext if ann_ext else annotations,
+                junction_type=jtype,
+                junction_extension=jext,
+                include_metadata=inc_meta,
+                include_bigwig=inc_bw,
+            )
 
-    elif mode == "sources":
-        _require("organism")
-        found = r3_search.search_data_sources(organism=filters["organism"])
+        case "sources":
+            _require("organism")
+            found = r3_search.search_data_sources(organism=filters["organism"])
 
-    elif mode == "source-meta":
-        _require("organism", "data_source")
-        found = r3_search.search_data_source_metadata(
-            organism=filters["organism"], data_source=filters["data_source"]
-        )
+        case "source-meta":
+            _require("organism", "data_source")
+            found = r3_search.search_data_source_metadata(
+                organism=filters["organism"],
+                data_source=filters["data_source"],
+            )
 
-    else:
-        raise ValueError(f"Unknown search mode: {mode!r}")
+        case _:
+            raise ValueError(f"Unknown search mode: {mode!r}")
 
     configured = [dataclasses.replace(r, config=cfg) for r in found]
 
@@ -1762,23 +1770,29 @@ def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
     Raises:
       ValueError: If the command is unknown (should not happen with argparse).
     """
-    if args.command == "ids":
-        return _cmd_ids(args, cfg)
-    if args.command == "search":
-        return _cmd_search(args, cfg)
-    if args.command == "download":
-        return _cmd_download(args, cfg)
-    if args.command == "bundle":
-        if args.bundle_cmd == "stack-counts":
-            return _cmd_bundle_stack_counts(args, cfg)
-        if args.bundle_cmd == "se":
-            return _cmd_bundle_se(args, cfg)
-        if args.bundle_cmd == "rse":
-            return _cmd_bundle_rse(args, cfg)
-        raise ValueError(f"Unknown bundle subcommand: {args.bundle_cmd!r}")
-    if args.command == "smoke-test":
-        return _cmd_smoke_test(args, cfg)
-    raise ValueError(f"Unknown command: {args.command!r}")
+    match args.command:
+        case "ids":
+            return _cmd_ids(args, cfg)
+        case "search":
+            return _cmd_search(args, cfg)
+        case "download":
+            return _cmd_download(args, cfg)
+        case "bundle":
+            match args.bundle_cmd:
+                case "stack-counts":
+                    return _cmd_bundle_stack_counts(args, cfg)
+                case "se":
+                    return _cmd_bundle_se(args, cfg)
+                case "rse":
+                    return _cmd_bundle_rse(args, cfg)
+                case _:
+                    raise ValueError(
+                        f"Unknown bundle subcommand: {args.bundle_cmd!r}"
+                    )
+        case "smoke-test":
+            return _cmd_smoke_test(args, cfg)
+        case _:
+            raise ValueError(f"Unknown command: {args.command!r}")
 
 
 def main(argv: list[str] | None = None) -> None:

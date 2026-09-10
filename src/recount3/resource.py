@@ -434,31 +434,30 @@ class R3Resource:
         """
         cfg = self.config or default_config()
         cache_path = self._cached_path()
-        if mode == "disable":
-            raise ValueError("Cache is not used in 'disable' mode")
-
-        if mode == "enable":
-            return _ensure_cached_url(
-                url=self.url or "",
-                cache_root=self._cache_root(),
-                cfg=cfg,
-                chunk_size=chunk_size,
-            )
-
-        if mode == "update":
-            with _FILE_LOCK:
-                download_to_file(
-                    self.url or "",
-                    cache_path,
+        match mode:
+            case "disable":
+                raise ValueError("Cache is not used in 'disable' mode")
+            case "enable":
+                return _ensure_cached_url(
+                    url=self.url or "",
+                    cache_root=self._cache_root(),
+                    cfg=cfg,
                     chunk_size=chunk_size,
-                    timeout=cfg.timeout,
-                    insecure_ssl=cfg.insecure_ssl,
-                    user_agent=cfg.user_agent,
-                    attempts=cfg.max_retries,
                 )
-            return cache_path
-
-        raise ValueError(f"Unknown cache mode: {mode!r}")
+            case "update":
+                with _FILE_LOCK:
+                    download_to_file(
+                        self.url or "",
+                        cache_path,
+                        chunk_size=chunk_size,
+                        timeout=cfg.timeout,
+                        insecure_ssl=cfg.insecure_ssl,
+                        user_agent=cfg.user_agent,
+                        attempts=cfg.max_retries,
+                    )
+                return cache_path
+            case _:
+                raise ValueError(f"Unknown cache mode: {mode!r}")
 
     def download(
         self,

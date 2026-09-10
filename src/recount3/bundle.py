@@ -1165,25 +1165,29 @@ def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
       ValueError: If ``res`` is not a recognized count-file type.
     """
     rtype = getattr(res.description, "resource_type", None)
-    if rtype == "count_files_gene_or_exon":
-        genomic_unit = getattr(res.description, "genomic_unit", None) or ""
-        family = "gene_or_exon"
-        feature_key = f"{family}:{genomic_unit}"
-        return family, feature_key
-
-    if rtype == "count_files_junctions":
-        junction_type = getattr(res.description, "junction_type", None) or ""
-        junction_ext = (
-            getattr(res.description, "junction_extension", None) or ""
-        )
-        family = "junctions"
-        feature_key = f"{family}:{junction_type}:{junction_ext}"
-        return family, feature_key
-
-    raise ValueError(
-        "Resource is not a recognized count-file type for stacking: "
-        f"{rtype!r}"
-    )
+    match rtype:
+        case "count_files_gene_or_exon":
+            genomic_unit = (
+                getattr(res.description, "genomic_unit", None) or ""
+            )
+            family = "gene_or_exon"
+            feature_key = f"{family}:{genomic_unit}"
+            return family, feature_key
+        case "count_files_junctions":
+            junction_type = (
+                getattr(res.description, "junction_type", None) or ""
+            )
+            junction_ext = (
+                getattr(res.description, "junction_extension", None) or ""
+            )
+            family = "junctions"
+            feature_key = f"{family}:{junction_type}:{junction_ext}"
+            return family, feature_key
+        case _:
+            raise ValueError(
+                "Resource is not a recognized count-file type for stacking: "
+                f"{rtype!r}"
+            )
 
 
 def _make_unique_names(
@@ -1939,33 +1943,36 @@ class R3ResourceBundle:
             features.add(feature_key)
             family_counts[family] = family_counts.get(family, 0) + 1
 
-        if compat == "family":
-            if len(families) > 1:
-                details = ", ".join(
-                    f"{name}={count}"
-                    for name, count in sorted(family_counts.items())
-                )
-                raise errors.CompatibilityError(
-                    "Incompatible count families selected for stacking. "
-                    f"Found families: {sorted(families)} ({details}). "
-                    "Stack gene/exon with gene/exon, and junctions with "
-                    "junctions. Hint: filter first, for example, "
-                    'bundle.filter(resource_type="count_files_gene_or_exon") '
-                    'or bundle.filter(resource_type="count_files_junctions").'
-                )
-        elif compat == "feature":
-            if len(features) > 1:
-                examples = ", ".join(sorted(features))
-                raise errors.CompatibilityError(
-                    "Feature-level incompatibility detected. All inputs must "
-                    "share the same feature key (for example, gene vs exon; "
-                    "junction subtype). Distinct feature keys observed: "
-                    f"{examples}. Hint: filter by 'genomic_unit' for "
-                    "gene/exon or by 'junction_type' / "
-                    "'junction_extension' for junctions."
-                )
-        else:
-            raise ValueError(f"Unknown compat mode: {compat!r}")
+        match compat:
+            case "family":
+                if len(families) > 1:
+                    details = ", ".join(
+                        f"{name}={count}"
+                        for name, count in sorted(family_counts.items())
+                    )
+                    raise errors.CompatibilityError(
+                        "Incompatible count families selected for stacking. "
+                        f"Found families: {sorted(families)} ({details}). "
+                        "Stack gene/exon with gene/exon, and junctions with "
+                        "junctions. Hint: filter first, for example, "
+                        'bundle.filter('
+                        'resource_type="count_files_gene_or_exon") '
+                        'or bundle.filter('
+                        'resource_type="count_files_junctions").'
+                    )
+            case "feature":
+                if len(features) > 1:
+                    examples = ", ".join(sorted(features))
+                    raise errors.CompatibilityError(
+                        "Feature-level incompatibility detected. All inputs "
+                        "must share the same feature key (for example, gene "
+                        "vs exon; junction subtype). Distinct feature keys "
+                        f"observed: {examples}. Hint: filter by 'genomic_unit' "
+                        "for gene/exon or by 'junction_type' / "
+                        "'junction_extension' for junctions."
+                    )
+            case _:
+                raise ValueError(f"Unknown compat mode: {compat!r}")
 
         data_frames: list[pd.DataFrame] = []
         for res, obj in self.iter_loaded(autoload=autoload):
