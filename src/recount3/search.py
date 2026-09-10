@@ -1127,16 +1127,16 @@ def _resolve_annotation_exts(
     if explicit_exts:
         return tuple(str(x).strip() for x in explicit_exts)
 
-    if annotations is None or annotations == "default":
-        return ("G026",) if org == "human" else ("M023",)
-
-    if isinstance(annotations, str):
-        if annotations == "all":
+    match annotations:
+        case None | "default":
+            return ("G026",) if org == "human" else ("M023",)
+        case "all":
             return _ANN_EXT_HUMAN if org == "human" else _ANN_EXT_MOUSE
-        parts = [p.strip() for p in annotations.split(",") if p.strip()]
-        return tuple(parts)
-
-    return tuple(str(x).strip() for x in annotations)
+        case str():
+            parts = [p.strip() for p in annotations.split(",") if p.strip()]
+            return tuple(parts)
+        case _:
+            return tuple(str(x).strip() for x in annotations)
 
 
 def samples_for_project(
