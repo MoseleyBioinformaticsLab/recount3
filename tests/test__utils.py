@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import builtins
 import errno
 import io
 import os
@@ -39,6 +40,7 @@ import types
 import urllib.error
 import zipfile
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pandas as pd
@@ -46,6 +48,17 @@ import pytest
 
 import recount3._utils as _utils
 from recount3 import errors
+
+
+def _any_parquet_engine() -> bool:
+    """Return True when pandas can resolve any Parquet engine here."""
+    import importlib.util  # pylint: disable=import-outside-toplevel
+
+    return any(
+        importlib.util.find_spec(name) is not None
+        for name in ("pyarrow", "fastparquet")
+    )
+
 
 _DATA_DIR = Path(__file__).parent / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
@@ -1607,3 +1620,306 @@ def test_derive_junction_sidecar_url_no_pattern_raises() -> None:
         _utils._derive_junction_sidecar_url(
             "https://example.com/file.tsv.gz", "MM"
         )
+
+
+def test_ensure_parquet_engine_returns_resolved_engine_name() -> None:
+    """The name pandas resolved is returned, for logging."""
+    pytest.importorskip("pandas.io.parquet")
+    if not _any_parquet_engine():
+        pytest.skip("No Parquet engine installed.")
+    assert _utils.ensure_parquet_engine() in {
+        "pyarrow",
+        "fastparquet",
+    }
+
+
+def test_ensure_parquet_engine_honours_fastparquet_selection() -> None:
+    """A fastparquet-only installation is a supported installation."""
+
+    class FastParquetImpl:  # pylint: disable=too-few-public-methods
+        pass
+
+    with mock.patch(
+        "pandas.io.parquet.get_engine", return_value=FastParquetImpl()
+    ):
+        assert _utils.ensure_parquet_engine() == "fastparquet"
+
+
+def test_ensure_parquet_engine_unknown_impl_reports_auto() -> None:
+    """An engine pandas gained later is accepted, just not named."""
+
+    class _SomeFutureImpl:  # pylint: disable=too-few-public-methods
+        pass
+
+    with mock.patch(
+        "pandas.io.parquet.get_engine", return_value=_SomeFutureImpl()
+    ):
+        assert _utils.ensure_parquet_engine() == "auto"
+
+
+def test_ensure_parquet_engine_missing_engine_gives_install_command() -> None:
+    """A missing engine raises ImportError naming the extra to install."""
+    with mock.patch(
+        "pandas.io.parquet.get_engine",
+        side_effect=ImportError("Unable to find a usable engine"),
+    ):
+        with pytest.raises(ImportError) as excinfo:
+            _utils.ensure_parquet_engine()
+
+    message = str(excinfo.value)
+    assert 'pip install "recount3[parquet]"' in message
+    assert ".tsv" in message
+    assert "Unable to find a usable engine" in message
+
+
+def test_ensure_parquet_engine_reports_configured_engine() -> None:
+    """An explicit io.parquet.engine option is named in the error."""
+    with (
+        mock.patch(
+            "pandas.io.parquet.get_engine",
+            side_effect=ImportError("nope"),
+        ),
+        mock.patch("pandas.get_option", return_value="fastparquet"),
+    ):
+        with pytest.raises(ImportError, match="fastparquet"):
+            _utils.ensure_parquet_engine()
+
+
+def test_ensure_parquet_engine_propagates_bad_engine_option() -> None:
+    """A bogus io.parquet.engine value stays a ValueError."""
+    with mock.patch(
+        "pandas.io.parquet.get_engine",
+        side_effect=ValueError("engine must be one of"),
+    ):
+        with pytest.raises(ValueError, match="engine must be one of"):
+            _utils.ensure_parquet_engine()
+
+
+def test_ensure_anndata_support_probes_both_modules() -> None:
+    """Both anndata and delayedarray are probed, in that order."""
+    with mock.patch("recount3._utils.import_optional_module") as mock_import:
+        _utils.ensure_anndata_support()
+
+    assert [c.args[0] for c in mock_import.call_args_list] == [
+        "anndata",
+        "delayedarray",
+    ]
+
+
+def test_ensure_anndata_support_missing_delayedarray_raises() -> None:
+    """delayedarray is required even when anndata is installed."""
+
+    def _fake_import(name: str) -> types.ModuleType:
+        if name == "delayedarray":
+            raise ImportError('pip install "recount3[anndata]"')
+        return types.ModuleType(name)
+
+    with mock.patch(
+        "recount3._utils.import_optional_module", side_effect=_fake_import
+    ):
+        with pytest.raises(ImportError, match=r"recount3\[anndata\]"):
+            _utils.ensure_anndata_support()
+
+
+def test_get_anndata_module_delegates_to_import_optional() -> None:
+    """get_anndata_module calls import_optional_module('anndata')."""
+    fake_mod = types.ModuleType("anndata")
+    with mock.patch(
+        "recount3._utils.import_optional_module",
+        return_value=fake_mod,
+    ) as mock_import:
+        result = _utils.get_anndata_module()
+
+    assert result is fake_mod
+    mock_import.assert_called_once_with("anndata")
+
+
+def test_anndata_install_command_names_the_extra() -> None:
+    """A missing anndata points at the extra, not a bare pip install."""
+    message = _utils._format_optional_dependency_import_error("anndata")
+    assert 'pip install "recount3[anndata]"' in message
+
+
+def test_sparse_column_names_lists_only_sparse_columns() -> None:
+    """Dense columns are not reported."""
+    frame = pd.DataFrame({"dense": [1, 2]})
+    frame["sparse"] = pd.arrays.SparseArray([0, 3])
+    assert _utils.sparse_column_names(frame) == ["sparse"]
+
+
+def test_sparse_column_names_empty_for_dense_frame() -> None:
+    """A fully dense frame reports nothing."""
+    frame = pd.DataFrame({"a": [1, 2], "b": [3.0, 4.0]})
+    assert _utils.sparse_column_names(frame) == []
+
+
+def test_densify_sparse_columns_converts_to_subtype() -> None:
+    """Sparse columns become dense columns of their subtype."""
+    frame = pd.DataFrame({"dense": [1, 2]})
+    frame["sparse"] = pd.arrays.SparseArray([0, 3], dtype="int64")
+
+    dense = _utils.densify_sparse_columns(frame)
+
+    assert _utils.sparse_column_names(dense) == []
+    assert dense["sparse"].dtype == "int64"
+    assert dense["sparse"].tolist() == [0, 3]
+    assert dense["dense"].tolist() == [1, 2]
+
+
+def test_densify_sparse_columns_returns_dense_frame_unchanged() -> None:
+    """A dense frame is returned as-is, without a copy."""
+    frame = pd.DataFrame({"a": [1, 2]})
+    assert _utils.densify_sparse_columns(frame) is frame
+
+
+class _FakeAnnData:  # pylint: disable=too-few-public-methods
+    """Minimal stand-in exposing the obs/var frames the helpers touch."""
+
+    def __init__(self, obs: pd.DataFrame, var: pd.DataFrame) -> None:
+        self.obs = obs
+        self.var = var
+
+
+def test_normalize_anndata_casts_all_missing_object_columns() -> None:
+    """An all-None object column becomes all-NaN float64."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"empty": [None, None]}),
+        var=pd.DataFrame({"also_empty": [None, None]}),
+    )
+
+    cast = _utils.normalize_anndata_for_hdf5(adata)
+
+    assert cast == ["obs.empty", "var.also_empty"]
+    assert adata.obs["empty"].dtype == "float64"
+    assert adata.obs["empty"].isna().all()
+    assert adata.var["also_empty"].dtype == "float64"
+
+
+def test_normalize_anndata_leaves_partly_populated_columns() -> None:
+    """A column with any string still writes correctly, so it is untouched."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"mixed": ["a", None]}),
+        var=pd.DataFrame({"strings": ["x", "y"], "numbers": [1, 2]}),
+    )
+
+    assert _utils.normalize_anndata_for_hdf5(adata) == []
+    assert adata.obs["mixed"].tolist() == ["a", None]
+    assert adata.var["numbers"].dtype == "int64"
+
+
+def test_normalize_anndata_ignores_empty_frames() -> None:
+    """An empty object column is writable as-is and is left alone."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"nothing": pd.Series([], dtype=object)}),
+        var=pd.DataFrame(),
+    )
+    assert _utils.normalize_anndata_for_hdf5(adata) == []
+
+
+def test_hdf5_unsafe_column_names_finds_slashes_in_both_frames() -> None:
+    """recount3 STAR QC fields are named after splice motifs."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame(
+            {
+                "recount_qc__star.number_of_splices:_gt/ag": [1],
+                "clean": [2],
+            }
+        ),
+        var=pd.DataFrame({"also/bad": [3]}),
+    )
+
+    assert _utils.hdf5_unsafe_column_names(adata) == [
+        "obs.recount_qc__star.number_of_splices:_gt/ag",
+        "var.also/bad",
+    ]
+
+
+def test_hdf5_unsafe_column_names_empty_when_all_safe() -> None:
+    """Nothing is reported for a frame HDF5 can already write."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"clean": [1]}),
+        var=pd.DataFrame({"also_clean": [2]}),
+    )
+    assert _utils.hdf5_unsafe_column_names(adata) == []
+
+
+def test_sanitize_anndata_column_names_replaces_slashes() -> None:
+    """Renames are applied in place and reported to the caller."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"a/b": [1], "keep": [2]}),
+        var=pd.DataFrame({"c/d/e": [3]}),
+    )
+
+    renames = _utils.sanitize_anndata_column_names(adata)
+
+    assert renames == [("a/b", "a_b"), ("c/d/e", "c_d_e")]
+    assert list(adata.obs.columns) == ["a_b", "keep"]
+    assert list(adata.var.columns) == ["c_d_e"]
+    assert adata.obs["a_b"].tolist() == [1]
+
+
+def test_sanitize_anndata_column_names_noop_when_all_safe() -> None:
+    """A frame with no slashes is left untouched."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"clean": [1]}), var=pd.DataFrame({"fine": [2]})
+    )
+    assert _utils.sanitize_anndata_column_names(adata) == []
+    assert list(adata.obs.columns) == ["clean"]
+
+
+def test_sanitize_anndata_column_names_refuses_to_merge_columns() -> None:
+    """Renaming must not silently collapse two distinct fields."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"a/b": [1], "a_b": [2]}), var=pd.DataFrame()
+    )
+
+    with pytest.raises(ValueError, match="already used by another column"):
+        _utils.sanitize_anndata_column_names(adata)
+
+
+def test_anndata_frames_returns_both_frames_in_order() -> None:
+    """obs comes before var, so reported labels are stably ordered."""
+    adata = _FakeAnnData(
+        obs=pd.DataFrame({"a": [1]}), var=pd.DataFrame({"b": [2]})
+    )
+
+    frames = _utils._anndata_frames(adata)
+
+    assert [name for name, _ in frames] == ["obs", "var"]
+    assert list(frames[0][1].columns) == ["a"]
+
+
+def test_anndata_frames_skips_absent_and_non_frame_attributes() -> None:
+    """A partially formed object yields only the frame-shaped attributes."""
+
+    class _NoVar:  # pylint: disable=too-few-public-methods
+        obs = pd.DataFrame({"a": [1]})
+
+    assert [name for name, _ in _utils._anndata_frames(_NoVar())] == ["obs"]
+
+    adata = _FakeAnnData(obs=pd.DataFrame({"a": [1]}), var=None)
+    assert [name for name, _ in _utils._anndata_frames(adata)] == ["obs"]
+
+    assert _utils._anndata_frames(object()) == []
+
+
+def test_anndata_helpers_tolerate_a_missing_frame() -> None:
+    """All three helpers no-op on the frame that is not there."""
+    adata = _FakeAnnData(obs=pd.DataFrame({"empty": [None]}), var=None)
+
+    assert _utils.normalize_anndata_for_hdf5(adata) == ["obs.empty"]
+    assert _utils.hdf5_unsafe_column_names(adata) == []
+    assert _utils.sanitize_anndata_column_names(adata) == []
+
+
+def test_ensure_parquet_engine_tolerates_missing_pandas_internals() -> None:
+    """Introspection must never block an otherwise working installation."""
+    real_import = builtins.__import__
+
+    def _fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "pandas.io.parquet":
+            raise ImportError("pandas internals moved")
+        return real_import(name, *args, **kwargs)
+
+    with mock.patch("builtins.__import__", _fake_import):
+        assert _utils.ensure_parquet_engine() == "auto"

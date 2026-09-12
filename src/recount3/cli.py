@@ -65,6 +65,7 @@ from recount3.errors import (
 )
 from recount3.resource import R3Resource
 from recount3.types import CacheMode, CompatibilityMode
+from recount3 import _utils
 from recount3 import search as r3_search
 from recount3.version import __version__
 
@@ -542,15 +543,32 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_stack.add_argument(
+        "--densify",
+        action="store_true",
+        help=(
+            "Convert sparse columns to dense before "
+            "writing Parquet. Junction count matrices "
+            "load sparse and no Parquet engine accepts "
+            "pandas sparse dtypes, so .parquet output "
+            "fails without this flag. Densifying "
+            "materializes every implicit zero and can "
+            "need far more memory. Ignored for text "
+            "formats, which already write dense rows."
+        ),
+    )
+    p_stack.add_argument(
         "--out",
         required=True,
         metavar="FILE",
         help=(
             "Output file path. Extension determines "
-            "format: .tsv (tab-separated), .tsv.gz "
+            "format: .csv, .tsv (tab-separated), .tsv.gz "
             "(gzip-compressed TSV), or .parquet "
-            "(Apache Parquet; requires pyarrow or "
-            "fastparquet)."
+            "(Apache Parquet; requires a Parquet engine: "
+            "pip install 'recount3[parquet]', or any "
+            "pyarrow/fastparquet install pandas accepts). "
+            "Engine availability is checked before "
+            "downloading anything."
         ),
     )
 
@@ -561,8 +579,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "Assemble resources from a manifest into a "
             "BiocPy SummarizedExperiment. Requires the "
             "'recount3[biocpy]' extra. Output as a Python "
-            "pickle (.pkl) or, if anndata is installed, "
-            "an AnnData HDF5 file (.h5ad)."
+            "pickle (.pkl), or as an AnnData HDF5 file "
+            "(.h5ad) with the 'recount3[anndata]' extra. "
+            "Availability is checked before downloading "
+            "anything."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -614,13 +634,29 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_se.add_argument(
+        "--sanitize-columns",
+        action="store_true",
+        help=(
+            "Replace '/' with '_' in obs/var column "
+            "names before writing .h5ad. HDF5 reads a "
+            "forward slash as a path separator, and "
+            "recount3 STAR QC fields are named after "
+            "splice motifs (for example, "
+            "'recount_qc__star.number_of_splices:_gt/ag'), "
+            "so .h5ad output fails without this flag. "
+            "It renames the columns your analysis indexes "
+            "by. Ignored for .pkl output, which keeps the "
+            "names verbatim."
+        ),
+    )
+    p_se.add_argument(
         "--out",
         required=True,
         metavar="FILE",
         help=(
             "Output file path. Use .pkl for a Python "
             "pickle or .h5ad for an AnnData HDF5 file "
-            "(requires anndata)."
+            "(requires the 'recount3[anndata]' extra)."
         ),
     )
 
@@ -632,7 +668,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "BiocPy RangedSummarizedExperiment, which adds "
             "genomic coordinates (GenomicRanges) to each "
             "feature row. Requires the 'recount3[biocpy]' "
-            "extra. Output as .pkl or .h5ad."
+            "extra. Output as .pkl, or as .h5ad with the "
+            "'recount3[anndata]' extra."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -694,13 +731,29 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_rse.add_argument(
+        "--sanitize-columns",
+        action="store_true",
+        help=(
+            "Replace '/' with '_' in obs/var column "
+            "names before writing .h5ad. HDF5 reads a "
+            "forward slash as a path separator, and "
+            "recount3 STAR QC fields are named after "
+            "splice motifs (for example, "
+            "'recount_qc__star.number_of_splices:_gt/ag'), "
+            "so .h5ad output fails without this flag. "
+            "It renames the columns your analysis indexes "
+            "by. Ignored for .pkl output, which keeps the "
+            "names verbatim."
+        ),
+    )
+    p_rse.add_argument(
         "--out",
         required=True,
         metavar="FILE",
         help=(
             "Output file path. Use .pkl for a Python "
             "pickle or .h5ad for an AnnData HDF5 file "
-            "(requires anndata)."
+            "(requires the 'recount3[anndata]' extra)."
         ),
     )
 
@@ -1355,6 +1408,9 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
 
     Loads resources from a manifest and concatenates compatible count matrices.
 
+    Parquet output is validated before any download happens, so a missing
+    engine fails in a second rather than after assembling the matrix.
+
     Args:
       args: Parsed CLI arguments for ``bundle stack-counts``.
       cfg: :class:`Config` used for resource loading.
@@ -1362,6 +1418,17 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
     Returns:
       Process exit code (0 for success, non-zero for failure).
     """
+    out = Path(args.out)
+    to_parquet = out.suffix.lower() == ".parquet"
+
+    if to_parquet:
+        try:
+            engine = _utils.ensure_parquet_engine()
+        except ImportError as exc:
+            logging.error("%s", exc)
+            return 2
+        logging.debug("Parquet engine resolved by pandas: %s", engine)
+
     resources = list(_iter_manifest(args.manifest, cfg))
     bundle = R3ResourceBundle()
     bundle.extend(resources)
@@ -1379,11 +1446,36 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
         logging.error("Failed to stack count matrices (reason: %r)", exc)
         return 2
 
-    out = Path(args.out)
+    if to_parquet:
+        sparse_columns = _utils.sparse_column_names(df)
+        if sparse_columns:
+            if not args.densify:
+                logging.error(
+                    "Cannot write Parquet: %d of %d columns use a pandas "
+                    "sparse dtype (for example, %s), which no Parquet engine "
+                    "supports. Junction count matrices are sparse-backed. "
+                    "Re-run with --densify to materialize every implicit "
+                    "zero (this can need far more memory than the sparse "
+                    "matrix), or write .tsv/.tsv.gz/.csv instead, which "
+                    "handles sparse columns without densifying the whole "
+                    "frame in memory.",
+                    len(sparse_columns),
+                    df.shape[1],
+                    ", ".join(sparse_columns[:3]),
+                )
+                return 2
+            logging.warning(
+                "Densifying %d sparse column(s) for Parquet output; "
+                "memory use scales with the full %d x %d matrix.",
+                len(sparse_columns),
+                df.shape[0],
+                df.shape[1],
+            )
+            df = _utils.densify_sparse_columns(df)
+
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if out.suffix.lower() == ".parquet":
-            # Defer heavy deps to runtime; let pandas raise.
+        if to_parquet:
             df.to_parquet(out)
         else:
             sep = "," if out.suffix.lower() == ".csv" else "\t"
@@ -1411,6 +1503,16 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
         0 - success,
         2 - fatal error (missing dependency, build failure, or write failure).
     """
+    out = Path(args.out)
+    to_h5ad = out.suffix.lower() == ".h5ad"
+
+    if to_h5ad:
+        try:
+            _utils.ensure_anndata_support()
+        except ImportError as exc:
+            logging.error("Cannot write .h5ad: %s", exc)
+            return 2
+
     resources = list(_iter_manifest(args.manifest, cfg))
     bundle = R3ResourceBundle()
     bundle.extend(resources)
@@ -1430,11 +1532,41 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
         logging.error("Failed to build SE (reason: %r).", exc)
         return 2
 
-    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if out.suffix.lower() == ".h5ad":
+        if to_h5ad:
             adata = se.to_anndata()
+            cast = _utils.normalize_anndata_for_hdf5(adata)
+            if cast:
+                logging.info(
+                    "Cast %d all-missing column(s) to NaN for HDF5: %s",
+                    len(cast),
+                    ", ".join(cast),
+                )
+            unsafe = _utils.hdf5_unsafe_column_names(adata)
+            if unsafe:
+                if not args.sanitize_columns:
+                    logging.error(
+                        "Cannot write .h5ad: %d column name(s) contain a "
+                        "forward slash, which HDF5 reads as a path separator "
+                        "(for example, %s). recount3 STAR QC fields are named "
+                        "after splice motifs, so most projects with SRA "
+                        "metadata hit this. Re-run with --sanitize-columns to "
+                        "replace each '/' with '_' (this renames the columns "
+                        "your analysis indexes by), or write a .pkl instead, "
+                        "which keeps the names verbatim.",
+                        len(unsafe),
+                        ", ".join(unsafe[:3]),
+                    )
+                    return 2
+                renames = _utils.sanitize_anndata_column_names(adata)
+                logging.warning(
+                    "Renamed %d column(s) for HDF5: %s",
+                    len(renames),
+                    ", ".join(
+                        f"{before} -> {after}" for before, after in renames
+                    ),
+                )
             adata.write_h5ad(out)
         else:
             with open(out, "wb") as fh:
@@ -1462,6 +1594,16 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
         0 - success,
         2 - fatal error (missing dependency, build failure, or write failure).
     """
+    out = Path(args.out)
+    to_h5ad = out.suffix.lower() == ".h5ad"
+
+    if to_h5ad:
+        try:
+            _utils.ensure_anndata_support()
+        except ImportError as exc:
+            logging.error("Cannot write .h5ad: %s", exc)
+            return 2
+
     resources = list(_iter_manifest(args.manifest, cfg))
     bundle = R3ResourceBundle()
     bundle.extend(resources)
@@ -1482,11 +1624,41 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
         logging.error("Failed to build RSE (reason: %r).", exc)
         return 2
 
-    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
-        if out.suffix.lower() == ".h5ad":
+        if to_h5ad:
             adata = rse.to_anndata()
+            cast = _utils.normalize_anndata_for_hdf5(adata)
+            if cast:
+                logging.info(
+                    "Cast %d all-missing column(s) to NaN for HDF5: %s",
+                    len(cast),
+                    ", ".join(cast),
+                )
+            unsafe = _utils.hdf5_unsafe_column_names(adata)
+            if unsafe:
+                if not args.sanitize_columns:
+                    logging.error(
+                        "Cannot write .h5ad: %d column name(s) contain a "
+                        "forward slash, which HDF5 reads as a path separator "
+                        "(for example, %s). recount3 STAR QC fields are named "
+                        "after splice motifs, so most projects with SRA "
+                        "metadata hit this. Re-run with --sanitize-columns to "
+                        "replace each '/' with '_' (this renames the columns "
+                        "your analysis indexes by), or write a .pkl instead, "
+                        "which keeps the names verbatim.",
+                        len(unsafe),
+                        ", ".join(unsafe[:3]),
+                    )
+                    return 2
+                renames = _utils.sanitize_anndata_column_names(adata)
+                logging.warning(
+                    "Renamed %d column(s) for HDF5: %s",
+                    len(renames),
+                    ", ".join(
+                        f"{before} -> {after}" for before, after in renames
+                    ),
+                )
             adata.write_h5ad(out)
         else:
             with open(out, "wb") as fh:

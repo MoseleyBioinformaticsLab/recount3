@@ -4,7 +4,9 @@ on:
   workflow_call:
     inputs:
       install_command:
-        description: Install command for Linux (full extras, including bigwig and biocpy).
+        description: >-
+          Install command for Linux (full extras, including bigwig, biocpy,
+          parquet, and anndata).
         required: true
         type: string
       install_command_macos:
@@ -13,15 +15,17 @@ on:
           reliable macOS wheel); the BiocPy stack builds from source there.
         required: false
         type: string
-        default: 'python -m pip install -e ".[dev,biocpy]"'
+        default: 'python -m pip install -e ".[dev,biocpy,parquet,anndata]"'
       install_command_windows:
         description: >-
-          Install command for Windows. Core only: neither pyBigWig nor the BiocPy
-          ranged stack (iranges/genomicranges) provides Windows wheels, and the
-          latter fails to build from source. BiocPy-dependent tests skip there.
+          Install command for Windows. Core plus parquet: pyarrow ships Windows
+          wheels, but neither pyBigWig nor the BiocPy ranged stack
+          (iranges/genomicranges) does, and the latter fails to build from
+          source. The anndata extra implies biocpy, so it is omitted too.
+          BiocPy- and anndata-dependent tests skip there.
         required: false
         type: string
-        default: 'python -m pip install -e ".[dev]"'
+        default: 'python -m pip install -e ".[dev,parquet]"'
 
 jobs:
   run-tests:

@@ -15,7 +15,7 @@ documentation, see :doc:`api`.
 Installation
 ------------
 
-The core package depends only on NumPy, pandas, and SciPy. The two optional
+The core package depends only on NumPy, pandas, and SciPy. The optional
 extras enable features used throughout this tutorial:
 
 .. code:: bash
@@ -23,7 +23,9 @@ extras enable features used throughout this tutorial:
    python3 -m pip install recount3               # core only
    python3 -m pip install "recount3[biocpy]"     # + SummarizedExperiment
    python3 -m pip install "recount3[bigwig]"     # + pyBigWig
-   python3 -m pip install "recount3[biocpy,bigwig]"
+   python3 -m pip install "recount3[parquet]"    # + .parquet output
+   python3 -m pip install "recount3[anndata]"    # + .h5ad output
+   python3 -m pip install "recount3[all]"        # everything
 
 What each extra enables:
 
@@ -35,10 +37,22 @@ What each extra enables:
 - ``bigwig`` is required only when you call
   :meth:`~recount3.resource.R3Resource.load` on a BigWig resource or use the
   :class:`~recount3._bigwig.BigWigFile` reader directly.
+- ``parquet`` installs ``pyarrow`` and is required to write ``.parquet``, both
+  from :meth:`pandas.DataFrame.to_parquet` on a stacked matrix and from
+  ``recount3 bundle stack-counts --out=counts.parquet``. pandas accepts either
+  ``pyarrow`` or ``fastparquet``; an existing ``fastparquet`` installation is
+  used as-is, and the ``io.parquet.engine`` option is honoured.
+- ``anndata`` installs ``anndata`` and ``delayedarray`` (and implies
+  ``biocpy``). ``SummarizedExperiment.to_anndata()`` imports both, and
+  ``summarizedexperiment`` declares neither as a required dependency, so the
+  extra is needed to write ``.h5ad`` from ``recount3 bundle se`` /
+  ``recount3 bundle rse``.
 
 If an optional dependency is missing, the affected function raises
 :exc:`ImportError` on first use; the remainder of the package stays importable
-and functional.
+and functional. The two output extras are additionally checked up front by the
+CLI, before any download runs, so an unusable output format is reported
+immediately rather than after the data has been fetched and assembled.
 
 
 Quick start
@@ -749,6 +763,28 @@ Common pitfalls
 
 ``ImportError: summarizedexperiment is required``
    Install the BiocPy extra: ``pip install "recount3[biocpy]"``.
+
+``Writing Parquet requires a Parquet engine``
+   No ``pyarrow`` or ``fastparquet`` is installed. Run
+   ``pip install "recount3[parquet]"``, or write ``.tsv``, ``.tsv.gz``, or
+   ``.csv`` instead.
+
+``Cannot write .h5ad: Optional dependency 'anndata' is required``
+   ``SummarizedExperiment.to_anndata()`` needs ``anndata`` and
+   ``delayedarray``. Run ``pip install "recount3[anndata]"``, or write a
+   ``.pkl`` instead.
+
+``Cannot write .h5ad: N column name(s) contain a forward slash``
+   HDF5 reads ``/`` as a path separator, and recount3 STAR QC fields are
+   named after splice motifs (``..._gt/ag``). Pass ``--sanitize-columns``
+   to rename them to ``..._gt_ag``, or write a ``.pkl`` instead, which
+   keeps the names verbatim.
+
+``Cannot write Parquet: N columns use a pandas sparse dtype``
+   Junction count matrices load sparse-backed and no Parquet engine accepts
+   :class:`pandas.SparseDtype`. Write a text format, or pass ``--densify``
+   to materialize every implicit zero first. Densifying a junction matrix
+   can need far more memory than the sparse form.
 
 ``KeyError: Missing required field: annotation_extension``
    Gene and exon descriptions need an annotation code. Pass it

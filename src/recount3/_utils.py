@@ -37,9 +37,9 @@ The module is organized into four sections:
 2. Filesystem Utilities: Directory management and atomic file operations
 3. HTTP Utilities: Network requests with retries, streaming, and ZIP handling
 4. Optional Dependency Management: lazy import helpers for BiocPy packages
-   (``biocframe``, ``summarizedexperiment``, ``genomicranges``) and
-   ``pyBigWig``; raises a standardized :exc:`ImportError` when a required
-   optional package is missing.
+   (``biocframe``, ``summarizedexperiment``, ``genomicranges``), ``pyBigWig``,
+   ``anndata``, and Parquet engines; raises a standardized :exc:`ImportError`
+   with an install command when a required optional package is missing.
 
 Note:
     This module is considered internal implementation detail and may change
@@ -849,8 +849,13 @@ _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
             'pip install "recount3[bigwig]"\n'
             "  conda install -c conda-forge -c bioconda pybigwig"
         ),
+        "pyarrow": 'pip install "recount3[parquet]"',
+        "anndata": 'pip install "recount3[anndata]"',
+        "delayedarray": 'pip install "recount3[anndata]"',
     }
 )
+
+_PARQUET_INSTALL_COMMAND = _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS["pyarrow"]
 
 
 def _format_optional_dependency_import_error(
@@ -1058,6 +1063,275 @@ def get_pybigwig_module() -> types.ModuleType:
         ImportError: If the optional dependency is missing or fails to import.
     """
     return import_optional_module("pyBigWig")
+
+
+def get_anndata_module() -> types.ModuleType:
+    """Return the optional ``anndata`` module.
+
+    Returns:
+        The imported ``anndata`` module.
+
+    Raises:
+        ImportError: If the optional dependency is missing or fails to import.
+    """
+    return import_optional_module("anndata")
+
+
+def ensure_anndata_support() -> None:
+    """Verify that AnnData conversion is possible before doing expensive work.
+
+    :meth:`summarizedexperiment.SummarizedExperiment.to_anndata` imports both
+    ``anndata`` and ``delayedarray``, and ``summarizedexperiment`` declares
+    neither as a required dependency. Probing both up front lets callers fail
+    before downloading and assembling data that cannot then be written.
+
+    Raises:
+        ImportError: If either dependency is missing or fails to import.
+    """
+    for module_name in ("anndata", "delayedarray"):
+        import_optional_module(module_name)
+
+
+def _anndata_frames(adata: Any) -> list[tuple[str, Any]]:
+    """Return an AnnData object's ``obs`` and ``var`` frames, in that order.
+
+    The AnnData helpers below accept :data:`~typing.Any` because they also run
+    against test doubles, so each pair is returned only when the attribute is
+    present and frame-shaped.
+
+    Args:
+        adata: AnnData object to read ``obs`` and ``var`` from.
+
+    Returns:
+        ``(name, frame)`` pairs for whichever of the two frames are present.
+    """
+    frames: list[tuple[str, Any]] = []
+    for frame_name in ("obs", "var"):
+        frame = getattr(adata, frame_name, None)
+        if frame is not None and hasattr(frame, "columns"):
+            frames.append((frame_name, frame))
+    return frames
+
+
+def normalize_anndata_for_hdf5(adata: Any) -> list[str]:
+    """Cast all-missing object columns so an AnnData object can be written.
+
+    :mod:`h5py` cannot serialize an object-dtype column whose values are all
+    :data:`None`: there is no string for ``anndata`` to infer a type from, and
+    the write fails with ``TypeError: Can't implicitly convert non-string
+    objects to strings``. recount3 produces such columns whenever a GTF
+    attribute (for example, ``phase``) or a sample-metadata field is absent for
+    every row, so real projects hit this on the default export path.
+
+    Casting those columns to all-NaN ``float64`` preserves "missing for every
+    row" and round-trips through :func:`anndata.read_h5ad`. Columns with at
+    least one string are already written correctly and are left alone, as are
+    columns holding genuinely non-string objects, which still fail loudly.
+
+    Args:
+        adata: AnnData object. Its ``obs`` and ``var`` frames are modified
+          in place.
+
+    Returns:
+        ``"frame.column"`` labels that were cast, in ``obs`` then ``var``
+        order, for logging.
+    """
+    converted: list[str] = []
+    for frame_name, frame in _anndata_frames(adata):
+        for column in frame.columns:
+            series = frame[column]
+            if series.dtype != object or series.empty:
+                continue
+            if series.isna().all():
+                frame[column] = series.astype("float64")
+                converted.append(f"{frame_name}.{column}")
+    return converted
+
+
+def hdf5_unsafe_column_names(adata: Any) -> list[str]:
+    """Return ``obs``/``var`` column names that HDF5 cannot use as group keys.
+
+    ``anndata`` stores each column of ``obs`` and ``var`` as an HDF5 dataset
+    named after the column, and HDF5 treats ``"/"`` as a path separator, so a
+    column name containing one fails with ``ValueError: Forward slashes are
+    not allowed in keys``. recount3 metadata hits this: the STAR QC fields are
+    named after splice-site motifs, for example
+    ``recount_qc__star.number_of_splices:_gt/ag``.
+
+    Args:
+        adata: AnnData object to inspect.
+
+    Returns:
+        ``"frame.column"`` labels containing a forward slash, in ``obs`` then
+        ``var`` order.
+    """
+    unsafe: list[str] = []
+    for frame_name, frame in _anndata_frames(adata):
+        unsafe.extend(
+            f"{frame_name}.{column}"
+            for column in frame.columns
+            if "/" in str(column)
+        )
+    return unsafe
+
+
+def sanitize_anndata_column_names(adata: Any) -> list[tuple[str, str]]:
+    """Replace forward slashes in ``obs``/``var`` column names with ``"_"``.
+
+    This renames the columns an analysis indexes by, so callers should apply it
+    only on an explicit request and report every rename.
+
+    Args:
+        adata: AnnData object. Its ``obs`` and ``var`` frames are renamed
+          in place.
+
+    Returns:
+        ``(old, new)`` name pairs that were applied, in ``obs`` then ``var``
+        order.
+
+    Raises:
+        ValueError: If a sanitized name would collide with another column in
+          the same frame, which would silently merge two distinct fields.
+    """
+    renames: list[tuple[str, str]] = []
+    for frame_name, frame in _anndata_frames(adata):
+        mapping: dict[Any, str] = {}
+        taken = {
+            str(column) for column in frame.columns if "/" not in str(column)
+        }
+        for column in frame.columns:
+            name = str(column)
+            if "/" not in name:
+                continue
+            new_name = name.replace("/", "_")
+            if new_name in taken:
+                raise ValueError(
+                    f"Cannot sanitize {frame_name} column {name!r} for HDF5: "
+                    f"the sanitized name {new_name!r} is already used by "
+                    "another column, and renaming would merge two distinct "
+                    "fields. Write a .pkl instead, or rename the column "
+                    "before exporting."
+                )
+            taken.add(new_name)
+            mapping[column] = new_name
+            renames.append((name, new_name))
+
+        if mapping:
+            frame.rename(columns=mapping, inplace=True)
+    return renames
+
+
+_PARQUET_IMPL_ENGINE_NAMES = types.MappingProxyType(
+    {
+        "PyArrowImpl": "pyarrow",
+        "FastParquetImpl": "fastparquet",
+    }
+)
+
+
+def _format_parquet_engine_error(exc: BaseException) -> str:
+    """Format an actionable error for an unresolvable pandas Parquet engine.
+
+    Args:
+        exc: The :exc:`ImportError` pandas raised while resolving an engine.
+
+    Returns:
+        A user-facing error message suitable for raising as an
+        :exc:`ImportError`.
+    """
+    configured = "auto"
+    with contextlib.suppress(Exception):
+        configured = str(pd.get_option("io.parquet.engine"))
+
+    tried = (
+        f"pandas is configured to use the {configured!r} engine "
+        "(io.parquet.engine)"
+        if configured != "auto"
+        else "pandas tried the 'pyarrow' and 'fastparquet' engines"
+    )
+
+    return (
+        f"Writing Parquet requires a Parquet engine, but {tried} and none "
+        "is usable.\n\n"
+        f"Install one with:\n\n  {_PARQUET_INSTALL_COMMAND}\n\n"
+        "Or write a text format instead, by choosing an output path ending "
+        "in .tsv, .tsv.gz, or .csv.\n\n"
+        f"Original import error: {exc!r}"
+    )
+
+
+def ensure_parquet_engine() -> str:
+    """Verify that pandas can resolve a Parquet engine, and name it.
+
+    This defers engine selection to pandas rather than probing import names
+    directly, so it honours the ``io.parquet.engine`` option, pandas' own
+    minimum-version rules, and a ``fastparquet``-only installation.
+
+    Returns:
+        The resolved engine name (``"pyarrow"`` or ``"fastparquet"``), or
+        ``"auto"`` when the engine cannot be identified but pandas accepted it.
+
+    Raises:
+        ImportError: If no usable Parquet engine is installed.
+        ValueError: If ``io.parquet.engine`` is set to an unknown engine.
+    """
+    try:
+        # pylint: disable-next=import-outside-toplevel
+        from pandas.io.parquet import get_engine
+    except ImportError:
+        return "auto"
+
+    try:
+        impl = get_engine("auto")
+    except ImportError as exc:
+        raise ImportError(_format_parquet_engine_error(exc)) from exc
+
+    return _PARQUET_IMPL_ENGINE_NAMES.get(type(impl).__name__, "auto")
+
+
+def sparse_column_names(frame: pd.DataFrame) -> list[str]:
+    """Return the names of columns backed by a pandas sparse dtype.
+
+    Junction MM resources load as sparse-backed DataFrames (see
+    :meth:`recount3.resource.R3Resource.load`), and no Parquet engine accepts
+    :class:`pandas.SparseDtype` columns.
+
+    Args:
+        frame: DataFrame to inspect.
+
+    Returns:
+        Column names with a sparse dtype, in column order.
+    """
+    return [
+        str(name)
+        for name, dtype in frame.dtypes.items()
+        if isinstance(dtype, pd.SparseDtype)
+    ]
+
+
+def densify_sparse_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return ``frame`` with every sparse column converted to its dense dtype.
+
+    Each sparse column becomes a dense column of its
+    :attr:`pandas.SparseDtype.subtype`. Densifying a junction matrix
+    materializes every implicit zero, so callers should treat this as an
+    explicit, opt-in memory cost.
+
+    Args:
+        frame: DataFrame that may contain sparse columns.
+
+    Returns:
+        The original object when no column is sparse, otherwise a new
+        DataFrame with dense columns.
+    """
+    conversions = {
+        name: dtype.subtype
+        for name, dtype in frame.dtypes.items()
+        if isinstance(dtype, pd.SparseDtype)
+    }
+    if not conversions:
+        return frame
+    return frame.astype(conversions)
 
 
 _JXN_SIDECAR_RE = re.compile(r"\.(MM|ID|RR)\.gz$", re.IGNORECASE)

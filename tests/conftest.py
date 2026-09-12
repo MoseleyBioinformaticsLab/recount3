@@ -31,14 +31,14 @@
 #
 """Platform-conditional skip markers for recount3's optional dependencies.
 
-recount3's core is pure Python and runs everywhere, but two of its optional
+recount3's core is pure Python and runs everywhere, but several of its optional
 features are backed by compiled (C / C++) dependencies whose binary-wheel
 availability differs by operating system. Continuous integration therefore
 installs a different subset of extras on each OS (Linux: full; macOS: no bigwig;
-Windows: core only), and the tests that exercise those features must be skipped
-wherever their dependency cannot be installed, otherwise the suite would fail
-on a platform where the feature is simply not available. This module centralizes
-that skipping logic. Each optional stack gets one marker.
+Windows: core plus parquet), and the tests that exercise those features must be
+skipped wherever their dependency cannot be installed, otherwise the suite would
+fail on a platform where the feature is simply not available. This module
+centralizes that skipping logic. Each optional stack gets one marker.
 """
 
 from __future__ import annotations
@@ -55,8 +55,20 @@ def _all_installed(*module_names: str) -> bool:
     )
 
 
+def _any_installed(*module_names: str) -> bool:
+    """Return True if at least one of the named modules is importable."""
+    return any(
+        importlib.util.find_spec(name) is not None for name in module_names
+    )
+
+
 HAS_PYBIGWIG = _all_installed("pyBigWig")
 HAS_BIOCPY = _all_installed("summarizedexperiment", "genomicranges", "iranges")
+# pandas picks whichever engine is present, so either one is enough.
+HAS_PARQUET = _any_installed("pyarrow", "fastparquet")
+# SummarizedExperiment.to_anndata() imports anndata and delayedarray, and the
+# object it converts comes from the BiocPy stack, so all of it must be present.
+HAS_ANNDATA = HAS_BIOCPY and _all_installed("anndata", "delayedarray")
 
 _OPTIONAL_DEPENDENCY_MARKERS: dict[str, tuple[bool, str]] = {
     "requires_pybigwig": (
@@ -69,6 +81,17 @@ _OPTIONAL_DEPENDENCY_MARKERS: dict[str, tuple[bool, str]] = {
         "BiocPy ranged stack (summarizedexperiment/genomicranges/iranges) is not "
         "installed; iranges has no Windows wheel and fails to build there "
         "(installed on Linux and macOS).",
+    ),
+    "requires_parquet": (
+        HAS_PARQUET,
+        "No Parquet engine installed; install the 'recount3[parquet]' extra "
+        "(pyarrow ships wheels on every supported platform).",
+    ),
+    "requires_anndata": (
+        HAS_ANNDATA,
+        "anndata/delayedarray (or the BiocPy stack they convert from) is not "
+        "installed; install the 'recount3[anndata]' extra, which is "
+        "unavailable on Windows because BiocPy is.",
     ),
 }
 
@@ -84,6 +107,16 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "requires_biocpy: test needs the BiocPy ranged stack "
         "(summarizedexperiment/genomicranges/iranges), unavailable on Windows.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_parquet: test needs a pandas Parquet engine from the "
+        "'recount3[parquet]' extra.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_anndata: test needs anndata and delayedarray from the "
+        "'recount3[anndata]' extra, plus the BiocPy stack.",
     )
 
 

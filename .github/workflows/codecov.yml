@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install -e .[dev,bigwig,biocpy]
+          python3 -m pip install -e .[dev,bigwig,biocpy,parquet,anndata]
 
       - name: Run tests and collect coverage
         run: pytest --cov=recount3 --cov-report=xml

@@ -40,7 +40,10 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import numpy as np
+import pandas as pd
 import pytest
+import scipy.sparse
 
 from recount3._descriptions import R3ResourceDescription
 from recount3.config import Config, default_config
@@ -182,6 +185,20 @@ class TestBuildParser:
         assert args.join == "inner"
         assert args.axis == 1
         assert not args.verify_integrity
+        assert not args.densify
+
+    def test_bundle_stack_counts_densify(self) -> None:
+        parser = _build_parser()
+        args = parser.parse_args(
+            [
+                "bundle",
+                "stack-counts",
+                "--from=m.jsonl",
+                "--densify",
+                "--out=out.parquet",
+            ]
+        )
+        assert args.densify
 
     def test_bundle_se(self) -> None:
         parser = _build_parser()
@@ -1500,6 +1517,7 @@ class TestCmdBundleStackCounts:
             join="inner",
             axis=1,
             verify_integrity=False,
+            densify=False,
             out=out,
         )
         defaults.update(kw)
@@ -1510,6 +1528,7 @@ class TestCmdBundleStackCounts:
         out = tmp_path / "out.parquet"
         args = self._make_args(str(out))
         mock_df = mock.MagicMock()
+        mock_df.dtypes.items.return_value = []
         mock_bundle = mock.MagicMock()
         mock_bundle.stack_count_matrices.return_value = mock_df
         res = _make_annotation_resource(cfg)
@@ -1517,6 +1536,9 @@ class TestCmdBundleStackCounts:
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch(
+                "recount3._utils.ensure_parquet_engine", return_value="pyarrow"
             ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -1623,15 +1645,20 @@ class TestCmdBundleStackCounts:
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
+            mock.patch(
+                "recount3._utils.ensure_parquet_engine", return_value="pyarrow"
+            ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
         assert code == 2
+        mock_bundle.stack_count_matrices.assert_called_once()
 
     def test_write_exception_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
         args = self._make_args(str(out))
         mock_df = mock.MagicMock()
+        mock_df.dtypes.items.return_value = []
         mock_df.to_parquet.side_effect = OSError("disk full")
         mock_bundle = mock.MagicMock()
         mock_bundle.stack_count_matrices.return_value = mock_df
@@ -1641,9 +1668,233 @@ class TestCmdBundleStackCounts:
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
+            mock.patch(
+                "recount3._utils.ensure_parquet_engine", return_value="pyarrow"
+            ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
         assert code == 2
+        mock_df.to_parquet.assert_called_once_with(out)
+
+    _GENE_IDS = [
+        "ENSG00000000003.14",
+        "ENSG00000000005.5",
+        "ENSG00000000419.12",
+    ]
+    _EXON_IDS = [
+        "ENSG00000000003.14|1",
+        "ENSG00000000003.14|2",
+        "ENSG00000000419.12|1",
+    ]
+    _SAMPLES = ["SRR387777", "SRR387778", "SRR387779"]
+
+    def _run_with_frame(
+        self,
+        frame: pd.DataFrame,
+        args: argparse.Namespace,
+        cfg: Config,
+    ) -> int:
+        """Run the command against a real DataFrame instead of a mock."""
+        mock_bundle = mock.MagicMock()
+        mock_bundle.stack_count_matrices.return_value = frame
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+        ):
+            return _cmd_bundle_stack_counts(args, cfg)
+
+    @staticmethod
+    def _counts_frame(feature_ids: list[str]) -> pd.DataFrame:
+        values = np.array(
+            [[10, 0, 7], [0, 3, 0], [5, 5, 5]],
+            dtype=np.int64,
+        )
+        frame = pd.DataFrame(
+            values,
+            index=pd.Index(feature_ids, name="feature_id"),
+            columns=TestCmdBundleStackCounts._SAMPLES,
+        )
+        return frame
+
+    @pytest.mark.requires_parquet
+    @pytest.mark.parametrize(
+        ("unit", "feature_ids"),
+        [
+            ("gene", _GENE_IDS),
+            ("exon", _EXON_IDS),
+        ],
+    )
+    def test_parquet_round_trip(
+        self, tmp_path: Path, unit: str, feature_ids: list[str]
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / f"{unit}_counts.parquet"
+        frame = self._counts_frame(feature_ids)
+
+        code = self._run_with_frame(frame, self._make_args(str(out)), cfg)
+
+        assert code == 0
+        assert out.is_file() and out.stat().st_size > 0
+
+        back = pd.read_parquet(out)
+        assert list(back.index) == feature_ids
+        assert back.index.name == "feature_id"
+        assert list(back.columns) == self._SAMPLES
+        np.testing.assert_array_equal(back.to_numpy(), frame.to_numpy())
+        pd.testing.assert_frame_equal(back, frame)
+
+    @pytest.mark.requires_parquet
+    def test_parquet_round_trip_preserves_sample_lookup(
+        self, tmp_path: Path
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.parquet"
+        frame = self._counts_frame(self._GENE_IDS)
+
+        code = self._run_with_frame(frame, self._make_args(str(out)), cfg)
+        assert code == 0
+
+        back = pd.read_parquet(out)
+        assert back.loc["ENSG00000000005.5", "SRR387778"] == 3
+        assert back["SRR387777"].sum() == 15
+
+    def test_missing_parquet_engine_returns_2_before_any_download(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.parquet"
+        args = self._make_args(str(out))
+        boom = ImportError(
+            "Writing Parquet requires a Parquet engine.\n\n"
+            'Install one with:\n\n  pip install "recount3[parquet]"\n'
+        )
+        with (
+            mock.patch(
+                "recount3._utils.ensure_parquet_engine", side_effect=boom
+            ),
+            mock.patch("recount3.cli._iter_manifest") as mock_manifest,
+            mock.patch("recount3.cli.R3ResourceBundle") as mock_bundle_cls,
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_stack_counts(args, cfg)
+
+        assert code == 2
+        # Nothing was read, loaded, or downloaded.
+        mock_manifest.assert_not_called()
+        mock_bundle_cls.assert_not_called()
+        assert not out.exists()
+        assert 'pip install "recount3[parquet]"' in caplog.text
+
+    def test_text_output_does_not_require_a_parquet_engine(
+        self, tmp_path: Path
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.tsv"
+        frame = self._counts_frame(self._GENE_IDS)
+        with mock.patch(
+            "recount3._utils.ensure_parquet_engine",
+            side_effect=AssertionError("engine checked for text output"),
+        ):
+            code = self._run_with_frame(frame, self._make_args(str(out)), cfg)
+
+        assert code == 0
+        back = pd.read_csv(out, sep="\t", index_col=0)
+        assert list(back.columns) == self._SAMPLES
+
+    @staticmethod
+    def _sparse_junction_frame() -> pd.DataFrame:
+        """Mimic a junction MM load: a sparse-backed count matrix."""
+        matrix = scipy.sparse.csr_array(
+            np.array([[3, 0, 0], [0, 0, 11], [0, 5, 0]], dtype=np.int64)
+        )
+        frame = pd.DataFrame.sparse.from_spmatrix(matrix)
+        frame.columns = TestCmdBundleStackCounts._SAMPLES
+        frame.index = pd.Index(["0", "1", "2"], name="junction_id")
+        return frame
+
+    @pytest.mark.requires_parquet
+    def test_sparse_junctions_to_parquet_without_densify_returns_2(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "junctions.parquet"
+        frame = self._sparse_junction_frame()
+
+        with caplog.at_level(logging.ERROR):
+            code = self._run_with_frame(frame, self._make_args(str(out)), cfg)
+
+        assert code == 2
+        assert not out.exists()
+        assert "sparse dtype" in caplog.text
+        assert "--densify" in caplog.text
+
+    @pytest.mark.requires_parquet
+    def test_sparse_junctions_to_parquet_with_densify_round_trips(
+        self, tmp_path: Path
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "junctions.parquet"
+        frame = self._sparse_junction_frame()
+        args = self._make_args(str(out), densify=True)
+
+        code = self._run_with_frame(frame, args, cfg)
+
+        assert code == 0
+        back = pd.read_parquet(out)
+        assert list(back.index) == ["0", "1", "2"]
+        assert back.index.name == "junction_id"
+        assert list(back.columns) == self._SAMPLES
+        assert not any(
+            isinstance(dtype, pd.SparseDtype) for dtype in back.dtypes
+        )
+        np.testing.assert_array_equal(
+            back.to_numpy(),
+            np.array([[3, 0, 0], [0, 0, 11], [0, 5, 0]], dtype=np.int64),
+        )
+
+    def test_sparse_junctions_to_tsv_needs_no_densify(
+        self, tmp_path: Path
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "junctions.tsv"
+        frame = self._sparse_junction_frame()
+
+        code = self._run_with_frame(frame, self._make_args(str(out)), cfg)
+
+        assert code == 0
+        back = pd.read_csv(out, sep="\t", index_col=0)
+        assert list(back.columns) == self._SAMPLES
+        np.testing.assert_array_equal(
+            back.to_numpy(),
+            np.array([[3, 0, 0], [0, 0, 11], [0, 5, 0]], dtype=np.int64),
+        )
+
+
+def _make_experiment(
+    *,
+    counts: np.ndarray,
+    feature_ids: list[str],
+    samples: list[str],
+    biocframe: Any,
+    extra_row_data: dict[str, list[Any]] | None = None,
+    extra_column_data: dict[str, list[Any]] | None = None,
+) -> Any:
+    """Build a real SummarizedExperiment for AnnData round-trip tests."""
+    import summarizedexperiment  # pylint: disable=import-outside-toplevel
+
+    row_data: dict[str, list[Any]] = {"feature_id": list(feature_ids)}
+    row_data.update(extra_row_data or {})
+    column_data: dict[str, list[Any]] = {"sample": list(samples)}
+    column_data.update(extra_column_data or {})
+
+    return summarizedexperiment.SummarizedExperiment(
+        assays={"raw_counts": counts},
+        row_data=biocframe.BiocFrame(row_data, row_names=feature_ids),
+        column_data=biocframe.BiocFrame(column_data, row_names=samples),
+    )
 
 
 class TestCmdBundleSe:
@@ -1654,6 +1905,7 @@ class TestCmdBundleSe:
             annotation=None,
             assay_name="raw_counts",
             join="inner",
+            sanitize_columns=False,
             out=out,
         )
         defaults.update(kw)
@@ -1693,6 +1945,7 @@ class TestCmdBundleSe:
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
         ):
             code = _cmd_bundle_se(args, cfg)
         assert code == 0
@@ -1766,9 +2019,211 @@ class TestCmdBundleSe:
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
         ):
             code = _cmd_bundle_se(args, cfg)
         assert code == 2
+        mock_adata.write_h5ad.assert_called_once_with(out)
+
+    def test_h5ad_missing_anndata_returns_2_before_any_build(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.h5ad"
+        args = self._make_args(str(out))
+        boom = ImportError(
+            "Optional dependency 'anndata' is required for this feature.\n\n"
+            'Install it with:\n\n  pip install "recount3[anndata]"\n'
+        )
+        with (
+            mock.patch(
+                "recount3._utils.ensure_anndata_support", side_effect=boom
+            ),
+            mock.patch("recount3.cli._iter_manifest") as mock_manifest,
+            mock.patch("recount3.cli.R3ResourceBundle") as mock_bundle_cls,
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 2
+        mock_manifest.assert_not_called()
+        mock_bundle_cls.assert_not_called()
+        assert not out.exists()
+        assert 'pip install "recount3[anndata]"' in caplog.text
+
+    def test_pkl_output_does_not_require_anndata(self, tmp_path: Path) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.pkl"
+        args = self._make_args(str(out))
+        mock_obj = mock.MagicMock()
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = mock_obj
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch(
+                "recount3._utils.ensure_anndata_support",
+                side_effect=AssertionError("anndata checked for .pkl output"),
+            ),
+            mock.patch("pickle.dump"),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 0
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_round_trip(self, tmp_path: Path) -> None:
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out))
+
+        feature_ids = ["ENSG00000000003.14", "ENSG00000000005.5"]
+        samples = ["SRR387777", "SRR387778", "SRR387779"]
+        counts = np.array([[10, 0, 7], [0, 3, 0]], dtype=np.int64)
+        experiment = _make_experiment(
+            counts=counts,
+            feature_ids=feature_ids,
+            samples=samples,
+            biocframe=biocframe,
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 0
+        assert out.is_file() and out.stat().st_size > 0
+
+        back = anndata.read_h5ad(out)
+        # AnnData is observation-major: samples become obs, features var.
+        assert list(back.obs_names) == samples
+        assert list(back.var_names) == feature_ids
+        np.testing.assert_array_equal(
+            np.asarray(back.layers["raw_counts"]), counts.T
+        )
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_all_missing_column_is_cast_to_nan(
+        self, tmp_path: Path
+    ) -> None:
+        """An absent-for-every-row field would otherwise fail h5py."""
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out))
+        experiment = _make_experiment(
+            counts=np.array([[1, 2], [3, 4]], dtype=np.int64),
+            feature_ids=["g1", "g2"],
+            samples=["s1", "s2"],
+            biocframe=biocframe,
+            extra_row_data={"phase": [None, None]},
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 0
+        back = anndata.read_h5ad(out)
+        assert back.var["phase"].isna().all()
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_slash_in_column_name_returns_2_without_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """HDF5 reads '/' as a path separator; renaming needs consent."""
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out))
+        experiment = _make_experiment(
+            counts=np.array([[1, 2], [3, 4]], dtype=np.int64),
+            feature_ids=["g1", "g2"],
+            samples=["s1", "s2"],
+            biocframe=biocframe,
+            extra_column_data={
+                "recount_qc__star.number_of_splices:_gt/ag": ["1", "2"]
+            },
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 2
+        assert not out.exists()
+        assert "--sanitize-columns" in caplog.text
+        assert "forward slash" in caplog.text
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_slash_in_column_name_round_trips_with_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out), sanitize_columns=True)
+        experiment = _make_experiment(
+            counts=np.array([[1, 2], [3, 4]], dtype=np.int64),
+            feature_ids=["g1", "g2"],
+            samples=["s1", "s2"],
+            biocframe=biocframe,
+            extra_column_data={
+                "recount_qc__star.number_of_splices:_gt/ag": ["1", "2"]
+            },
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 0
+        assert "_gt/ag -> " in caplog.text
+
+        back = anndata.read_h5ad(out)
+        assert "recount_qc__star.number_of_splices:_gt_ag" in back.obs.columns
+        assert "recount_qc__star.number_of_splices:_gt/ag" not in back.obs
 
 
 class TestCmdBundleRse:
@@ -1780,6 +2235,7 @@ class TestCmdBundleRse:
             assay_name="raw_counts",
             join="inner",
             allow_fallback_to_se=False,
+            sanitize_columns=False,
             out=out,
         )
         defaults.update(kw)
@@ -1819,6 +2275,7 @@ class TestCmdBundleRse:
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
         ):
             code = _cmd_bundle_rse(args, cfg)
         assert code == 0
@@ -1914,9 +2371,212 @@ class TestCmdBundleRse:
             mock.patch(
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
         ):
             code = _cmd_bundle_rse(args, cfg)
         assert code == 2
+        mock_adata.write_h5ad.assert_called_once_with(out)
+
+    def test_h5ad_missing_anndata_returns_2_before_any_build(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.h5ad"
+        args = self._make_args(str(out))
+        boom = ImportError(
+            "Optional dependency 'anndata' is required for this feature.\n\n"
+            'Install it with:\n\n  pip install "recount3[anndata]"\n'
+        )
+        with (
+            mock.patch(
+                "recount3._utils.ensure_anndata_support", side_effect=boom
+            ),
+            mock.patch("recount3.cli._iter_manifest") as mock_manifest,
+            mock.patch("recount3.cli.R3ResourceBundle") as mock_bundle_cls,
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 2
+        mock_manifest.assert_not_called()
+        mock_bundle_cls.assert_not_called()
+        assert not out.exists()
+        assert 'pip install "recount3[anndata]"' in caplog.text
+
+    def test_pkl_output_does_not_require_anndata(self, tmp_path: Path) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.pkl"
+        args = self._make_args(str(out))
+        mock_obj = mock.MagicMock()
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = mock_obj
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch(
+                "recount3._utils.ensure_anndata_support",
+                side_effect=AssertionError("anndata checked for .pkl output"),
+            ),
+            mock.patch("pickle.dump"),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 0
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_round_trip(self, tmp_path: Path) -> None:
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out))
+
+        feature_ids = ["ENSG00000000003.14", "ENSG00000000005.5"]
+        samples = ["SRR387777", "SRR387778", "SRR387779"]
+        counts = np.array([[10, 0, 7], [0, 3, 0]], dtype=np.int64)
+        experiment = _make_experiment(
+            counts=counts,
+            feature_ids=feature_ids,
+            samples=samples,
+            biocframe=biocframe,
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 0
+        assert out.is_file() and out.stat().st_size > 0
+
+        back = anndata.read_h5ad(out)
+        # AnnData is observation-major: samples become obs, features var.
+        assert list(back.obs_names) == samples
+        assert list(back.var_names) == feature_ids
+        np.testing.assert_array_equal(
+            np.asarray(back.layers["raw_counts"]), counts.T
+        )
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_all_missing_column_is_cast_to_nan(
+        self, tmp_path: Path
+    ) -> None:
+        """An absent-for-every-row field would otherwise fail h5py."""
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out))
+        experiment = _make_experiment(
+            counts=np.array([[1, 2], [3, 4]], dtype=np.int64),
+            feature_ids=["g1", "g2"],
+            samples=["s1", "s2"],
+            biocframe=biocframe,
+            extra_row_data={"phase": [None, None]},
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 0
+        back = anndata.read_h5ad(out)
+        assert back.var["phase"].isna().all()
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_slash_in_column_name_returns_2_without_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """HDF5 reads '/' as a path separator; renaming needs consent."""
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out))
+        experiment = _make_experiment(
+            counts=np.array([[1, 2], [3, 4]], dtype=np.int64),
+            feature_ids=["g1", "g2"],
+            samples=["s1", "s2"],
+            biocframe=biocframe,
+            extra_column_data={
+                "recount_qc__star.number_of_splices:_gt/ag": ["1", "2"]
+            },
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 2
+        assert not out.exists()
+        assert "--sanitize-columns" in caplog.text
+        assert "forward slash" in caplog.text
+
+    @pytest.mark.requires_anndata
+    def test_h5ad_slash_in_column_name_round_trips_with_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "counts.h5ad"
+        args = self._make_args(str(out), sanitize_columns=True)
+        experiment = _make_experiment(
+            counts=np.array([[1, 2], [3, 4]], dtype=np.int64),
+            feature_ids=["g1", "g2"],
+            samples=["s1", "s2"],
+            biocframe=biocframe,
+            extra_column_data={
+                "recount_qc__star.number_of_splices:_gt/ag": ["1", "2"]
+            },
+        )
+
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = experiment
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 0
+        # Every rename is reported, not applied silently.
+        assert "_gt/ag -> " in caplog.text
+
+        back = anndata.read_h5ad(out)
+        assert "recount_qc__star.number_of_splices:_gt_ag" in back.obs.columns
+        assert "recount_qc__star.number_of_splices:_gt/ag" not in back.obs
 
 
 class TestCmdSmokeTest:
