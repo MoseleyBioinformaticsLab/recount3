@@ -128,6 +128,19 @@ common workflow: one project, one organism, one annotation, one assembled
 :class:`~summarizedexperiment.RangedSummarizedExperiment`. Requires the
 ``biocpy`` extra.
 
+**Use this layer when** you have a study accession and want its expression
+data ready to analyze. You read a paper that used ``SRP009615`` and want to
+re-run the differential expression yourself; you need gene-level counts for
+one GTEx tissue to test a hypothesis; you are checking whether a gene of
+interest is expressed in a public dataset before designing an experiment. In
+each case one accession goes in and one object comes out, with counts,
+sample metadata, and genomic coordinates already aligned to each other.
+
+**Use a different layer when** one project is not the unit of work: reach
+for Layer 2 if you need several studies in one matrix or want to inspect the
+files before committing to a download, and Layer 3 if you want one specific
+file and nothing else.
+
 Gene-level RSE (default)
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -190,10 +203,36 @@ this.
 Falling back to a plain ``SummarizedExperiment``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If genomic ranges cannot be derived (for example, the GTF is missing or an
-RR file is unavailable), ``create_rse`` raises :exc:`ValueError` by
-default. Pass ``allow_fallback_to_se=True`` to receive a plain
-:class:`~summarizedexperiment.SummarizedExperiment` in that case:
+Every gene or exon row range comes from an annotation GTF, and every
+junction range from an RR sidecar. When that file cannot be turned into
+ranges, ``create_rse`` raises :exc:`~recount3.RangesError` (a
+:exc:`ValueError`) naming which of three things went wrong:
+
+``the annotation could not be retrieved``
+   The download failed. The HTTP layer has already retried it
+   (``RECOUNT3_MAX_RETRIES``, default 3), so this points at a mirror or
+   network that is actually down rather than a momentary blip. Try again
+   later, or point ``RECOUNT3_URL`` at another mirror.
+
+``the annotation could not be parsed``
+   The file arrived but is not readable as a GTF, most often a truncated
+   cache entry from an interrupted download. Drop it with
+   :func:`~recount3.recount3_cache_rm` and let it download again.
+
+``the annotation does not cover every counted feature``
+   The annotation parses cleanly but describes a different feature set
+   than the counts -- a GENCODE 26 GTF against GENCODE 29 counts, say.
+   Pass the matching ``annotation_extension`` or ``annotation_label``;
+   :func:`~recount3.annotation_options` lists what is available.
+
+You do not have to predict which of these will happen before you call.
+Ask for the RSE; you either get one, or you get a message naming the
+cause. Nothing is silently degraded in between.
+
+``allow_fallback_to_se=True`` changes only what happens in that failure
+case: rather than raising, you get a plain
+:class:`~summarizedexperiment.SummarizedExperiment` and a logged warning
+explaining why:
 
 .. code:: python
 
@@ -202,6 +241,26 @@ default. Pass ``allow_fallback_to_se=True`` to receive a plain
        organism="human",
        allow_fallback_to_se=True,
    )
+
+Be deliberate about that flag:
+
+- The returned object **has no genomic ranges**. Counts, sample metadata,
+  and the operations driven by column data still work --
+  :func:`recount3.se.transform_counts`,
+  :func:`recount3.se.compute_scale_factors`,
+  :func:`recount3.se.expand_sra_attributes`. Anything needing coordinates
+  does not: range queries, overlaps, subsetting by region, and
+  :func:`recount3.se.compute_tpm`, which needs feature widths and raises on
+  a plain SE. Code written for an RSE will still fail, just later and
+  further from the cause.
+- It is **not a retry**. The download is not attempted again, and the flag
+  does nothing about whatever made retrieval fail.
+- It does **not repair an annotation mismatch**. Accepting an SE is how a
+  wrong ``annotation_extension`` goes unnoticed.
+
+It earns its place in count-only work, and in batch jobs that should not
+abort on one bad project. When you do want ranges, fix the cause the
+message names instead of passing the flag.
 
 Operations performed by ``create_rse``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -228,6 +287,28 @@ Layer 2: Resource bundles
 :class:`~recount3.R3ResourceBundle` is a container of
 :class:`~recount3.R3Resource` objects with helpers for filtering,
 loading, stacking, and converting to BiocPy objects.
+
+**Use this layer when** ``create_rse``'s one-project, everything-at-once
+shape does not fit. Typical cases:
+
+- *Several studies, one matrix.* You want a gene-level matrix spanning
+  ``SRP009615`` and ``SRP001558`` to look for an effect that holds across
+  both, so the counts have to be stacked on a shared feature axis before
+  any analysis starts.
+- *Look before you download.* Junction and BigWig files are large. A bundle
+  lists what exists for a project -- URLs, sizes, annotation codes -- as
+  plain objects, so you can decide what is worth fetching, or write out a
+  manifest for someone else to fetch.
+- *Only part of what discovery returns.* You need the four gene-count files
+  and the QC table, not the exon counts, the junctions, and the other four
+  metadata tables that ``create_rse`` would download alongside them.
+- *Your own assembly.* You want the stacked counts as a
+  :class:`pandas.DataFrame` to merge with clinical data of your own, and
+  will build the BiocPy object yourself (or skip it entirely).
+
+A bundle is just a list of resources plus filters, so nothing is downloaded
+until you ask for it. That is the practical difference from Layer 1:
+``create_rse`` decides what to fetch for you, a bundle lets you decide.
 
 Discovering resources for one or more projects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -415,8 +496,14 @@ Layer 3: Individual resources
 -----------------------------
 
 :class:`~recount3.R3Resource` is the lowest level: one file, one URL, one
-cache entry, one parser. Use it when you want to download or load a
-specific file without going through the bundle machinery.
+cache entry, one parser.
+
+**Use this layer when** the unit of work is a single file. You want the
+GENCODE 26 gene annotation itself, not an experiment built from it; you are
+mirroring a handful of known URLs into a shared directory for a cluster job;
+you want the raw junction MatrixMarket file to feed a tool of your own; or
+you are debugging and want to see exactly which URL a description resolves
+to before anything is fetched.
 
 A resource is built from a description. Descriptions are typed
 dataclasses with field validation; the recommended constructor is the
@@ -756,7 +843,16 @@ Exception                                         Raised when
 :exc:`~recount3.DownloadError`                    Network/I-O failure during download
 :exc:`~recount3.LoadError`                        Cached file parsed empty, malformed, or shape-mismatched
 :exc:`~recount3.CompatibilityError`               Incompatible resources combined in a stack/build
+:exc:`~recount3.RangesError`                      Genomic ranges could not be derived for an RSE
+:exc:`~recount3.MissingRangesError`               Nothing in the bundle can supply genomic ranges
+:exc:`~recount3.RangesCoverageError`              Ranges source omits some counted features
 ================================================  ======================================================
+
+The three ranges errors also subclass :exc:`ValueError`, which is what
+``create_rse`` has always raised on this failure, so existing
+``except ValueError`` handlers keep working. ``MissingRangesError`` and
+``RangesCoverageError`` are what you catch to tell "there was no
+annotation to read" from "the annotation was the wrong one".
 
 Common pitfalls
 ~~~~~~~~~~~~~~~
@@ -795,10 +891,16 @@ Common pitfalls
    Filter the bundle before calling stack:
    ``bundle.filter(genomic_unit="gene").stack_count_matrices()``.
 
-``ValueError: Could not derive genomic ranges …``
-   The required GTF (gene/exon) or RR file (junction) was not in the
-   bundle, or the annotation code does not match the count files. Either
-   include the right annotation, or pass ``allow_fallback_to_se=True``.
+``RangesError: Could not derive genomic ranges …``
+   The rest of the message names the cause: the annotation (or, for
+   junctions, the RR coordinate file) could not be retrieved, could not be
+   parsed, or does not cover every counted feature -- a mismatch, fixed by
+   passing the matching ``annotation_extension``. A fourth variant, "no
+   annotation providing genomic ranges was in the bundle", means there is
+   no GTF or RR file to work from at all; include one at discovery time.
+   ``allow_fallback_to_se=True`` returns a range-less
+   :class:`~summarizedexperiment.SummarizedExperiment` instead of raising;
+   it does not retry or repair anything.
 
 ``CompatibilityError: Incompatible count families …``
    You tried to stack gene/exon counts together with junctions. Filter

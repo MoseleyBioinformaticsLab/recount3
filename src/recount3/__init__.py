@@ -103,6 +103,9 @@ from recount3.errors import (
     ConfigurationError,
     DownloadError,
     LoadError,
+    MissingRangesError,
+    RangesCoverageError,
+    RangesError,
     Recount3Error,
 )
 from recount3.resource import R3Resource
@@ -150,6 +153,9 @@ __all__ = [
     "DownloadError",
     "LoadError",
     "CompatibilityError",
+    "RangesError",
+    "MissingRangesError",
+    "RangesCoverageError",
     # Types
     "CacheMode",
     "CompatibilityMode",

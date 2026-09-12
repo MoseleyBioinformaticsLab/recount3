@@ -313,9 +313,13 @@ def build_ranged_summarized_experiment(
         present.
       assay_name: Name for the count assay in the output.
       join_policy: Join policy across projects when stacking.
-      autoload: If :data:`True`, load resources transparently.
+      autoload: If :data:`True`, download and load resources as they are
+        needed. If :data:`False`, only already-cached resources are used.
       allow_fallback_to_se: If :data:`True`, return a plain SE when
-        ranges are unavailable.
+        ranges are unavailable. That object has no genomic ranges, so
+        operations requiring an RSE will not work on it; the flag changes
+        the return type on failure and neither retries a failed retrieval
+        nor repairs a mismatched annotation.
 
     Returns:
       A :class:`summarizedexperiment.RangedSummarizedExperiment` object,
@@ -391,9 +395,14 @@ def create_ranged_summarized_experiment(
         resources in the bundle. These can be large.
       join_policy: Join policy across projects when stacking count matrices
         (passed to :func:`build_ranged_summarized_experiment`).
-      autoload: If :data:`True`, load resources transparently.
+      autoload: If :data:`True`, download and load resources as they are
+        needed. If :data:`False`, only already-cached resources are used.
       allow_fallback_to_se: If :data:`True`, construct a plain SE when
         genomic ranges cannot be derived for the requested combination.
+        That object has no genomic ranges, so operations requiring an RSE
+        will not work on it; the flag changes the return type on failure
+        and neither retries a failed retrieval nor repairs a mismatched
+        annotation.
       strict: If :data:`True`, propagate validation errors from the
         search layer (for example, missing projects or incompatible
         combinations).

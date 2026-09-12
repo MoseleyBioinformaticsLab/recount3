@@ -44,6 +44,9 @@ def _all_error_types() -> tuple[type[BaseException], ...]:
         recount3.errors.DownloadError,
         recount3.errors.LoadError,
         recount3.errors.CompatibilityError,
+        recount3.errors.RangesError,
+        recount3.errors.MissingRangesError,
+        recount3.errors.RangesCoverageError,
     )
 
 
@@ -61,12 +64,39 @@ def test_error_hierarchy_is_correct() -> None:
         recount3.errors.DownloadError,
         recount3.errors.LoadError,
         recount3.errors.CompatibilityError,
+        recount3.errors.RangesError,
+        recount3.errors.MissingRangesError,
+        recount3.errors.RangesCoverageError,
     )
 
     assert issubclass(base_type, Exception)
     for leaf_type in leaf_types:
         assert issubclass(leaf_type, base_type)
         assert leaf_type is not base_type
+
+
+def test_ranges_errors_are_also_value_errors() -> None:
+    """to_ranged_summarized_experiment has always failed with ValueError."""
+    for error_type in (
+        recount3.errors.RangesError,
+        recount3.errors.MissingRangesError,
+        recount3.errors.RangesCoverageError,
+    ):
+        assert issubclass(error_type, ValueError)
+        assert issubclass(error_type, recount3.errors.Recount3Error)
+
+
+def test_ranges_leaves_are_distinguishable() -> None:
+    """The two causes a caller can act on differently are separate types."""
+    assert issubclass(
+        recount3.errors.MissingRangesError, recount3.errors.RangesError
+    )
+    assert issubclass(
+        recount3.errors.RangesCoverageError, recount3.errors.RangesError
+    )
+    assert not issubclass(
+        recount3.errors.RangesCoverageError, recount3.errors.MissingRangesError
+    )
 
 
 @pytest.mark.parametrize(
@@ -77,6 +107,9 @@ def test_error_hierarchy_is_correct() -> None:
         recount3.errors.DownloadError,
         recount3.errors.LoadError,
         recount3.errors.CompatibilityError,
+        recount3.errors.RangesError,
+        recount3.errors.MissingRangesError,
+        recount3.errors.RangesCoverageError,
     ),
 )
 def test_error_is_catchable_as_base(error_type: type[BaseException]) -> None:
@@ -96,6 +129,9 @@ def test_error_is_catchable_as_base(error_type: type[BaseException]) -> None:
         recount3.errors.DownloadError,
         recount3.errors.LoadError,
         recount3.errors.CompatibilityError,
+        recount3.errors.RangesError,
+        recount3.errors.MissingRangesError,
+        recount3.errors.RangesCoverageError,
     ),
 )
 def test_error_message_is_visible_in_repr(

@@ -483,6 +483,89 @@ def test_cached_path_filename_contains_url_basename(cfg: Config) -> None:
     assert "sra.gene_sums.SRP014565.G026.gz" in cp.name
 
 
+class TestEnsureCached:
+    """`_cached_path()` computes a path; `ensure_cached()` guarantees a file.
+
+    The distinction matters because callers that read the cached file
+    themselves cannot tell a cache miss from a hit by calling
+    `_cached_path()`, it returns a path either way and never raises.
+    """
+
+    @staticmethod
+    def _resource(cfg: Config) -> R3Resource:
+        return _make(
+            "count_files_gene_or_exon",
+            cfg,
+            organism="human",
+            data_source="sra",
+            genomic_unit="gene",
+            project="SRP014565",
+            annotation_extension="G026",
+        )
+
+    def test_returns_the_cached_file_without_downloading(
+        self, cfg: Config, tmp_path: Path
+    ) -> None:
+        res = self._resource(cfg)
+        src = tmp_path / "seed.gz"
+        src.write_bytes(b"payload")
+        seeded = _seed(res, src)
+
+        with mock.patch.object(res_module, "download_to_file") as dl:
+            assert res.ensure_cached() == seeded
+        dl.assert_not_called()
+
+    def test_downloads_when_the_file_is_absent(self, cfg: Config) -> None:
+        res = self._resource(cfg)
+        assert not res._cached_path().exists()
+
+        def fake_download(url: str, out_path: Path, **_kw: object) -> None:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(b"fetched")
+
+        with mock.patch.object(
+            res_module, "download_to_file", side_effect=fake_download
+        ) as dl:
+            path = res.ensure_cached()
+        dl.assert_called_once()
+        assert path.read_bytes() == b"fetched"
+
+    def test_raises_instead_of_downloading_when_disabled(
+        self, cfg: Config
+    ) -> None:
+        res = self._resource(cfg)
+        with mock.patch.object(res_module, "download_to_file") as dl:
+            with pytest.raises(FileNotFoundError):
+                res.ensure_cached(download=False)
+        dl.assert_not_called()
+
+    def test_a_resource_with_no_usable_path_still_tries_to_download(
+        self, cfg: Config, tmp_path: Path
+    ) -> None:
+        """The only case where `_cached_path()` itself can fail."""
+        res = self._resource(cfg)
+        real_path = res._cached_path()
+        calls = {"n": 0}
+
+        def flaky_cached_path(_self: R3Resource) -> Path:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("malformed resource")
+            return real_path
+
+        def fake_download(url: str, out_path: Path, **_kw: object) -> None:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(b"fetched")
+
+        with (
+            mock.patch.object(R3Resource, "_cached_path", flaky_cached_path),
+            mock.patch.object(
+                res_module, "download_to_file", side_effect=fake_download
+            ),
+        ):
+            assert res.ensure_cached().read_bytes() == b"fetched"
+
+
 # ===========================================================================
 # R3Resource._ensure_cached
 # ===========================================================================

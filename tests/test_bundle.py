@@ -33,9 +33,11 @@
 
 from __future__ import annotations
 
+import dataclasses
 import gzip
 import io
 import logging
+import urllib.error
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -57,6 +59,7 @@ from recount3.bundle import (
     _construct_ranged_summarized_experiment,
     _construct_summarized_experiment,
     _count_compat_keys,
+    _classify_ranges_failure,
     _dedupe_ranges_on_feature_id,
     _ensure_unique_columns,
     _make_unique_names,
@@ -74,8 +77,15 @@ from recount3.bundle import (
     _strip_ensembl_version,
     _to_genomic_ranges,
 )
+from recount3._descriptions import R3ResourceDescription
 from recount3.config import Config
-from recount3.errors import CompatibilityError
+from recount3.errors import (
+    CompatibilityError,
+    DownloadError,
+    MissingRangesError,
+    RangesCoverageError,
+    RangesError,
+)
 from recount3.resource import R3Resource
 
 _TESTS_DIR = Path(__file__).parent
@@ -883,10 +893,17 @@ class TestRangesFromGtf:
 class TestPeekGtfFeatureCounts:
     def test_reads_gtf_gz(self) -> None:
         res = MagicMock(spec=R3Resource)
-        res._cached_path.return_value = _GENE_GTF_GZ
+        res.ensure_cached.return_value = _GENE_GTF_GZ
         counts = _peek_gtf_feature_counts(res)
         assert "gene" in counts
         assert counts["gene"] == 2000
+
+    def test_autoload_is_passed_to_the_resource(self) -> None:
+        """autoload is the bundle's policy; download= is the resource's."""
+        res = MagicMock(spec=R3Resource)
+        res.ensure_cached.return_value = _GENE_GTF_GZ
+        _peek_gtf_feature_counts(res, autoload=False)
+        res.ensure_cached.assert_called_once_with(download=False)
 
     def test_max_lines_limits_scan(self, tmp_path: Path) -> None:
         lines = [
@@ -898,7 +915,7 @@ class TestPeekGtfFeatureCounts:
             f.writelines(lines)
 
         res = MagicMock(spec=R3Resource)
-        res._cached_path.return_value = gz_path
+        res.ensure_cached.return_value = gz_path
         counts = _peek_gtf_feature_counts(res, max_lines=5)
         assert counts["gene"] == 5
 
@@ -909,30 +926,283 @@ class TestPeekGtfFeatureCounts:
             f.write(content)
 
         res = MagicMock(spec=R3Resource)
-        res._cached_path.return_value = gz_path
+        res.ensure_cached.return_value = gz_path
         counts = _peek_gtf_feature_counts(res)
         assert counts.get("gene", 0) == 1
         assert counts.get("#", 0) == 0
 
-    def test_downloads_when_cached_path_raises(self, tmp_path: Path) -> None:
-        gz_path = tmp_path / "test.gtf.gz"
-        content = 'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
-        with gzip.open(gz_path, "wt", encoding="utf-8") as f:
-            f.write(content)
 
-        call_count = {"n": 0}
+def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """Return the messages of every captured record at WARNING or above."""
+    return [
+        rec.getMessage()
+        for rec in caplog.records
+        if rec.levelno >= logging.WARNING
+    ]
 
-        def cached_path_side_effect() -> Path:
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                raise RuntimeError("not cached")
-            return gz_path
 
-        res = MagicMock(spec=R3Resource)
-        res._cached_path.side_effect = cached_path_side_effect
-        counts = _peek_gtf_feature_counts(res)
-        res.download.assert_called_once()
-        assert counts["gene"] == 1
+class TestAnnotationCachePreparation:
+    """Cache preparation for annotations, using real resources and caches.
+
+    These exercise the actual contract of
+    :meth:`R3Resource._cached_path`: it computes a path and never consults
+    the filesystem, so a cache miss is an absent file, not an exception.
+    Mocking ``_cached_path`` to raise cannot reproduce that, which is how
+    the first-use ``FileNotFoundError`` warning went unnoticed.
+    """
+
+    @staticmethod
+    def _gene_annotation(cfg: Config) -> R3Resource:
+        """Return the mirror's real human G026 gene annotation resource."""
+        return R3Resource(
+            description=R3ResourceDescription(
+                resource_type="annotations",
+                organism="human",
+                genomic_unit="gene",
+                annotation_extension="G026",
+            ),
+            config=cfg,
+        )
+
+    def test_cache_miss_is_an_absent_file_not_an_exception(
+        self, local_config: Config
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        assert not res._cached_path().exists()
+
+    def test_ensure_cached_downloads_on_cold_cache(
+        self, local_config: Config
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        path = res.ensure_cached()
+        assert path.exists()
+        assert path == res._cached_path()
+
+    def test_ensure_cached_reuses_a_warm_cache(
+        self, local_config: Config, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        res.download(path=None, cache_mode="enable")
+
+        def no_network(*_args: Any, **_kwargs: Any) -> None:
+            raise AssertionError("a warm cache must not be re-fetched")
+
+        monkeypatch.setattr(_utils_module, "http_open", no_network)
+        assert res.ensure_cached().exists()
+
+    def test_ensure_cached_refuses_to_download_when_told_not_to(
+        self, local_config: Config
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        with pytest.raises(FileNotFoundError):
+            res.ensure_cached(download=False)
+        assert not res._cached_path().exists()
+
+    def test_peek_succeeds_on_a_cold_cache_without_warning(
+        self, local_config: Config, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The regression: first use used to warn, then work on the retry."""
+        res = self._gene_annotation(local_config)
+        with caplog.at_level(logging.DEBUG):
+            counts = _peek_gtf_feature_counts(res)
+        assert counts["gene"] == 2000
+        assert res._cached_path().exists()
+        assert _warnings(caplog) == []
+
+    def test_peek_with_autoload_off_raises_and_stays_offline(
+        self, local_config: Config
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        with pytest.raises(FileNotFoundError):
+            _peek_gtf_feature_counts(res, autoload=False)
+        assert not res._cached_path().exists()
+
+    def test_selection_on_a_cold_cache_emits_no_warning(
+        self, local_config: Config, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        bundle = R3ResourceBundle(resources=[res])
+        with caplog.at_level(logging.DEBUG):
+            picked = _select_gtf_resource_for_unit(
+                bundle, genomic_unit="gene", annotation_extension="G026"
+            )
+        assert picked is res
+        assert res._cached_path().exists()
+        assert _warnings(caplog) == []
+
+    def test_selection_on_a_warm_cache_issues_no_request(
+        self, local_config: Config, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        res.download(path=None, cache_mode="enable")
+
+        def no_network(*_args: Any, **_kwargs: Any) -> None:
+            raise AssertionError("a warm cache must not be re-fetched")
+
+        monkeypatch.setattr(_utils_module, "http_open", no_network)
+        bundle = R3ResourceBundle(resources=[res])
+        picked = _select_gtf_resource_for_unit(
+            bundle, genomic_unit="gene", annotation_extension="G026"
+        )
+        assert picked is res
+
+    def test_selection_with_autoload_off_stays_offline(
+        self, local_config: Config, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        bundle = R3ResourceBundle(resources=[res])
+        with caplog.at_level(logging.DEBUG):
+            picked = _select_gtf_resource_for_unit(
+                bundle,
+                genomic_unit="gene",
+                annotation_extension="G026",
+                autoload=False,
+            )
+        # Ranking alone decides; nothing is fetched and nothing is wrong.
+        assert picked is res
+        assert not res._cached_path().exists()
+        assert _warnings(caplog) == []
+
+    def test_transient_retrieval_failure_is_retried_not_warned(
+        self,
+        local_config: Config,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The download layer's existing retries cover a flaky first attempt."""
+        cfg = dataclasses.replace(local_config, max_retries=3)
+        res = self._gene_annotation(cfg)
+
+        real_http_open = _utils_module.http_open
+        attempts = {"n": 0}
+
+        def flaky_http_open(url: str, **kwargs: Any) -> Any:
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise urllib.error.URLError("transient")
+            return real_http_open(url, **kwargs)
+
+        monkeypatch.setattr(_utils_module, "http_open", flaky_http_open)
+        monkeypatch.setattr(_utils_module.time, "sleep", lambda _s: None)
+
+        with caplog.at_level(logging.DEBUG):
+            counts = _peek_gtf_feature_counts(res)
+
+        assert attempts["n"] == 2
+        assert counts["gene"] == 2000
+        assert _warnings(caplog) == []
+
+    def test_persistent_retrieval_failure_is_reported_as_retrieval(
+        self,
+        local_config: Config,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        res = self._gene_annotation(local_config)
+
+        def always_down(*_args: Any, **_kwargs: Any) -> None:
+            raise urllib.error.URLError("down")
+
+        monkeypatch.setattr(_utils_module, "http_open", always_down)
+
+        with pytest.raises(DownloadError):
+            _peek_gtf_feature_counts(res)
+
+        bundle = R3ResourceBundle(resources=[res])
+        with caplog.at_level(logging.DEBUG):
+            picked = _select_gtf_resource_for_unit(
+                bundle, genomic_unit="gene", annotation_extension="G026"
+            )
+        # Unusable, but still the best-ranked candidate on offer.
+        assert picked is res
+        messages = _warnings(caplog)
+        assert len(messages) == 1
+        assert "could not inspect" in messages[0]
+
+    def test_corrupt_cache_entry_is_reported_as_a_parse_failure(
+        self, local_config: Config
+    ) -> None:
+        res = self._gene_annotation(local_config)
+        res.download(path=None, cache_mode="enable")
+        res._cached_path().write_bytes(b"this is not gzipped GTF")
+
+        counts_df = pd.DataFrame(
+            [[1.0]], index=["ENSG00000278704.1"], columns=["SRR001"]
+        )
+        res_count = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=counts_df,
+            genomic_unit="gene",
+            annotation_extension="G026",
+        )
+        bundle = R3ResourceBundle(resources=[res_count, res])
+
+        with pytest.raises(ValueError, match="could not be parsed"):
+            bundle.to_ranged_summarized_experiment(
+                genomic_unit="gene", annotation_extension="G026"
+            )
+
+
+class TestClassifyRangesFailure:
+    """The failure modes are told apart because the user's fix differs."""
+
+    def test_download_failure_is_retrieval(self) -> None:
+        assert (
+            _classify_ranges_failure(DownloadError("boom"))
+            == "the annotation could not be retrieved"
+        )
+
+    def test_absent_file_is_retrieval(self) -> None:
+        assert (
+            _classify_ranges_failure(FileNotFoundError(2, "nope"))
+            == "the annotation could not be retrieved"
+        )
+
+    def test_corrupt_archive_is_content_not_retrieval(self) -> None:
+        """gzip.BadGzipFile is an OSError, but the bytes did arrive."""
+        assert (
+            _classify_ranges_failure(gzip.BadGzipFile("not gzipped"))
+            == "the annotation could not be parsed"
+        )
+
+    def test_parse_failure_is_content(self) -> None:
+        assert (
+            _classify_ranges_failure(ValueError("bad columns"))
+            == "the annotation could not be parsed"
+        )
+
+    def test_uncovered_features_is_a_mismatch(self) -> None:
+        assert (
+            _classify_ranges_failure(RangesCoverageError("missing"))
+            == "the annotation does not cover every counted feature"
+        )
+
+    def test_nothing_to_read_is_reported_as_absent(self) -> None:
+        assert (
+            _classify_ranges_failure(MissingRangesError("none"))
+            == "no annotation providing genomic ranges was in the bundle"
+        )
+
+    def test_no_attempt_at_all_is_reported_as_absent(self) -> None:
+        assert (
+            _classify_ranges_failure(None)
+            == "no annotation providing genomic ranges was in the bundle"
+        )
+
+    def test_source_renames_the_subject_of_the_phrase(self) -> None:
+        """Junction ranges come from an RR file, not from an annotation."""
+        assert (
+            _classify_ranges_failure(
+                DownloadError("boom"), source="RR coordinate file"
+            )
+            == "the RR coordinate file could not be retrieved"
+        )
+
+    def test_ranges_errors_still_read_as_value_errors(self) -> None:
+        """Callers catching ValueError keep working across this split."""
+        assert issubclass(RangesCoverageError, ValueError)
+        assert issubclass(MissingRangesError, ValueError)
+        assert issubclass(RangesError, ValueError)
 
 
 class TestSelectGtfResourceForUnit:
@@ -2531,7 +2801,7 @@ class TestPeekGtfShortLines:
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write(content)
         res = MagicMock(spec=R3Resource)
-        res._cached_path.return_value = gz_path
+        res.ensure_cached.return_value = gz_path
         counts = _peek_gtf_feature_counts(res)
         assert counts.get("gene", 0) == 1
         assert counts.get("ref", 0) == 0
@@ -2731,7 +3001,7 @@ class TestNormalizeSampleMetadataExternalIdFillback:
 
 class TestToRangedSEAutoload:
     @pytest.mark.requires_biocpy
-    def test_autoload_true_downloads_gtf(self, tmp_path: Path) -> None:
+    def test_autoload_true_reuses_cached_gtf(self, tmp_path: Path) -> None:
         gz_path = tmp_path / "genes.gtf.gz"
         content = (
             'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001"; gene_name "MYC"\n'
@@ -2772,7 +3042,61 @@ class TestToRangedSEAutoload:
         rse = b.to_ranged_summarized_experiment(
             genomic_unit="gene", autoload=True
         )
-        res_ann.download.assert_called()
+        # The annotation is already in the cache, so no download is issued.
+        res_ann.download.assert_not_called()
+        assert rse is not None
+
+    @pytest.mark.requires_biocpy
+    def test_autoload_becomes_the_resources_download_policy(
+        self, tmp_path: Path
+    ) -> None:
+        """autoload reaches the annotation, which is what the bug missed.
+
+        Whether an absent file is then fetched is R3Resource.ensure_cached's
+        job; see TestEnsureCached in test_resource.py.
+        """
+        gz_path = tmp_path / "cache" / "genes.gtf.gz"
+        content = (
+            'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001"\n'
+            'chr2\tref\tgene\t200\t300\t.\t-\t.\tgene_id "ENSG002"\n'
+        )
+
+        counts_df = pd.DataFrame(
+            np.ones((2, 1), dtype=float),
+            index=["ENSG001", "ENSG002"],
+            columns=["SRR001"],
+        )
+        res_count = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=counts_df,
+            genomic_unit="gene",
+            annotation_extension="G026",
+        )
+
+        res_ann = MagicMock(spec=R3Resource)
+        desc_ann = MagicMock()
+        desc_ann.resource_type = "annotations"
+        desc_ann.url_path.return_value = "human/ann/gene.gtf.gz"
+        desc_ann.annotation_extension = "G026"
+        desc_ann.genomic_unit = "gene"
+        res_ann.description = desc_ann
+        res_ann.url = "http://example.com/ann/gene.gtf.gz"
+        res_ann._cached_path.return_value = gz_path
+
+        def fake_ensure_cached(*, download: bool) -> Path:
+            assert download is True
+            gz_path.parent.mkdir(parents=True, exist_ok=True)
+            with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+                fh.write(content)
+            return gz_path
+
+        res_ann.ensure_cached.side_effect = fake_ensure_cached
+
+        b = R3ResourceBundle(resources=[res_count, res_ann])
+        rse = b.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=True
+        )
+        res_ann.ensure_cached.assert_called_with(download=True)
         assert rse is not None
 
     @pytest.mark.requires_biocpy

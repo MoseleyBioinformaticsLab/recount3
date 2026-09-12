@@ -88,6 +88,7 @@ Note:
 from __future__ import annotations
 
 import dataclasses
+import errno
 import gzip
 import inspect
 import threading
@@ -458,6 +459,63 @@ class R3Resource:
                 return cache_path
             case _:
                 raise ValueError(f"Unknown cache mode: {mode!r}")
+
+    def ensure_cached(self, *, download: bool = True) -> Path:
+        """Return the local path of this resource, fetching it if absent.
+
+        :meth:`_cached_path` only computes where the file would live; it
+        neither consults the filesystem nor downloads anything, so opening
+        its result directly fails with :exc:`FileNotFoundError` the first
+        time a resource is used. This method closes that gap for callers
+        that read the cached file themselves rather than going through
+        :meth:`load`.
+
+        Fetching is delegated to :meth:`download`, so the configured retry,
+        locking, and atomic-replace behavior applies unchanged.
+
+        Args:
+            download: If True, download the resource when it is not already
+                cached. If False, never touch the network; an absent file
+                raises instead.
+
+        Returns:
+            Absolute path to the cached file.
+
+        Raises:
+            FileNotFoundError: If the file is absent and `download` is
+                False.
+            DownloadError: If the download fails.
+
+        Examples:
+            Read a cached file directly, fetching it on first use::
+
+                with gzip.open(res.ensure_cached(), "rb") as fh:
+                    header = fh.readline()
+
+            Use only what is already on disk::
+
+                path = res.ensure_cached(download=False)
+        """
+        path: Path | None
+        try:
+            path = self._cached_path()
+            cached = path.exists()
+        except Exception:  # pylint: disable=broad-exception-caught
+            path = None
+            cached = False
+
+        if cached and path is not None:
+            return path
+
+        if not download:
+            raise FileNotFoundError(
+                errno.ENOENT,
+                "Resource is not cached and downloading is disabled",
+                str(path) if path is not None else (self.url or ""),
+            )
+
+        self.download(path=None, cache_mode="enable")
+        return self._cached_path()
 
     def download(
         self,

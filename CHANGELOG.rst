@@ -4,6 +4,22 @@ Changelog
 Unreleased
 ----------
 
+Added
+~~~~~
+
+- ``RangesError`` and its subclasses ``MissingRangesError`` and
+  ``RangesCoverageError`` in ``recount3.errors``, also exported at the top
+  level. They make the reason ranges could not be derived catchable rather
+  than only readable: ``MissingRangesError`` means nothing in the bundle can
+  supply ranges, ``RangesCoverageError`` that the file does not describe every
+  counted feature. All three also subclass ``ValueError``, which is what
+  ``to_ranged_summarized_experiment`` has always raised, so existing handlers
+  keep working.
+- ``R3Resource.ensure_cached(download=...)`` returns a resource's local path,
+  fetching it first when absent. ``_cached_path()`` only computes a path and
+  never reports a cache miss, so callers that read the cached file themselves
+  had no way to prepare it.
+
 Changed
 ~~~~~~~
 
@@ -17,6 +33,29 @@ Changed
   installable on Python 3.10 and 3.11) working unchanged.
 - Deprecation warnings originating in ``recount3`` modules now fail the test
   suite, so upstream deprecations surface before they become breaking changes.
+- When genomic ranges cannot be derived, the reported reason now distinguishes
+  a failure to retrieve the annotation, an annotation that cannot be parsed,
+  and an annotation that does not cover every counted feature. Only the last
+  is fixed by choosing a different ``annotation_extension``.
+- The "falling back" warning is emitted only when a plain
+  ``SummarizedExperiment`` is actually returned, instead of whenever range
+  derivation failed.
+- ``autoload`` now reaches annotation selection, so ``autoload=False``
+  inspects only already-cached annotations and never downloads.
+- ``to_ranged_summarized_experiment`` raises ``RangesError`` instead of a bare
+  ``ValueError``. ``RangesError`` is a ``ValueError``, so this is
+  source-compatible.
+
+Fixed
+~~~~~
+
+- ``create_rse`` no longer logs a spurious ``Failed to peek GTF features ...
+  FileNotFoundError`` warning on the first use of an annotation. Annotation
+  selection opened the computed cache path without first ensuring the file was
+  there, so a cold cache produced a warning that vanished once the normal
+  loading path had downloaded the file. Selection now prepares the cache
+  through the existing download implementation, which already retries
+  transient network errors.
 
 1.1.0 (2026-06-12)
 ------------------

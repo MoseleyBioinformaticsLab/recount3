@@ -45,6 +45,14 @@ to handle a specific failure mode:
 * :class:`CompatibilityError`: resources that are incompatible with each
   other were combined in an operation such as
   :meth:`~recount3.bundle.R3ResourceBundle.stack_count_matrices`.
+* :class:`RangesError`: genomic ranges could not be derived for a
+  :class:`~summarizedexperiment.RangedSummarizedExperiment`, with
+  :class:`MissingRangesError` and :class:`RangesCoverageError` naming the
+  two cases a caller can act on differently.
+
+The ranges errors also subclass :exc:`ValueError`, which is what
+:meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`
+has always raised, so ``except ValueError`` keeps catching them.
 
 Example:
     Catch all recount3 errors with the base class::
@@ -80,3 +88,29 @@ class LoadError(Recount3Error):
 
 class CompatibilityError(Recount3Error):
     """Raised when resources are incompatible for combined operations."""
+
+
+class RangesError(Recount3Error, ValueError):
+    """Raised when genomic ranges cannot be derived for a count matrix.
+
+    Also a :exc:`ValueError`, because deriving ranges has always reported
+    failure that way; catching either base still works.
+    """
+
+
+class MissingRangesError(RangesError):
+    """Raised when no resource in the bundle can supply genomic ranges.
+
+    Nothing failed: the GTF annotation (gene and exon units) or RR
+    coordinate file (junctions) that ranges would come from is simply not
+    part of the bundle. Include it at discovery time.
+    """
+
+
+class RangesCoverageError(RangesError):
+    """Raised when a ranges source omits some of the counted features.
+
+    The file was retrieved and parsed, but does not describe every feature
+    in the counts matrix -- typically an annotation mismatch, fixed by
+    selecting the ``annotation_extension`` that matches the counts.
+    """

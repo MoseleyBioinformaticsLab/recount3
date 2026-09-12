@@ -107,6 +107,9 @@ def test_error_classes_are_exported() -> None:
         "DownloadError",
         "LoadError",
         "CompatibilityError",
+        "RangesError",
+        "MissingRangesError",
+        "RangesCoverageError",
     ):
         obj = getattr(recount3, name)
         assert isinstance(obj, type)

@@ -799,15 +799,62 @@ def _ranges_from_gtf(
     return out
 
 
+def _classify_ranges_failure(
+    exc: Optional[BaseException], *, source: str = "annotation"
+) -> str:
+    """Describe why genomic ranges could not be derived.
+
+    Four outcomes are worth telling apart, because the user action differs
+    for each: nothing to derive ranges from was in the bundle; the file
+    could not be retrieved (worth retrying, or a mirror problem); it was
+    retrieved but could not be parsed (damaged or unexpected content); or
+    it parsed cleanly but does not describe every counted feature (a
+    mismatch, fixed by selecting the matching ``annotation_extension``).
+
+    Args:
+      exc: The exception raised while deriving ranges, or :data:`None`
+        when no attempt was made at all.
+      source: What ranges were to be read from, for the returned phrase --
+        ``"annotation"`` for gene and exon units, the RR coordinate file
+        for junctions.
+
+    Returns:
+      A short human-readable phrase naming the outcome.
+    """
+    if exc is None or isinstance(exc, errors.MissingRangesError):
+        return f"no {source} providing genomic ranges was in the bundle"
+    if isinstance(exc, errors.RangesCoverageError):
+        return f"the {source} does not cover every counted feature"
+    if isinstance(exc, (gzip.BadGzipFile, EOFError)):
+        return f"the {source} could not be parsed"
+    if isinstance(exc, (errors.DownloadError, OSError)):
+        return f"the {source} could not be retrieved"
+    return f"the {source} could not be parsed"
+
+
+_RR_SOURCE = "RR coordinate file"
+
+
 def _peek_gtf_feature_counts(
-    res: resource.R3Resource, *, max_lines: int = 50000
+    res: resource.R3Resource,
+    *,
+    max_lines: int = 50000,
+    autoload: bool = True,
 ) -> Counter[str]:
-    """Scan the GTF and count feature types without loading it fully."""
-    try:
-        path = res._cached_path()
-    except Exception:  # pylint: disable=broad-exception-caught
-        res.download(path=None, cache_mode="enable")
-        path = res._cached_path()
+    """Scan the GTF and count feature types without loading it fully.
+
+    Args:
+      res: The annotation resource to inspect.
+      max_lines: Stop after this many feature rows.
+      autoload: If :data:`True`, download the annotation when it is not
+        already cached. If :data:`False`, an uncached annotation raises
+        :exc:`FileNotFoundError` instead of being fetched.
+
+    Returns:
+      A :class:`collections.Counter` mapping GTF feature type to the number
+      of rows seen for it within the scanned prefix of the file.
+    """
+    path = res.ensure_cached(download=autoload)
 
     opener = gzip.open if str(path).endswith(".gz") else open
     counts: Counter[str] = Counter()
@@ -830,8 +877,28 @@ def _select_gtf_resource_for_unit(
     *,
     genomic_unit: str,
     annotation_extension: Optional[str],
+    autoload: bool = True,
 ) -> Optional[resource.R3Resource]:
-    """Pick the most appropriate annotation resource for gene/exon ranges."""
+    """Pick the most appropriate annotation resource for gene/exon ranges.
+
+    Candidates are ranked by their description and URL, then confirmed by
+    peeking at the file itself. Confirmation needs the annotation on disk,
+    so with ``autoload`` enabled a candidate that is not cached yet is
+    downloaded first; with ``autoload`` disabled, uncached candidates are
+    skipped and the ranking alone decides.
+
+    Args:
+      bundle: The bundle to search for annotation resources.
+      genomic_unit: Either ``"gene"`` or ``"exon"``.
+      annotation_extension: Restrict candidates to this annotation code
+        when given.
+      autoload: If :data:`True`, download candidate annotations as needed
+        to inspect them. If :data:`False`, inspect only what is cached.
+
+    Returns:
+      The selected resource, or :data:`None` when the bundle holds no
+      annotation resources at all.
+    """
     feature_kind = "gene" if genomic_unit == "gene" else "exon"
 
     ann = bundle.filter(resource_type="annotations")
@@ -866,20 +933,35 @@ def _select_gtf_resource_for_unit(
 
     for res in candidates:
         try:
-            feats = _peek_gtf_feature_counts(res, max_lines=50000)
-            if feats.get(feature_kind, 0) > 0:
-                logging.info(
-                    "Selected annotation resource for %s: %s "
-                    "(peek features=%s)",
-                    genomic_unit,
-                    res.description.url_path(),
-                    dict(feats.most_common(5)),
-                )
-                return res
+            feats = _peek_gtf_feature_counts(
+                res, max_lines=50000, autoload=autoload
+            )
+        except FileNotFoundError:
+            # Expected whenever autoload is off and the candidate has not
+            # been downloaded yet; the ranking above still applies.
+            logging.debug(
+                "Not inspecting annotation %s: it is not cached and "
+                "autoload is disabled.",
+                res.url,
+            )
+            continue
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logging.warning(
-                "Failed to peek GTF features for %s: %r", res.url, exc
+                "Skipping annotation candidate %s: could not inspect its "
+                "GTF features (%r).",
+                res.url,
+                exc,
             )
+            continue
+
+        if feats.get(feature_kind, 0) > 0:
+            logging.info(
+                "Selected annotation resource for %s: %s (peek features=%s)",
+                genomic_unit,
+                res.description.url_path(),
+                dict(feats.most_common(5)),
+            )
+            return res
 
     return candidates[0]
 
@@ -2363,9 +2445,14 @@ class R3ResourceBundle:
         ``"junction"``, this method prefers an RR table (junction
         coordinates) when available.
 
-        When row ranges cannot be resolved and
-        ``allow_fallback_to_se`` is :data:`True`, a plain
-        :class:`SummarizedExperiment` is returned instead.
+        Ranges can fail to resolve for three distinct reasons, which are
+        reported separately: the annotation could not be retrieved, it was
+        retrieved but could not be parsed, or it parsed cleanly but does
+        not describe every feature in the counts matrix. Only the last of
+        those is fixed by choosing a different ``annotation_extension``.
+        When ranges cannot be resolved and ``allow_fallback_to_se`` is
+        :data:`True`, a plain :class:`SummarizedExperiment` is returned
+        instead.
 
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
@@ -2376,10 +2463,20 @@ class R3ResourceBundle:
           assay_name: Name assigned to the coverage-sum assay within the
             :class:`SummarizedExperiment` (default: ``"raw_counts"``).
           join_policy: Join policy across projects when stacking.
-          autoload: If :data:`True`, load resources transparently.
-          allow_fallback_to_se: If :data:`True`, construct a plain
-            :class:`SummarizedExperiment` when genomic ranges cannot be
-            derived for the requested combination.
+          autoload: If :data:`True`, download and load resources as they
+            are needed, including the annotation that has to be read to
+            confirm which GTF supplies the requested feature type. If
+            :data:`False`, only already-cached resources are used and
+            nothing is fetched.
+          allow_fallback_to_se: If :data:`True`, return a plain
+            :class:`SummarizedExperiment` instead of raising when genomic
+            ranges cannot be derived. That object carries no genomic
+            ranges, so anything requiring a
+            :class:`RangedSummarizedExperiment` -- range queries, overlap
+            operations, coordinate-based subsetting -- will not work on
+            it. It only changes what is returned on failure: it does not
+            retry a failed retrieval and does not repair a mismatched
+            annotation.
 
         Returns:
           A :class:`RangedSummarizedExperiment` instance, or a plain
@@ -2395,6 +2492,7 @@ class R3ResourceBundle:
             compatibility variants.
         """
         last_ranges_error: Exception | None = None
+        ranges_source = "annotation"
 
         working = self
         counts_df = working._stack_counts_for(
@@ -2447,11 +2545,11 @@ class R3ResourceBundle:
                 self,
                 genomic_unit=genomic_unit,
                 annotation_extension=annotation_extension,
+                autoload=autoload,
             )
             if gtf_res is not None:
                 try:
-                    if autoload:
-                        gtf_res.download(path=None, cache_mode="enable")
+                    gtf_res.ensure_cached(download=autoload)
                     gtf = _read_gtf_dataframe(gtf_res)
                     feature_kind = "gene" if genomic_unit == "gene" else "exon"
                     ranges = _ranges_from_gtf(
@@ -2474,7 +2572,7 @@ class R3ResourceBundle:
                             for i, m in enumerate(missing_mask)
                             if m
                         ][:10]
-                        raise ValueError(
+                        raise errors.RangesCoverageError(
                             "Annotation does not contain ranges for some "
                             "feature IDs present in the counts matrix. "
                             "Example missing feature_ids: "
@@ -2508,10 +2606,12 @@ class R3ResourceBundle:
                     if enrich_cols:  # pragma: no branch
                         row_data_df = row_data_df.join(ranges_df[enrich_cols])
                 except Exception as exc:  # pylint: disable=broad-except
-                    logging.warning(
-                        "Falling back: failed to parse GTF for %s ranges "
-                        "(reason: %r).",
+                    logging.info(
+                        "Could not derive %s ranges from annotation %s: %s "
+                        "(%r).",
                         genomic_unit,
+                        gtf_res.url,
+                        _classify_ranges_failure(exc),
                         exc,
                     )
                     last_ranges_error = exc
@@ -2527,7 +2627,7 @@ class R3ResourceBundle:
                 )
                 rr_res = rr_candidates[0] if rr_candidates else None
                 if rr_res is None:
-                    raise ValueError(
+                    raise errors.MissingRangesError(
                         "No RR junction coordinate resource found in bundle."
                     )
 
@@ -2568,7 +2668,7 @@ class R3ResourceBundle:
                 )
 
                 if len(std) != n_features:
-                    raise ValueError(
+                    raise errors.RangesCoverageError(
                         f"RR row count {len(std)} != MM feature count "
                         f"{n_features}; cannot build junction ranges."
                     )
@@ -2609,16 +2709,39 @@ class R3ResourceBundle:
                 )
 
             except Exception as exc:  # pylint: disable=broad-except
-                logging.warning(
-                    "Falling back: failed to derive junction ranges from "
-                    "RR (reason: %r).",
+                logging.info(
+                    "Could not derive junction ranges: %s (%r).",
+                    _classify_ranges_failure(exc, source=_RR_SOURCE),
                     exc,
                 )
                 last_ranges_error = exc
+                ranges_source = _RR_SOURCE
                 ranges_df = None
 
         if ranges_df is None:
+            if (
+                genomic_unit == "junction"
+                and not prefer_rr_junction_coordinates
+                and last_ranges_error is None
+            ):
+                reason = (
+                    "junction ranges come from the RR coordinate file and "
+                    "prefer_rr_junction_coordinates is False"
+                )
+            else:
+                reason = _classify_ranges_failure(
+                    last_ranges_error, source=ranges_source
+                )
+
             if allow_fallback_to_se:
+                logging.warning(
+                    "Falling back to a plain SummarizedExperiment for %s "
+                    "because %s. The returned object carries no genomic "
+                    "ranges, so operations that require a "
+                    "RangedSummarizedExperiment will not work on it.",
+                    genomic_unit,
+                    reason,
+                )
                 return self.to_summarized_experiment(
                     genomic_unit=genomic_unit,
                     annotation_extension=annotation_extension,
@@ -2627,13 +2750,17 @@ class R3ResourceBundle:
                     autoload=autoload,
                 )
             message = (
-                "Could not derive genomic ranges for the requested object. "
-                "Pass allow_fallback_to_se=True to receive a plain "
-                "SummarizedExperiment."
+                "Could not derive genomic ranges for the requested object "
+                f"because {reason}. Pass allow_fallback_to_se=True to "
+                "receive a plain SummarizedExperiment instead; that object "
+                "has no genomic ranges and cannot be used where a "
+                "RangedSummarizedExperiment is required, and it neither "
+                "retries the retrieval nor repairs a mismatch between the "
+                "counts and the ranges."
             )
             if last_ranges_error is not None:
-                raise ValueError(message) from last_ranges_error
-            raise ValueError(message)
+                raise errors.RangesError(message) from last_ranges_error
+            raise errors.RangesError(message)
 
         return _construct_ranged_summarized_experiment(
             counts_df=counts_df,

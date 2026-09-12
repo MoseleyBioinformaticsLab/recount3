@@ -32,6 +32,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from unittest import mock
 
 import numpy as np
@@ -54,6 +55,10 @@ from recount3.se import (
     compute_scale_factors,
     transform_counts,
 )
+
+_MIRROR = (
+    Path(__file__).parent / "data" / "recount3_mirror" / "recount3"
+).resolve()
 
 
 class _MockBiocFrame:
@@ -657,6 +662,96 @@ class TestCreateRse:
         call_kwargs = m.call_args.kwargs
         assert call_kwargs["project"] == "P1"
         assert call_kwargs["junction_extensions"] == ["RR"]
+
+
+class TestCreateRseAgainstLocalMirror:
+    """End-to-end runs against the mirrored recount3 tree in tests/data."""
+
+    @staticmethod
+    def _use_mirror(monkeypatch: pytest.MonkeyPatch, cache_dir: Path) -> None:
+        monkeypatch.setenv("RECOUNT3_URL", f"file://{_MIRROR}/")
+        monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(cache_dir))
+
+    @staticmethod
+    def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+        return [
+            rec.getMessage()
+            for rec in caplog.records
+            if rec.levelno >= logging.WARNING
+        ]
+
+    @pytest.mark.requires_biocpy
+    def test_cold_cache_reports_only_the_real_reason(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """The regression: a cold cache used to warn about FileNotFoundError."""
+        self._use_mirror(monkeypatch, tmp_path / "cache")
+
+        with caplog.at_level(logging.DEBUG):
+            experiment = create_rse(
+                project="SRP014565",
+                organism="human",
+                annotation_extension="G026",
+                allow_fallback_to_se=True,
+            )
+
+        assert experiment.shape[1] > 0
+        messages = self._warnings(caplog)
+        assert len(messages) == 1
+        assert "Falling back to a plain SummarizedExperiment" in messages[0]
+        assert "does not cover every counted feature" in messages[0]
+        assert "FileNotFoundError" not in messages[0]
+
+    @pytest.mark.requires_biocpy
+    def test_warm_cache_reports_exactly_the_same_thing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Behavior must not depend on whether the cache is already filled."""
+        self._use_mirror(monkeypatch, tmp_path / "cache")
+
+        kwargs = {
+            "project": "SRP014565",
+            "organism": "human",
+            "annotation_extension": "G026",
+            "allow_fallback_to_se": True,
+        }
+        with caplog.at_level(logging.DEBUG):
+            create_rse(**kwargs)
+        first = self._warnings(caplog)
+
+        caplog.clear()
+        with caplog.at_level(logging.DEBUG):
+            create_rse(**kwargs)
+        second = self._warnings(caplog)
+
+        assert first == second
+
+    @pytest.mark.requires_biocpy
+    def test_without_fallback_the_error_explains_the_option(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._use_mirror(monkeypatch, tmp_path / "cache")
+
+        with pytest.raises(ValueError) as excinfo:
+            create_rse(
+                project="SRP014565",
+                organism="human",
+                annotation_extension="G026",
+                allow_fallback_to_se=False,
+            )
+
+        message = str(excinfo.value)
+        assert "Could not derive genomic ranges" in message
+        assert "does not cover every counted feature" in message
+        # The option changes the returned object; it is not a retry or a fix.
+        assert "no genomic ranges" in message
+        assert "neither retries" in message
 
 
 class TestExpandSraAttributes:
