@@ -1,11 +1,11 @@
-name: codecov.io
+name: Coverage
 
 on:
   workflow_call:
   workflow_dispatch:
 
 jobs:
-  coverage:
+  run:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

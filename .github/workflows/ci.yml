@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  tests:
+    uses: ./.github/workflows/run-tests.yml
+    with:
+      install_command_linux: 'python -m pip install -e ".[dev,bigwig,biocpy,parquet,anndata]"'
+      install_command_macos: 'python -m pip install -e ".[dev,biocpy,parquet,anndata]"'
+      install_command_windows: 'python -m pip install -e ".[dev,parquet]"'
+
+  coverage:
+    uses: ./.github/workflows/report-coverage.yml
+    secrets: inherit

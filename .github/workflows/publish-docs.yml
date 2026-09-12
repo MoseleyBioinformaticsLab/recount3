@@ -1,11 +1,11 @@
-name: Publish Documentation
+name: Publish documentation
 
 on:
   workflow_call:
   workflow_dispatch:
 
 jobs:
-  publish-documentation:
+  run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -19,7 +19,7 @@ jobs:
           sphinx-build docs ./docs/_build/html/
       - uses: actions/upload-artifact@v4
         with:
-          name: DocumentationHTML
+          name: documentation-html
           path: docs/_build/html/
       - name: Deploy to gh-pages
         env:
@@ -35,7 +35,7 @@ jobs:
           git add .
           git commit -m "Update documentation." -a || true
       - name: Push changes
-        uses: ad-m/github-push-action@master
+        uses: ad-m/github-push-action@881a6320fdb16eb5318c5054f31c218aec2b324c # v1.3.0
         with:
           branch: gh-pages
           directory: gh-pages

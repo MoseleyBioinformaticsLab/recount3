@@ -1,0 +1,71 @@
+name: Package and documentation release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release-version:
+    runs-on: ubuntu-latest
+    steps:
+      - id: parse-version
+        name: Parse release version
+        run: |
+          echo "version=${RELEASE_VERSION#v}" >> "$GITHUB_OUTPUT"
+    env:
+      RELEASE_VERSION: ${{ github.event.release.tag_name }}
+    outputs:
+      version: ${{ steps.parse-version.outputs.version }}
+
+  publish-testpypi:
+    uses: ./.github/workflows/publish-pypi.yml
+    with:
+      repository_url: https://test.pypi.org/legacy/
+    secrets:
+      PYPI_API_TOKEN: ${{ secrets.TEST_PYPI_API_TOKEN }}
+
+  verify-testpypi:
+    needs: [release-version, publish-testpypi]
+    uses: ./.github/workflows/run-tests.yml
+    with:
+      install_command_linux: >-
+        python3 -m pip install
+        -i https://test.pypi.org/simple/
+        --extra-index-url https://pypi.org/simple
+        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+      install_command_macos: >-
+        python3 -m pip install
+        -i https://test.pypi.org/simple/
+        --extra-index-url https://pypi.org/simple
+        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+      install_command_windows: >-
+        python3 -m pip install
+        -i https://test.pypi.org/simple/
+        --extra-index-url https://pypi.org/simple
+        recount3[dev,parquet]==${{ needs.release-version.outputs.version }}
+
+  publish-pypi:
+    needs: verify-testpypi
+    uses: ./.github/workflows/publish-pypi.yml
+    with:
+      repository_url: https://upload.pypi.org/legacy/
+    secrets:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  verify-pypi:
+    needs: [release-version, publish-pypi]
+    uses: ./.github/workflows/run-tests.yml
+    with:
+      install_command_linux: >-
+        python3 -m pip install
+        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+      install_command_macos: >-
+        python3 -m pip install
+        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+      install_command_windows: >-
+        python3 -m pip install
+        recount3[dev,parquet]==${{ needs.release-version.outputs.version }}
+
+  publish-docs:
+    needs: verify-pypi
+    uses: ./.github/workflows/publish-docs.yml
