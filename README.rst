@@ -74,28 +74,40 @@ Installation
 ~~~~~~~~~~~~
 
 The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy. Two optional extras enable additional features:
+and SciPy. Four optional extras enable additional features:
 
 .. code:: bash
 
-   python3 -m pip install recount3                   # core
-   python3 -m pip install "recount3[biocpy]"         # + SummarizedExperiment builders
-   python3 -m pip install "recount3[bigwig]"         # + BigWig coverage access
-   python3 -m pip install "recount3[biocpy,bigwig]"  # everything
+   python3 -m pip install recount3                # core
+   python3 -m pip install "recount3[biocpy]"      # + SummarizedExperiment builders
+   python3 -m pip install "recount3[bigwig]"      # + BigWig coverage access
+   python3 -m pip install "recount3[parquet]"     # + .parquet output
+   python3 -m pip install "recount3[anndata]"     # + .h5ad output
+   python3 -m pip install "recount3[all]"         # every optional feature
 
 * ``biocpy`` (``biocframe``, ``genomicranges``, ``summarizedexperiment``) is
   required for ``create_rse`` and every helper that returns or operates on a
   BiocPy object.
 * ``bigwig`` (``pyBigWig``) is required only for BigWig coverage access.
+* ``parquet`` (``pyarrow``) is required only to write ``.parquet`` output.
+  pandas accepts either ``pyarrow`` or ``fastparquet``; an existing
+  ``fastparquet`` installation is used as-is.
+* ``anndata`` (``anndata``, ``delayedarray``) is required only to write
+  ``.h5ad`` output, and implies ``biocpy``.
+
+``all`` installs every optional feature listed above. The ``dev`` and ``docs``
+extras hold the test and documentation toolchains and are installed separately.
 
 On Windows, substitute ``py -3 -m pip install ...``. Upgrade an existing
 installation with ``python3 -m pip install --upgrade recount3``.
 
 **Note:** The optional extras have platform constraints. The ``bigwig`` extra
 can be difficult or impossible to install on Windows and macOS. The ``biocpy``
-extra can be difficult or impossible to install on Windows. The core package and
-the command-line workflow do not depend on either extra and work on all
-supported platforms.
+extra can be difficult or impossible to install on Windows, and ``anndata``
+inherits that constraint because it requires ``biocpy``. The ``parquet`` extra
+installs cleanly on every supported platform. The core package and the
+command-line workflow do not depend on any extra and work on all supported
+platforms.
 
 
 The three-layer API
@@ -232,13 +244,26 @@ Optional: BiocPy integration (``recount3[biocpy]``):
 
    biocframe>=0.7
    genomicranges>=0.8
-   summarizedexperiment>=0.6
+   summarizedexperiment>=0.7.1
 
 Optional: BigWig support (``recount3[bigwig]``):
 
 .. code:: text
 
    pybigwig>=0.3.18
+
+Optional: Parquet output (``recount3[parquet]``):
+
+.. code:: text
+
+   pyarrow>=23.0.1
+
+Optional: AnnData output (``recount3[anndata]``, implies ``biocpy``):
+
+.. code:: text
+
+   anndata>=0.11
+   delayedarray>=0.5
 
 
 Questions, Feature Requests, and Bug Reports

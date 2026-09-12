@@ -25,7 +25,7 @@ extras enable features used throughout this tutorial:
    python3 -m pip install "recount3[bigwig]"     # + pyBigWig
    python3 -m pip install "recount3[parquet]"    # + .parquet output
    python3 -m pip install "recount3[anndata]"    # + .h5ad output
-   python3 -m pip install "recount3[all]"        # everything
+   python3 -m pip install "recount3[all]"        # every optional feature
 
 What each extra enables:
 
@@ -47,6 +47,9 @@ What each extra enables:
   ``summarizedexperiment`` declares neither as a required dependency, so the
   extra is needed to write ``.h5ad`` from ``recount3 bundle se`` /
   ``recount3 bundle rse``.
+- ``all`` installs every optional feature above. The ``dev`` and ``docs``
+  extras hold the test and documentation toolchains and are installed
+  separately, so ``all`` does not pull them in.
 
 If an optional dependency is missing, the affected function raises
 :exc:`ImportError` on first use; the remainder of the package stays importable
