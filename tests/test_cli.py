@@ -1545,6 +1545,75 @@ class TestCmdBundleStackCounts:
         assert code == 0
         mock_df.to_parquet.assert_called_once_with(out)
 
+    def test_sparse_parquet_requires_explicit_densify(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.parquet"
+        args = self._make_args(str(out))
+        mock_df = mock.MagicMock()
+        mock_df.shape = (5, 2)
+        mock_bundle = mock.MagicMock()
+        mock_bundle.stack_count_matrices.return_value = mock_df
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch(
+                "recount3._utils.ensure_parquet_engine",
+                return_value="pyarrow",
+            ),
+            mock.patch(
+                "recount3._utils.sparse_column_names",
+                return_value=["sample/a", "sample/b"],
+            ),
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_stack_counts(args, cfg)
+
+        assert code == 2
+        mock_df.to_parquet.assert_not_called()
+        assert "2 of 2 columns use a pandas sparse dtype" in caplog.text
+        assert "--densify" in caplog.text
+
+    def test_sparse_parquet_densifies_when_requested(
+        self, tmp_path: Path
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.parquet"
+        args = self._make_args(str(out), densify=True)
+        sparse_df = mock.MagicMock()
+        sparse_df.shape = (5, 2)
+        dense_df = mock.MagicMock()
+        mock_bundle = mock.MagicMock()
+        mock_bundle.stack_count_matrices.return_value = sparse_df
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch(
+                "recount3._utils.ensure_parquet_engine",
+                return_value="pyarrow",
+            ),
+            mock.patch(
+                "recount3._utils.sparse_column_names",
+                return_value=["sample/a", "sample/b"],
+            ),
+            mock.patch(
+                "recount3._utils.densify_sparse_columns",
+                return_value=dense_df,
+            ) as mock_densify,
+        ):
+            code = _cmd_bundle_stack_counts(args, cfg)
+
+        assert code == 0
+        mock_densify.assert_called_once_with(sparse_df)
+        dense_df.to_parquet.assert_called_once_with(out)
+
     def test_success_tsv(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
@@ -1951,6 +2020,85 @@ class TestCmdBundleSe:
         assert code == 0
         mock_adata.write_h5ad.assert_called_once_with(out)
 
+    def test_h5ad_unsafe_columns_require_sanitization_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.h5ad"
+        args = self._make_args(str(out))
+        mock_se = mock.MagicMock()
+        mock_adata = mock.MagicMock()
+        mock_se.to_anndata.return_value = mock_adata
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = mock_se
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.normalize_anndata_for_hdf5",
+                return_value=[],
+            ),
+            mock.patch(
+                "recount3._utils.hdf5_unsafe_column_names",
+                return_value=["star/metric"],
+            ),
+            mock.patch(
+                "recount3._utils.sanitize_anndata_column_names"
+            ) as mock_sanitize,
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 2
+        mock_sanitize.assert_not_called()
+        mock_adata.write_h5ad.assert_not_called()
+        assert "--sanitize-columns" in caplog.text
+
+    def test_h5ad_normalizes_and_sanitizes_columns_with_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.h5ad"
+        args = self._make_args(str(out), sanitize_columns=True)
+        mock_se = mock.MagicMock()
+        mock_adata = mock.MagicMock()
+        mock_se.to_anndata.return_value = mock_adata
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_summarized_experiment.return_value = mock_se
+        res = _make_annotation_resource(cfg)
+        renames = [("star/metric", "star_metric")]
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.normalize_anndata_for_hdf5",
+                return_value=["all_missing"],
+            ),
+            mock.patch(
+                "recount3._utils.hdf5_unsafe_column_names",
+                return_value=["star/metric"],
+            ),
+            mock.patch(
+                "recount3._utils.sanitize_anndata_column_names",
+                return_value=renames,
+            ) as mock_sanitize,
+            caplog.at_level(logging.INFO),
+        ):
+            code = _cmd_bundle_se(args, cfg)
+
+        assert code == 0
+        mock_sanitize.assert_called_once_with(mock_adata)
+        mock_adata.write_h5ad.assert_called_once_with(out)
+        assert "Cast 1 all-missing column" in caplog.text
+        assert "star/metric -> star_metric" in caplog.text
+
     def test_import_error_returns_2(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
@@ -2280,6 +2428,85 @@ class TestCmdBundleRse:
             code = _cmd_bundle_rse(args, cfg)
         assert code == 0
         mock_adata.write_h5ad.assert_called_once_with(out)
+
+    def test_h5ad_unsafe_columns_require_sanitization_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.h5ad"
+        args = self._make_args(str(out))
+        mock_rse = mock.MagicMock()
+        mock_adata = mock.MagicMock()
+        mock_rse.to_anndata.return_value = mock_adata
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
+        res = _make_annotation_resource(cfg)
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.normalize_anndata_for_hdf5",
+                return_value=[],
+            ),
+            mock.patch(
+                "recount3._utils.hdf5_unsafe_column_names",
+                return_value=["star/metric"],
+            ),
+            mock.patch(
+                "recount3._utils.sanitize_anndata_column_names"
+            ) as mock_sanitize,
+            caplog.at_level(logging.ERROR),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 2
+        mock_sanitize.assert_not_called()
+        mock_adata.write_h5ad.assert_not_called()
+        assert "--sanitize-columns" in caplog.text
+
+    def test_h5ad_normalizes_and_sanitizes_columns_with_flag(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        cfg = _make_cfg(tmp_path)
+        out = tmp_path / "out.h5ad"
+        args = self._make_args(str(out), sanitize_columns=True)
+        mock_rse = mock.MagicMock()
+        mock_adata = mock.MagicMock()
+        mock_rse.to_anndata.return_value = mock_adata
+        mock_bundle = mock.MagicMock()
+        mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
+        res = _make_annotation_resource(cfg)
+        renames = [("star/metric", "star_metric")]
+        with (
+            mock.patch("recount3.cli._iter_manifest", return_value=[res]),
+            mock.patch(
+                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+            ),
+            mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.normalize_anndata_for_hdf5",
+                return_value=["all_missing"],
+            ),
+            mock.patch(
+                "recount3._utils.hdf5_unsafe_column_names",
+                return_value=["star/metric"],
+            ),
+            mock.patch(
+                "recount3._utils.sanitize_anndata_column_names",
+                return_value=renames,
+            ) as mock_sanitize,
+            caplog.at_level(logging.INFO),
+        ):
+            code = _cmd_bundle_rse(args, cfg)
+
+        assert code == 0
+        mock_sanitize.assert_called_once_with(mock_adata)
+        mock_adata.write_h5ad.assert_called_once_with(out)
+        assert "Cast 1 all-missing column" in caplog.text
+        assert "star/metric -> star_metric" in caplog.text
 
     def test_allow_fallback_to_se_passed_through(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
