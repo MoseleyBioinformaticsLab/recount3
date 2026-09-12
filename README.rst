@@ -43,6 +43,24 @@ The package provides two interfaces:
   ``.zip`` archive with parallel downloads.
 
 
+Contents
+~~~~~~~~
+
+* `Links`_
+* `Installation`_
+* `The three-layer API`_
+* `Quickstart`_
+
+  * `Python API`_
+  * `Command-line tool`_
+
+* `Data mirrors`_
+* `Dependencies`_
+* `Questions, Feature Requests, and Bug Reports`_
+* `License`_
+* `Citation`_
+
+
 Links
 ~~~~~
 
