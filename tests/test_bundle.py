@@ -38,6 +38,7 @@ import gzip
 import io
 import logging
 import urllib.error
+import urllib.parse
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -107,13 +108,19 @@ _EXON_GTF_GZ = (
     / "human.exon_sums.G026.gtf.gz"
 )
 
+# Path.as_uri(), not "file://" + str(path): on Windows the latter yields
+# file://D:\..., where the drive letter parses as the URL authority rather
+# than as part of the path. It is well formed on POSIX only because an
+# absolute path already starts with the separator.
+_MIRROR_URL = _MIRROR.resolve().as_uri() + "/"
+
 
 @pytest.fixture()
 def local_config(tmp_path: Path) -> Config:
     """Return a Config whose cache_dir is tmp_path and base_url points at the
     local test-data mirror."""
     return Config(
-        base_url=f"file://{_MIRROR}/",
+        base_url=_MIRROR_URL,
         timeout=5,
         insecure_ssl=False,
         max_retries=1,
@@ -121,6 +128,19 @@ def local_config(tmp_path: Path) -> Config:
         cache_dir=tmp_path / "cache",
         cache_disabled=False,
     )
+
+
+def test_mirror_url_is_a_well_formed_file_url() -> None:
+    """Guard the fixture that reaches the download code path.
+
+    A "file://" URL carrying a Windows drive letter puts it in the
+    authority, where urllib treats it as a remote host and refuses the
+    download. This assertion is what fails first if that creeps back.
+    """
+    parts = urllib.parse.urlsplit(_MIRROR_URL)
+    assert parts.scheme == "file"
+    assert parts.netloc == ""
+    assert parts.path.endswith("/")
 
 
 def _mock_resource(

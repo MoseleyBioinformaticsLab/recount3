@@ -59,6 +59,9 @@ from recount3.se import (
 _MIRROR = (
     Path(__file__).parent / "data" / "recount3_mirror" / "recount3"
 ).resolve()
+# as_uri() rather than "file://" + str(path), which misplaces a Windows
+# drive letter into the URL authority.
+_MIRROR_URL = _MIRROR.as_uri() + "/"
 
 
 class _MockBiocFrame:
@@ -669,7 +672,7 @@ class TestCreateRseAgainstLocalMirror:
 
     @staticmethod
     def _use_mirror(monkeypatch: pytest.MonkeyPatch, cache_dir: Path) -> None:
-        monkeypatch.setenv("RECOUNT3_URL", f"file://{_MIRROR}/")
+        monkeypatch.setenv("RECOUNT3_URL", _MIRROR_URL)
         monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(cache_dir))
 
     @staticmethod
