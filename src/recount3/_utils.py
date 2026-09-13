@@ -122,8 +122,36 @@ class _WeakRefLock:
         return self._lock.__exit__(*args)
 
 
+def _strip_extended_prefix(text: str) -> str:
+    """Return a resolved path without a Windows extended-length prefix.
+
+    :meth:`pathlib.Path.resolve` keeps the ``\\\\?\\`` prefix whenever it
+    cannot confirm that the plain spelling names the same file, which is
+    the case while another thread holds that file open. One destination
+    then has two spellings, and callers reaching it by different spellings
+    would key separate locks. Paths without the prefix, including every
+    POSIX path, are returned unchanged.
+
+    Args:
+        text: A resolved filesystem path.
+
+    Returns:
+        The path with any extended-length prefix removed.
+    """
+    prefix = "\\\\?\\"
+    unc_prefix = prefix + "UNC\\"
+    if text[: len(unc_prefix)].upper() == unc_prefix:
+        return "\\\\" + text[len(unc_prefix) :]
+    if text.startswith(prefix):
+        return text[len(prefix) :]
+    return text
+
+
 def _path_lock_for_path(path: Path) -> _WeakRefLock:
     """Return a weakly retained lock for a canonical filesystem destination.
+
+    The key is normalized so that spellings Windows treats as one file share
+    a single lock during registry initialization, downloads, and ZIP writes.
 
     Args:
         path: Target cache payload, registry directory, or archive path.
@@ -131,7 +159,8 @@ def _path_lock_for_path(path: Path) -> _WeakRefLock:
     Returns:
         A lock shared by all writers to this canonical destination.
     """
-    key = str(path.expanduser().resolve())
+    resolved = _strip_extended_prefix(str(path.expanduser().resolve()))
+    key = os.path.normcase(resolved)
     with _PATH_LOCKS_GUARD:
         lock = _PATH_LOCKS.get(key)
         if lock is None:

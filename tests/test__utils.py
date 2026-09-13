@@ -162,6 +162,68 @@ def test_path_lock_for_path_shares_one_lock_per_canonical_path(
     assert _utils._path_lock_for_path(alias / "file") is lock
 
 
+@pytest.mark.parametrize(
+    ("prefixed", "plain"),
+    [
+        (
+            r"\\?\C:\cache\BiocFileCache.sqlite",
+            r"C:\cache\BiocFileCache.sqlite",
+        ),
+        (
+            r"\\?\UNC\host\share\BiocFileCache.sqlite",
+            r"\\host\share\BiocFileCache.sqlite",
+        ),
+        (
+            r"\\?\unc\host\share\BiocFileCache.sqlite",
+            r"\\host\share\BiocFileCache.sqlite",
+        ),
+    ],
+)
+def test_strip_extended_prefix_unifies_windows_spellings(
+    prefixed: str, plain: str
+) -> None:
+    """An extended-length path reduces to the spelling it aliases.
+
+    Windows resolution keeps the prefix while another thread holds the file
+    open, so one destination reaches the lock registry under two names. Drive
+    and UNC forms both collapse, in either case, onto the plain spelling,
+    which is itself left alone.
+    """
+    assert _utils._strip_extended_prefix(prefixed) == plain
+    assert _utils._strip_extended_prefix(plain) == plain
+
+
+def test_strip_extended_prefix_leaves_unprefixed_paths_alone() -> None:
+    """A path that never carries the prefix, as on POSIX, is unchanged."""
+    assert _utils._strip_extended_prefix("/var/cache/recount3") == (
+        "/var/cache/recount3"
+    )
+
+
+def test_path_lock_for_path_shares_one_lock_across_windows_spellings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Two spellings of one resolved destination take the same lock.
+
+    Resolution is stubbed because POSIX never produces the prefixed form.
+    Keying the spellings separately hands out two locks for one SQLite
+    registry, letting concurrent openers race to create its schema.
+    """
+    payload = tmp_path / "BiocFileCache.sqlite"
+    spellings = iter(
+        [
+            r"\\?\C:\cache\BiocFileCache.sqlite",
+            r"C:\cache\BiocFileCache.sqlite",
+        ]
+    )
+    monkeypatch.setattr(Path, "resolve", lambda self: next(spellings))
+
+    first = _utils._path_lock_for_path(payload)
+    second = _utils._path_lock_for_path(payload)
+
+    assert first is second
+
+
 def test_path_lock_for_path_does_not_accumulate_unused_locks(
     tmp_path: Path,
 ) -> None:
