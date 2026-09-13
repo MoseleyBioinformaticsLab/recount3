@@ -96,6 +96,29 @@ Fixed
   loading path had downloaded the file. Selection now prepares the cache
   through the existing download implementation, which already retries
   transient network errors.
+- Sample metadata whose tables share no samples no longer produces an
+  experiment with zero samples. The inner-join check compared the number of
+  matched samples with the number of merged rows, which are both zero when
+  the join matches nothing, so every sample could be dropped and the caller
+  handed a valid-looking object with an empty assay. Such a join now raises
+  and names ``metadata_join="outer"`` as the alternative, and construction
+  additionally refuses to return an experiment with no samples.
+- Metadata tables are joined on identifier values rather than on a
+  dtype-dependent rendering of them. A single blank cell widens a numeric
+  ``rail_id`` column to ``float64``, so one table's ``"123488"`` met another
+  table's ``"123488.0"`` and the two could not be joined; depending on the
+  tables involved this surfaced either as a spurious "Conflicting
+  external_id/rail_id mappings" error or as a silently emptied join. R is
+  unaffected because ``merge()`` compares the parsed numbers. Junction
+  ``.ID`` rail IDs, which become the count matrix's column labels, use the
+  same canonical rendering.
+- GTF attribute values are parsed with quoting rules, matching
+  ``rtracklayer::import.gff``. A quoted value ending at a ``;`` inside the
+  quotes truncated the value and left its remainder to be rescanned as
+  further ``key value`` pairs, so ``note "a, b; c (d)"`` yielded
+  ``note="a, b"`` plus a fabricated ``c`` column in ``rowData`` and
+  ``rowRanges`` metadata. An empty ``key ""`` is now an empty value rather
+  than an absent attribute. Repeated keys still use R's last-value rule.
 
 1.1.0 (2026-06-12)
 ------------------

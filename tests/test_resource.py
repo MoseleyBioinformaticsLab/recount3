@@ -257,6 +257,21 @@ def test_read_id_rail_ids_no_rail_id_uses_first_column(
     assert ids == ["S1", "S2"]
 
 
+def test_read_id_rail_ids_canonicalizes_widened_numeric_column(
+    tmp_path: Path,
+) -> None:
+    """A blank row must not turn the other rail IDs into "123488.0".
+
+    These strings become the junction matrix's column labels and are
+    matched against the rail IDs in the sample metadata, so a float
+    rendering here would match nothing and drop every sample.
+    """
+    p = tmp_path / "ids.tsv.gz"
+    with gzip.open(p, "wt") as fh:
+        fh.write("rail_id\tsample\n123488\ta\n\tb\n123474\tc\n")
+    assert _read_id_rail_ids(p) == ["123488", "<NA>", "123474"]
+
+
 def test_read_id_rail_ids_empty_dataframe_raises(tmp_path: Path) -> None:
     """Raises LoadError when the parsed DataFrame is empty."""
     p = tmp_path / "empty.tsv.gz"
@@ -271,24 +286,31 @@ def test_read_id_rail_ids_empty_list_raises_load_error(
 ) -> None:
     """LoadError when rail_ids list is empty despite a non-empty DataFrame.
 
-    This covers the guard at line 115 which is unreachable via normal I/O
-    (a non-empty DataFrame always yields ≥1 items). It is reached by mocking
-    pd.read_csv to return a DataFrame that passes df.empty but whose column
-    series returns [] from tolist().
+    This covers the empty-rail-ID guard, which is unreachable via normal
+    I/O (a non-empty DataFrame always yields >= 1 items). It is reached by
+    mocking pd.read_csv to return a DataFrame that passes df.empty, and by
+    mocking the canonicalizer it is passed through to return a column whose
+    tolist() is empty.
     """
     p = tmp_path / "data.tsv.gz"
     with gzip.open(p, "wt") as fh:
         fh.write("rail_id\nsome_value\n")
 
-    mock_series = mock.MagicMock()
-    mock_series.astype.return_value.tolist.return_value = []
+    mock_canonical = mock.MagicMock()
+    mock_canonical.astype.return_value.tolist.return_value = []
 
     mock_df = mock.MagicMock()
     mock_df.empty = False
     mock_df.columns = ["rail_id"]
-    mock_df.__getitem__ = mock.Mock(return_value=mock_series)
+    mock_df.__getitem__ = mock.Mock(return_value=mock.MagicMock())
 
-    with mock.patch("recount3.resource.pd.read_csv", return_value=mock_df):
+    with (
+        mock.patch("recount3.resource.pd.read_csv", return_value=mock_df),
+        mock.patch(
+            "recount3.resource.canonical_identifier_series",
+            return_value=mock_canonical,
+        ),
+    ):
         with pytest.raises(LoadError, match="has no rail IDs"):
             _read_id_rail_ids(p)
 

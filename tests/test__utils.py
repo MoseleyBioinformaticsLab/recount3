@@ -1329,6 +1329,67 @@ def test_coerce_numeric_column_raises_for_non_numeric_values() -> None:
         _utils._coerce_numeric_column(s, "score")
 
 
+def test_canonical_identifier_series_int_and_float_agree() -> None:
+    """The same ID renders identically whichever numeric dtype it got."""
+    as_int = _utils.canonical_identifier_series(pd.Series([123488]))
+    as_float = _utils.canonical_identifier_series(pd.Series([123488.0]))
+    assert list(as_int) == ["123488"]
+    assert list(as_float) == list(as_int)
+
+
+def test_canonical_identifier_series_preserves_missing() -> None:
+    """Missing entries stay missing rather than becoming text."""
+    result = _utils.canonical_identifier_series(pd.Series([100.0, None, 101.0]))
+    assert list(result)[0] == "100"
+    assert pd.isna(list(result)[1])
+    assert list(result)[2] == "101"
+    assert str(result.dtype) == "string"
+
+
+def test_canonical_identifier_series_keeps_non_integral_numbers() -> None:
+    """A value that is not a whole number is not narrowed."""
+    result = _utils.canonical_identifier_series(pd.Series([1.5, 2.0]))
+    assert list(result) == ["1.5", "2.0"]
+
+
+def test_canonical_identifier_series_text_unchanged() -> None:
+    result = _utils.canonical_identifier_series(pd.Series(["SRR1", "SRR2"]))
+    assert list(result) == ["SRR1", "SRR2"]
+
+
+def test_canonical_identifier_series_booleans_unchanged() -> None:
+    result = _utils.canonical_identifier_series(pd.Series([True, False]))
+    assert list(result) == ["True", "False"]
+
+
+def test_canonical_identifier_series_nullable_integer() -> None:
+    values = pd.Series([100, None], dtype="Int64")
+    result = _utils.canonical_identifier_series(values)
+    assert list(result)[0] == "100"
+    assert pd.isna(list(result)[1])
+
+
+def test_canonical_identifier_series_all_missing() -> None:
+    result = _utils.canonical_identifier_series(
+        pd.Series([pd.NA, pd.NA], dtype="object")
+    )
+    assert result.isna().all()
+    assert str(result.dtype) == "string"
+
+
+def test_canonical_identifier_series_empty() -> None:
+    result = _utils.canonical_identifier_series(pd.Series([], dtype="float64"))
+    assert len(result) == 0
+    assert str(result.dtype) == "string"
+
+
+def test_canonical_identifier_series_inexact_float_left_alone() -> None:
+    """Beyond 2**53 a float cannot be trusted as an exact integer."""
+    values = pd.Series([float(2**53 + 2)])
+    result = _utils.canonical_identifier_series(values)
+    assert list(result) == [str(values.iloc[0])]
+
+
 def test_resolve_metadata_column_exact_match() -> None:
     """An exact column name match returns the correct Series."""
     df = pd.DataFrame({"recount_qc.star.reads": [100, 200]})

@@ -110,6 +110,7 @@ from recount3._utils import (
     _derive_junction_sidecar_url,
     _ensure_dir,
     _hardlink_or_copy,
+    canonical_identifier_series,
     download_stream_to_zip,
     download_to_file,
     write_cached_file_to_zip,
@@ -288,7 +289,7 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
     else:
         rail_col = df.columns[0]
 
-    rail_ids = df[rail_col].astype(str).tolist()
+    rail_ids = canonical_identifier_series(df[rail_col]).astype(str).tolist()
     if not rail_ids:
         raise LoadError(f"Junction ID file {id_path.name!r} has no rail IDs.")
     return rail_ids

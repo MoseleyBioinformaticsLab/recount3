@@ -271,6 +271,59 @@ class TestStandardizeMetadataFrame:
         out = _standardize_metadata_frame(df)
         assert str(out["rail_id"].dtype) == "string"
 
+    def test_merge_key_text_is_independent_of_parsed_dtype(self) -> None:
+        """An int and a float column of the same IDs render identically.
+
+        A single blank cell widens a ``rail_id`` column to ``float64``, so
+        without canonical rendering the two tables would carry ``"100"``
+        and ``"100.0"`` and could never be joined.
+        """
+        as_int = _standardize_metadata_frame(pd.DataFrame({"rail_id": [100]}))
+        as_float = _standardize_metadata_frame(
+            pd.DataFrame({"rail_id": [100.0]})
+        )
+        assert list(as_int["rail_id"]) == ["100"]
+        assert list(as_float["rail_id"]) == list(as_int["rail_id"])
+
+    def test_tables_typed_differently_still_join(self) -> None:
+        """The regression this guards: an inner join must not empty out."""
+        left = _standardize_metadata_frame(
+            pd.DataFrame(
+                {
+                    "rail_id": [100, 101],
+                    "external_id": ["S1", "S2"],
+                    "study": ["P", "P"],
+                    "a": [1, 2],
+                }
+            )
+        )
+        # Same samples, but a blank third row made pandas pick float64.
+        right = _standardize_metadata_frame(
+            pd.DataFrame(
+                {
+                    "rail_id": [100.0, 101.0, np.nan],
+                    "external_id": ["S1", "S2", "S3"],
+                    "study": ["P", "P", "P"],
+                    "b": [3, 4, 5],
+                }
+            )
+        )
+        merged = pd.merge(
+            left, right, on=["rail_id", "external_id", "study"], how="inner"
+        )
+        assert list(merged["external_id"]) == ["S1", "S2"]
+
+    def test_non_integral_merge_key_kept_verbatim(self) -> None:
+        out = _standardize_metadata_frame(pd.DataFrame({"rail_id": [1.5]}))
+        assert list(out["rail_id"]) == ["1.5"]
+
+    def test_missing_merge_key_values_stay_missing(self) -> None:
+        out = _standardize_metadata_frame(
+            pd.DataFrame({"rail_id": [100.0, np.nan]})
+        )
+        assert list(out["rail_id"])[0] == "100"
+        assert pd.isna(list(out["rail_id"])[1])
+
     def test_original_not_mutated(self) -> None:
         df = pd.DataFrame({"RAIL_ID": ["1"]})
         _standardize_metadata_frame(df)
@@ -581,6 +634,52 @@ class TestParseGtfAttributes:
         result = _parse_gtf_attributes(attrs)
         assert len(result) == 2
         assert result["gene_id"].iloc[1] == "ENSG002"
+
+    def test_quoted_value_keeps_embedded_semicolon(self) -> None:
+        """A quoted value is taken whole, as rtracklayer does."""
+        attrs = pd.Series(['gene_id "A"; gene_name "has;semicolon";'])
+        result = _parse_gtf_attributes(attrs)
+        assert result["gene_name"].iloc[0] == "has;semicolon"
+
+    def test_quoted_value_with_separators_adds_no_columns(self) -> None:
+        """The tail of a quoted value must not become its own attribute.
+
+        Ending the value at a separator inside the quotes would leave
+        ``c (d)"`` to be rescanned and parsed as ``c = (d)``, inventing a
+        column that the annotation never declared.
+        """
+        attrs = pd.Series(['gene_id "A"; note "a, b; c (d)"; gene_name "N";'])
+        result = _parse_gtf_attributes(attrs)
+        assert list(result.columns) == ["gene_id", "note", "gene_name"]
+        assert result["note"].iloc[0] == "a, b; c (d)"
+        assert result["gene_name"].iloc[0] == "N"
+
+    def test_empty_quoted_value_is_empty_string(self) -> None:
+        """``key ""`` is an empty value, not an absent attribute."""
+        attrs = pd.Series(['gene_id "A"; gene_name "";'])
+        result = _parse_gtf_attributes(attrs)
+        assert result["gene_name"].iloc[0] == ""
+
+    def test_unquoted_value_parsed(self) -> None:
+        attrs = pd.Series(['gene_id "A"; level 2;'])
+        result = _parse_gtf_attributes(attrs)
+        assert result["level"].iloc[0] == "2"
+
+    def test_quoted_value_keeps_spaces(self) -> None:
+        attrs = pd.Series(['gene_id "A"; gene_name "has space";'])
+        result = _parse_gtf_attributes(attrs)
+        assert result["gene_name"].iloc[0] == "has space"
+
+    def test_repeated_key_keeps_last_value(self) -> None:
+        """Matches rtracklayer, which reports the final occurrence."""
+        attrs = pd.Series(['gene_id "A"; tag "x"; tag "y";'])
+        result = _parse_gtf_attributes(attrs)
+        assert result["tag"].iloc[0] == "y"
+
+    def test_trailing_pair_without_semicolon(self) -> None:
+        attrs = pd.Series(['gene_id "A"; gene_name "N"'])
+        result = _parse_gtf_attributes(attrs)
+        assert result["gene_name"].iloc[0] == "N"
 
 
 class TestCoerceGtfPhase:
@@ -2246,6 +2345,85 @@ class TestNormalizeSampleMetadata:
         result = b._normalize_sample_metadata(sample_ids=["SRR001"])
         assert "recount3_metadata_provenance" in result.attrs
 
+    @staticmethod
+    def _meta_resource(
+        external_ids: list[str],
+        rail_ids: list[str],
+        *,
+        table_name: str,
+        column: str,
+    ) -> MagicMock:
+        """Return a loaded metadata resource for the given samples."""
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(external_ids, dtype="string"),
+                "rail_id": pd.array(rail_ids, dtype="string"),
+                "study": pd.array(
+                    ["SRP001"] * len(external_ids), dtype="string"
+                ),
+                column: list(range(len(external_ids))),
+            }
+        )
+        return _mock_resource(
+            "metadata_files", loaded_data=frame, table_name=table_name
+        )
+
+    def test_inner_join_matching_nothing_raises(self) -> None:
+        """An inner join that matches no sample must not be silent.
+
+        The count samples would otherwise all be dropped and the caller
+        handed an experiment with no columns at all.
+        """
+        b = R3ResourceBundle(
+            resources=[
+                self._meta_resource(
+                    ["SRR001", "SRR002"],
+                    ["1", "2"],
+                    table_name="sra",
+                    column="a",
+                ),
+                self._meta_resource(
+                    ["SRR901", "SRR902"],
+                    ["901", "902"],
+                    table_name="recount_qc",
+                    column="b",
+                ),
+            ]
+        )
+        with pytest.raises(
+            ValueError, match="No count sample matched the merged sample"
+        ):
+            b._normalize_sample_metadata(sample_ids=["SRR001", "SRR002"])
+
+    def test_outer_join_matching_nothing_keeps_count_samples(self) -> None:
+        """The error message's suggested remedy actually works."""
+        b = R3ResourceBundle(
+            resources=[
+                self._meta_resource(
+                    ["SRR001", "SRR002"],
+                    ["1", "2"],
+                    table_name="sra",
+                    column="a",
+                ),
+                self._meta_resource(
+                    ["SRR901", "SRR902"],
+                    ["901", "902"],
+                    table_name="recount_qc",
+                    column="b",
+                ),
+            ]
+        )
+        result = b._normalize_sample_metadata(
+            sample_ids=["SRR001", "SRR002"], metadata_join="outer"
+        )
+        assert list(result["external_id"]) == ["SRR001", "SRR002"]
+
+    def test_no_sample_ids_does_not_raise(self) -> None:
+        """The guard is about lost samples, not about an empty request."""
+        b = R3ResourceBundle()
+        result = b._normalize_sample_metadata(sample_ids=[])
+        assert len(result) == 0
+
 
 @pytest.mark.requires_biocpy
 class TestToSummarizedExperiment:
@@ -2302,6 +2480,26 @@ class TestToSummarizedExperiment:
             se = b.to_summarized_experiment(genomic_unit="gene", autoload=False)
         assert se is not None
         assert "duplicate feature IDs" in caplog.text
+
+    def test_sample_alignment_losing_every_sample_raises(self) -> None:
+        """No code path may hand back an experiment with zero samples.
+
+        `_normalize_sample_metadata` already refuses an inner join that
+        matches nothing, so this backstop in `_prepare_experiment` is
+        reached by forcing that method to return empty alignment.
+        """
+        b = self._bundle_with_gene_counts()
+        empty = pd.DataFrame({"external_id": pd.array([], dtype="string")})
+        empty.attrs["recount3_metadata_provenance"] = {}
+        with patch.object(
+            R3ResourceBundle,
+            "_normalize_sample_metadata",
+            return_value=empty,
+        ):
+            with pytest.raises(
+                ValueError, match="Sample alignment produced no samples"
+            ):
+                b.to_summarized_experiment(genomic_unit="gene", autoload=False)
 
 
 class TestToRangedSummarizedExperiment:

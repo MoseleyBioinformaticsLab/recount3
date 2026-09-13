@@ -201,6 +201,13 @@ def _standardize_metadata_frame(df: pd.DataFrame) -> pd.DataFrame:
     set of known backwards-compatible key renames, and ensures the standard key
     columns exist.
 
+    The merge keys are rendered as text so that tables can be joined on them
+    regardless of how each file's columns were typed. That text form is
+    produced by :func:`recount3._utils.canonical_identifier_series` rather
+    than by a plain cast, because a numeric identifier parsed as ``int64``
+    in one table and ``float64`` in another would otherwise stringify to
+    ``"123488"`` and ``"123488.0"`` and fail to join.
+
     Args:
       df: Raw metadata table.
 
@@ -222,7 +229,7 @@ def _standardize_metadata_frame(df: pd.DataFrame) -> pd.DataFrame:
             out[key] = pd.NA
 
     for key in _METADATA_MERGE_KEYS:
-        out[key] = out[key].astype("string")
+        out[key] = _utils.canonical_identifier_series(out[key])
 
     return out
 
@@ -421,12 +428,25 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
 
 
 _GTF_ATTR_PAIR_RE = re.compile(
-    r'\s*(?P<key>[^\s;]+)\s+"?(?P<value>[^";]+)"?\s*(?:;|$)'
+    r'(?P<key>[^\s;"]+)\s+'
+    r'(?:"(?P<quoted>[^"]*)"|(?P<bare>[^;"]*?))'
+    r"\s*(?:;|$)"
 )
 
 
 def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     """Parse a GTF attributes column into a wide (column-per-key) DataFrame.
+
+    Values are read with GTF quoting rules, matching
+    ``rtracklayer::import.gff``: a double-quoted value is taken whole, so
+    ``gene_name "has;semicolon"`` keeps its semicolon and an empty
+    ``gene_name ""`` yields an empty string rather than a missing one.
+    Unquoted values such as ``level 2`` run to the delimiting semicolon.
+
+    Reading quoted values as a unit is what keeps the scan aligned with the
+    field: stopping at a separator inside quotes would leave the remainder
+    of that value to be rescanned, and its trailing words would be parsed
+    as further ``key value`` pairs and become spurious columns.
 
     Repeated keys retain their last value. Missing attribute strings produce
     rows with missing values; the input index is preserved.
@@ -441,8 +461,9 @@ def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     for value in attrs.fillna(""):
         row = {}
         for match in _GTF_ATTR_PAIR_RE.finditer(str(value)):
-            key, val = match.group("key", "value")
-            row[key] = val
+            key = match.group("key")
+            quoted = match.group("quoted")
+            row[key] = quoted if quoted is not None else match.group("bare")
         rows.append(row)
     return pd.DataFrame(rows, index=attrs.index)
 
@@ -2638,6 +2659,20 @@ class R3ResourceBundle:
                 raise ValueError(
                     "Metadata contains samples missing from the counts matrix."
                 )
+            if sample_ids and not represented:
+                # len(represented) == len(merged) also holds when both are
+                # zero, so the check above cannot see a join that matched
+                # nothing. Without this, every sample would be dropped and
+                # the caller would receive an experiment with no columns.
+                raise ValueError(
+                    "No count sample matched the merged sample metadata. "
+                    "The metadata tables for this project share no "
+                    f"{'/'.join(_METADATA_MERGE_KEYS)} rows, so the inner "
+                    "join produced no samples. Check that the tables "
+                    "describe the same samples, or pass "
+                    "metadata_join='outer' to keep every count sample and "
+                    "leave the unmatched metadata missing."
+                )
         selected = [
             name
             for name in sample_ids
@@ -2788,6 +2823,16 @@ class R3ResourceBundle:
         if counts.columns.has_duplicates:
             raise ValueError(
                 "Duplicate sample identifiers across selected count resources."
+            )
+        if counts.shape[1] == 0:
+            # A recount3 experiment always has at least one sample: the
+            # count resources were selected above and each carries its own
+            # samples. Reaching this point means sample alignment discarded
+            # all of them, which must never be returned as a valid object.
+            raise ValueError(
+                "Sample alignment produced no samples; the selected count "
+                "resources and their metadata do not describe any sample "
+                "in common."
             )
         col = pd.concat(columns, axis=0)
         col.attrs["recount3_metadata_provenance"] = {

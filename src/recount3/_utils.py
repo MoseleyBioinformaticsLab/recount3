@@ -799,6 +799,66 @@ def _coerce_numeric_column(series: pd.Series, column_name: str) -> pd.Series:
     return numeric.astype(float)
 
 
+_MAX_EXACT_FLOAT_INTEGER = 2**53
+
+
+def canonical_identifier_series(values: pd.Series) -> pd.Series:
+    """Render identifiers as text in a way that does not depend on dtype.
+
+    recount3 ships each metadata table for a project as its own TSV, and
+    each is parsed independently. A numeric identifier such as ``rail_id``
+    can therefore land as ``int64`` in one table and as ``float64`` in
+    another, because a single blank cell is enough to make pandas widen
+    the column. Stringifying those two columns directly yields ``"123488"``
+    and ``"123488.0"``, which no longer compare equal, so an inner join on
+    the identifier silently collapses to zero rows. R never sees this
+    because ``merge()`` compares the parsed numbers rather than their text
+    form.
+
+    Numeric columns whose present values are all whole numbers (and, for
+    floats, small enough to be represented exactly) are therefore rendered
+    through an integer, so the text depends only on the value. Everything
+    else -- including non-integral numbers, text and booleans -- is
+    stringified unchanged.
+
+    Args:
+        values: An identifier column parsed from a recount3 table.
+
+    Returns:
+        A ``string``-dtype Series with the same index as ``values``, with
+        missing entries preserved as :data:`pandas.NA`.
+
+    Examples:
+        Two tables that parsed the same identifier differently still agree
+        on the canonical text::
+
+            >>> import pandas as pd
+            >>> list(canonical_identifier_series(pd.Series([123488])))
+            ['123488']
+            >>> list(canonical_identifier_series(pd.Series([123488.0])))
+            ['123488']
+    """
+    if pd.api.types.is_bool_dtype(values):
+        return values.astype("string")
+    if not pd.api.types.is_numeric_dtype(values):
+        return values.astype("string")
+
+    numeric = pd.to_numeric(values, errors="coerce")
+    present = numeric.dropna()
+    if not present.empty:
+        if not bool((present == present.round()).all()):
+            return values.astype("string")
+        if pd.api.types.is_float_dtype(numeric) and not bool(
+            (present.abs() <= _MAX_EXACT_FLOAT_INTEGER).all()
+        ):
+            return values.astype("string")
+
+    canonical = pd.Series(pd.NA, index=values.index, dtype="string")
+    if not present.empty:
+        canonical.loc[present.index] = present.astype("int64").astype("string")
+    return canonical
+
+
 def _resolve_metadata_column(
     metadata_df: pd.DataFrame,
     column_name: str,
