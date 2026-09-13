@@ -32,17 +32,20 @@ jobs:
         python3 -m pip install
         -i https://test.pypi.org/simple/
         --extra-index-url https://pypi.org/simple
-        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+        "recount3[dev,biocpy,parquet,anndata,pybiocfilecache]"
+        recount3==${{ needs.release-version.outputs.version }}
       install_command_macos: >-
         python3 -m pip install
         -i https://test.pypi.org/simple/
         --extra-index-url https://pypi.org/simple
-        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+        "recount3[dev,biocpy,parquet,anndata,pybiocfilecache]"
+        recount3==${{ needs.release-version.outputs.version }}
       install_command_windows: >-
         python3 -m pip install
         -i https://test.pypi.org/simple/
         --extra-index-url https://pypi.org/simple
-        recount3[dev,parquet]==${{ needs.release-version.outputs.version }}
+        "recount3[dev,parquet,pybiocfilecache]"
+        recount3==${{ needs.release-version.outputs.version }}
 
   publish-pypi:
     needs: verify-testpypi
@@ -58,13 +61,16 @@ jobs:
     with:
       install_command_linux: >-
         python3 -m pip install
-        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+        "recount3[dev,biocpy,parquet,anndata,pybiocfilecache]"
+        recount3==${{ needs.release-version.outputs.version }}
       install_command_macos: >-
         python3 -m pip install
-        recount3[dev,biocpy,parquet,anndata]==${{ needs.release-version.outputs.version }}
+        "recount3[dev,biocpy,parquet,anndata,pybiocfilecache]"
+        recount3==${{ needs.release-version.outputs.version }}
       install_command_windows: >-
         python3 -m pip install
-        recount3[dev,parquet]==${{ needs.release-version.outputs.version }}
+        "recount3[dev,parquet,pybiocfilecache]"
+        recount3==${{ needs.release-version.outputs.version }}
 
   publish-docs:
     needs: verify-pypi

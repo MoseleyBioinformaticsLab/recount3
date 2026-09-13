@@ -18,7 +18,7 @@ on:
         type: string
       install_command_windows:
         description: >-
-          Install command for Windows. It must stay at core plus parquet:
+          Install command for Windows, including parquet and pybiocfilecache.
           pyarrow ships Windows wheels, but neither pyBigWig nor the BiocPy
           ranged stack (iranges/genomicranges) does, and the latter fails to
           build from source. The anndata extra implies biocpy, so it is

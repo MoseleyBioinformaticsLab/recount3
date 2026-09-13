@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install -e .[dev,bigwig,biocpy,parquet,anndata]
+          python3 -m pip install -e ".[dev,all]"
 
       - name: Run tests and collect coverage
         run: |
