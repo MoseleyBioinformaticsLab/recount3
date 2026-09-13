@@ -252,6 +252,59 @@ def _metadata_origin(res: resource.R3Resource) -> str:
     return str(origin).strip().lower()
 
 
+def _load_optional_metadata(
+    res: resource.R3Resource,
+    *,
+    autoload: bool,
+) -> pd.DataFrame | None:
+    """Load one metadata table, tolerating one that was never published.
+
+    recount3 does not publish every metadata table for every project, and a
+    mirror can be missing one. R treats that as expected rather than fatal:
+    ``file_retrieve()`` warns and yields ``NA`` for a URL it cannot reach,
+    and ``read_metadata()`` drops the ``NA`` entries before merging, so the
+    experiment is still built from the tables that do exist. This helper
+    applies the same rule, so one absent table no longer costs the caller
+    the whole experiment.
+
+    Only retrieval failures are tolerated. A table that was retrieved but
+    cannot be parsed is a damaged file rather than an absent one, and
+    silently dropping it would hide real corruption, so its error
+    propagates -- as it also does in R.
+
+    Args:
+      res: The metadata resource to load.
+      autoload: Whether an unloaded resource may be fetched. With
+        :data:`False` an unloaded resource is an error, because the caller
+        has undertaken to load every resource beforehand.
+
+    Returns:
+      The parsed table, or :data:`None` when the resource could not be
+      retrieved and should be dropped.
+
+    Raises:
+      ValueError: If the resource is not loaded and ``autoload`` is
+        :data:`False`.
+      TypeError: If the loaded object is not a :class:`pandas.DataFrame`.
+      recount3.errors.LoadError: If the retrieved file cannot be parsed.
+    """
+    if not res.is_loaded():
+        if not autoload:
+            raise ValueError(f"Metadata resource is not loaded: {res.url}")
+        try:
+            res.load()
+        except errors.DownloadError:
+            logging.warning(
+                "Dropping metadata table that could not be retrieved: %s",
+                res.url,
+            )
+            return None
+    frame = res.get_loaded()
+    if not isinstance(frame, pd.DataFrame):
+        raise TypeError(f"Metadata resource is not a DataFrame: {res.url}")
+    return frame
+
+
 def _namespace_metadata_columns(
     df: pd.DataFrame,
     *,
@@ -2546,8 +2599,10 @@ class R3ResourceBundle:
     ) -> pd.DataFrame:
         """Merge metadata within each project and align it to count samples.
 
-        Empty tables are ignored when another nonempty table is available.
-        External and rail identifiers must define consistent sample mappings.
+        Tables that are empty, or that recount3 never published for this
+        project, are dropped with a warning as long as one usable table
+        remains, matching R's ``read_metadata()``. External and rail
+        identifiers must define consistent sample mappings.
 
         Args:
             sample_ids: Count sample identifiers in the desired output order.
@@ -2563,12 +2618,13 @@ class R3ResourceBundle:
             only an ``external_id`` column for all requested samples.
 
         Raises:
-            ValueError: If the join policy is invalid, all supplied tables are
-                empty, identifiers conflict, table columns overlap, required
-                samples are absent, or unloaded resources cannot be autoloaded.
+            ValueError: If the join policy is invalid, every supplied table was
+                empty or unretrievable, identifiers conflict, table columns
+                overlap, required samples are absent, or unloaded resources
+                cannot be autoloaded.
             TypeError: If a loaded metadata resource is not a DataFrame.
-            recount3.errors.LoadError: If a metadata resource cannot be loaded.
-            recount3.errors.DownloadError: If metadata retrieval fails.
+            recount3.errors.LoadError: If a retrieved metadata table cannot be
+                parsed.
         """
         if metadata_join not in ("inner", "outer"):
             raise ValueError("metadata_join must be 'inner' or 'outer'.")
@@ -2576,17 +2632,9 @@ class R3ResourceBundle:
         groups = {}
         provenance = {}
         for res in self.only_metadata().resources:
-            if not res.is_loaded():
-                if not autoload:
-                    raise ValueError(
-                        f"Metadata resource is not loaded: {res.url}"
-                    )
-                res.load()
-            frame = res.get_loaded()
-            if not isinstance(frame, pd.DataFrame):
-                raise TypeError(
-                    f"Metadata resource is not a DataFrame: {res.url}"
-                )
+            frame = _load_optional_metadata(res, autoload=autoload)
+            if frame is None:
+                continue
             if len(frame) == 0:
                 logging.warning("Dropping empty metadata table %s", res.url)
                 continue
@@ -2601,7 +2649,15 @@ class R3ResourceBundle:
         if not groups:
             result = pd.DataFrame({"external_id": sample_ids}, index=sample_ids)
             if self.only_metadata().resources:
-                raise ValueError("All supplied metadata tables are empty.")
+                # Every table the bundle offered was empty or unretrievable.
+                # R stops here too ("The are no metadata files to work
+                # with."): a bundle that asked for metadata and got none
+                # back is a failure, unlike one that never asked.
+                raise ValueError(
+                    "Every metadata table in this bundle was empty or could "
+                    "not be retrieved, so no sample metadata is available. "
+                    "Earlier warnings name each table that was dropped."
+                )
             return result
         merged_groups = []
         for frames in groups.values():
@@ -2774,7 +2830,20 @@ class R3ResourceBundle:
                 "Ambiguous annotation, organism or junction format; "
                 "select compatible counts explicitly."
             )
-        annotation = next(iter(signatures))[1] if unit != "junction" else None
+        signature_organism, signature_feature = next(iter(signatures))
+        # Provenance reports the annotation the way R and the docs name it
+        # ("gencode_v26"), and keeps the file-naming code ("G026") beside
+        # it under its own key, because that is what selects the matching
+        # GTF. Junctions carry no annotation, so both stay unset.
+        annotation_extension_used = (
+            signature_feature if unit != "junction" else None
+        )
+        if annotation_extension_used:
+            annotation = search.annotation_label(
+                signature_organism, annotation_extension_used
+            )
+        else:
+            annotation = annotation_extension_used
         keys = list(dict.fromkeys(_project_key(r) for r in selected.resources))
         frames, columns, range_frames = [], [], []
         used_resources = []
@@ -2782,24 +2851,18 @@ class R3ResourceBundle:
             selected_counts = [
                 r for r in selected.resources if _project_key(r) == key
             ]
+            chosen = {id(r) for r in selected_counts}
             related = [
                 res
                 for res in self.resources
                 if _project_key(res) == key
                 and getattr(res.description, "resource_type", None)
                 in {"metadata_files", "count_files_junctions"}
-                and res not in selected_counts
+                and id(res) not in chosen
                 and getattr(res.description, "junction_extension", None) != "MM"
             ]
             group = R3ResourceBundle(selected_counts + related)
             used_resources.extend(group.resources)
-            for res in group.only_metadata().resources:
-                if not res.is_loaded():
-                    if not autoload:
-                        raise ValueError(
-                            f"Metadata resource is not loaded: {res.url}"
-                        )
-                    res.load()
             counts = group._stack_counts_for(
                 genomic_unit=unit, join_policy=join_policy, autoload=autoload
             )
@@ -2875,6 +2938,7 @@ class R3ResourceBundle:
             ),
             "type": unit,
             "annotation": annotation,
+            "annotation_extension": annotation_extension_used,
             "resource_urls": list(
                 dict.fromkeys(
                     res.url
@@ -2892,7 +2956,7 @@ class R3ResourceBundle:
             ),
         }
         if unit == "junction":
-            metadata["jxn_format"] = next(iter(signatures))[1]
+            metadata["jxn_format"] = signature_feature
         ranges = pd.concat(range_frames) if range_frames else None
         if ranges is not None:
             ranges = ranges.loc[~ranges.index.duplicated()].reindex(
@@ -3057,7 +3121,7 @@ class R3ResourceBundle:
         )
         try:
             if unit in {"gene", "exon"}:
-                annotation = metadata["annotation"]
+                annotation = metadata["annotation_extension"]
                 annotations = self
                 if isinstance(metadata["organism"], str):
                     annotations = self.filter(organism=metadata["organism"])

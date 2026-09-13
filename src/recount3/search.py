@@ -144,6 +144,16 @@ _ANNOTATION_NAME_TO_EXT_MOUSE: Final[dict[str, str]] = {
     "gencode_v23": "M023",
 }
 
+# Reverse of the two maps above. The forward maps are injective, so every
+# extension names exactly one annotation.
+_ANNOTATION_EXT_TO_NAME_HUMAN: Final[dict[str, str]] = {
+    ext: name for name, ext in _ANNOTATION_NAME_TO_EXT_HUMAN.items()
+}
+
+_ANNOTATION_EXT_TO_NAME_MOUSE: Final[dict[str, str]] = {
+    ext: name for name, ext in _ANNOTATION_NAME_TO_EXT_MOUSE.items()
+}
+
 
 def _normalize_to_tuple(value: StringOrIterable) -> tuple[str, ...]:
     """Normalize a string or iterable of strings into a tuple of strings.
@@ -1102,6 +1112,66 @@ def annotation_ext(organism: str, annotation: str) -> str:
         raise ValueError(message) from exc
 
 
+def annotation_label(organism: str | None, annotation_extension: str) -> str:
+    """Return the annotation name for a recount3 annotation extension.
+
+    This is the inverse of :func:`annotation_ext`, and the two agree:
+    ``annotation_ext(org, annotation_label(org, ext)) == ext`` for every
+    extension recount3 publishes. It exists so that recorded provenance can
+    name an annotation the way users and R do -- ``"gencode_v26"`` rather
+    than the file-naming code ``"G026"``.
+
+    Unlike :func:`annotation_ext`, an organism or extension this release
+    does not recognize is not an error. The two functions are strict about
+    different things on purpose: :func:`annotation_ext` builds a URL, where
+    a wrong value silently fetches nothing, while this function only names
+    an annotation for a human reader. It runs while provenance is being
+    recorded, after the data has already been assembled, so refusing to
+    name an unfamiliar build would throw away a finished experiment over a
+    label.
+
+    Args:
+      organism: Organism name ("human" or "mouse"), case-insensitive, or
+        :data:`None` when the organism is unknown.
+      annotation_extension: Annotation file extension (for example,
+        "G026"), case-insensitive.
+
+    Returns:
+      The annotation name (for example, "gencode_v26"). The extension is
+      returned unchanged, stripped of surrounding whitespace, when the
+      organism is unknown or has no name for it -- a custom mirror may
+      publish a build this release has never heard of.
+
+    Raises:
+      ValueError: If ``annotation_extension`` is empty or blank. That is a
+        caller mistake rather than an unfamiliar annotation.
+
+    Examples:
+        >>> annotation_label("human", "G026")
+        'gencode_v26'
+        >>> annotation_label("mouse", "M023")
+        'gencode_v23'
+        >>> annotation_label("human", "Z999")
+        'Z999'
+        >>> annotation_label(None, "G026")
+        'G026'
+    """
+    if not annotation_extension or not annotation_extension.strip():
+        raise ValueError("annotation_extension must be a non-empty string.")
+
+    extension = annotation_extension.strip()
+    org = organism.strip().lower() if organism else ""
+
+    if org == "human":
+        mapping = _ANNOTATION_EXT_TO_NAME_HUMAN
+    elif org == "mouse":
+        mapping = _ANNOTATION_EXT_TO_NAME_MOUSE
+    else:
+        return extension
+
+    return mapping.get(extension.upper(), extension)
+
+
 def _resolve_annotation_exts(
     organism: str,
     annotations: str | Iterable[str] | None,
@@ -1236,20 +1306,32 @@ def search_project_all(
       include_metadata: Whether to include sample metadata tables: five for SRA
         and four for GTEx/TCGA, which do not supply prediction tables.
       include_bigwig: Whether to include per-sample BigWig coverage files.
+        Only this option needs the data source's sample index, so only this
+        option downloads it and validates that the project appears in it.
       strict: If True, raise on invalid parameters; else skip broken items.
+        With False, a project that cannot be resolved in the sample index
+        yields no BigWig resources instead of raising.
       deduplicate: If True, drop duplicates across resource families.
 
     Returns:
       A list of :class:`R3Resource` objects covering the requested bundle.
 
     Raises:
-      ValueError: If validation fails (for example, missing project).
+      ValueError: If validation fails (for example, a missing project while
+        enumerating BigWig samples with ``strict=True``).
     """
-    samp_ids = samples_for_project(
-        organism=organism,
-        data_source=data_source,
-        project=project,
-    )
+    samp_ids: list[str] = []
+    if include_bigwig:
+        try:
+            samp_ids = samples_for_project(
+                organism=organism,
+                data_source=data_source,
+                project=project,
+            )
+        except ValueError:
+            if strict:
+                raise
+            samp_ids = []
 
     ann_exts = _resolve_annotation_exts(
         organism=organism,

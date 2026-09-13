@@ -64,6 +64,7 @@ from recount3.bundle import (
     _classify_ranges_failure,
     _dedupe_ranges_on_feature_id,
     _ensure_unique_columns,
+    _load_optional_metadata,
     _make_unique_names,
     _metadata_origin,
     _namespace_metadata_columns,
@@ -84,6 +85,7 @@ from recount3.config import Config
 from recount3.errors import (
     CompatibilityError,
     DownloadError,
+    LoadError,
     MissingRangesError,
     RangesCoverageError,
     RangesError,
@@ -4241,6 +4243,122 @@ def _metadata_resource(
     )
 
 
+class TestUnpublishedMetadataTables:
+    """recount3 does not publish every metadata table for every project.
+
+    R treats an unreachable table as expected: ``file_retrieve()`` warns and
+    yields ``NA``, ``read_metadata()`` drops it, and the RSE is still built
+    from the tables that do exist. These tests pin the same rule here.
+    """
+
+    _PROJECT = {
+        "organism": "human",
+        "data_source": "sra",
+        "project": "SRP001",
+    }
+
+    @staticmethod
+    def _unretrievable(table_name: str, **desc: Any) -> MagicMock:
+        res = _mock_resource(
+            "metadata_files",
+            url=f"http://example.com/{table_name}.MD.gz",
+            table_name=table_name,
+            **desc,
+        )
+        res.load.side_effect = DownloadError(f"Failed to download {table_name}")
+        return res
+
+    @staticmethod
+    def _usable(table_name: str, **desc: Any) -> MagicMock:
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["SRR001", "SRR002"], dtype="string"),
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [1.0, 2.0],
+            }
+        )
+        return _metadata_resource(frame, table_name=table_name, **desc)
+
+    def test_helper_drops_an_unretrievable_table_with_a_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        res = self._unretrievable("recount_pred")
+        with caplog.at_level(logging.WARNING):
+            assert _load_optional_metadata(res, autoload=True) is None
+        assert "could not be retrieved" in caplog.text
+        assert "recount_pred" in caplog.text
+
+    def test_helper_propagates_a_parse_failure(self) -> None:
+        """A retrieved-but-damaged table is corruption, not absence."""
+        res = _mock_resource("metadata_files", table_name="recount_qc")
+        res.load.side_effect = LoadError("not a TSV")
+        with pytest.raises(LoadError):
+            _load_optional_metadata(res, autoload=True)
+
+    def test_helper_requires_loading_when_autoload_is_off(self) -> None:
+        res = self._unretrievable("recount_qc")
+        with pytest.raises(ValueError, match="Metadata resource is not loaded"):
+            _load_optional_metadata(res, autoload=False)
+        res.load.assert_not_called()
+
+    def test_an_absent_table_still_yields_the_remaining_metadata(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        bundle = R3ResourceBundle(
+            resources=[
+                self._usable("recount_qc", **self._PROJECT),
+                self._unretrievable("recount_pred", **self._PROJECT),
+            ]
+        )
+        with caplog.at_level(logging.WARNING):
+            col = bundle._normalize_sample_metadata(
+                sample_ids=["SRR001", "SRR002"]
+            )
+        assert list(col.index) == ["SRR001", "SRR002"]
+        assert list(col["recount_qc__score"]) == [1.0, 2.0]
+        assert "could not be retrieved" in caplog.text
+
+    def test_an_absent_table_still_builds_the_experiment(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        counts = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=_gene_df(),
+            genomic_unit="gene",
+            annotation_extension="G026",
+            **self._PROJECT,
+        )
+        bundle = R3ResourceBundle(
+            resources=[
+                counts,
+                self._usable("recount_qc", **self._PROJECT),
+                self._unretrievable("recount_pred", **self._PROJECT),
+            ]
+        )
+        with caplog.at_level(logging.WARNING):
+            _, _, col, _, _ = bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=True,
+            )
+        assert list(col.index) == ["SRR001", "SRR002"]
+        assert "recount_pred" in caplog.text
+
+    def test_every_table_absent_is_reported_rather_than_ignored(self) -> None:
+        """R stops here too, rather than returning bare sample IDs."""
+        bundle = R3ResourceBundle(
+            resources=[
+                self._unretrievable("recount_qc", **self._PROJECT),
+                self._unretrievable("recount_pred", **self._PROJECT),
+            ]
+        )
+        with pytest.raises(ValueError, match="empty or could not be retrieved"):
+            bundle._normalize_sample_metadata(sample_ids=["SRR001"])
+
+
 class TestNormalizeSampleMetadataValidation:
     def test_rejects_an_unknown_metadata_join(self) -> None:
         bundle = R3ResourceBundle()
@@ -4284,7 +4402,8 @@ class TestNormalizeSampleMetadataValidation:
         bundle = R3ResourceBundle(resources=[_metadata_resource(empty)])
         with caplog.at_level(logging.WARNING):
             with pytest.raises(
-                ValueError, match="All supplied metadata tables are empty"
+                ValueError,
+                match="empty or could not be retrieved",
             ):
                 bundle._normalize_sample_metadata(sample_ids=["S1"])
         assert "Dropping empty metadata table" in caplog.text
@@ -4658,7 +4777,8 @@ class TestPrepareExperimentAssembly:
         assert list(col["recount_qc__score"]) == [1.0, 2.0]
         assert col["BigWigURL"].str.contains("SRP001").all()
         assert ranges is None
-        assert metadata["annotation"] == "G026"
+        assert metadata["annotation"] == "gencode_v26"
+        assert metadata["annotation_extension"] == "G026"
 
     def test_junction_projects_are_aligned_on_rr_coordinates(self) -> None:
         mm1, rr1 = _junction_resources(

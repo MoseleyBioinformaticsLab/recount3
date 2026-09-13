@@ -1131,6 +1131,13 @@ def compute_scale_factors(
        ratio==2 indicates paired-end, ratio==1 indicates single-end. Other
        ratios are treated as unknown and produce missing paired multipliers.
 
+    Paired-end status is resolved only for by="mapped_reads". It cancels out
+    of the AUC formula, so by="auc" never reads `avg_read_length_column` and
+    keeps working on projects whose ``recount_seq_qc`` table is empty or was
+    not published. This mirrors recount3's R implementation, where the
+    ``paired_end`` default argument is an ``is_paired_end()`` call that the
+    AUC branch never forces.
+
     Missing values in required metadata propagate to missing scale factors.
     Non-numeric metadata values raise an error.
 
@@ -1150,8 +1157,9 @@ def compute_scale_factors(
         sample.
       paired_end_status: Optional paired-end indicator per sample. If
         provided, it must align with the samples in `external_id`. If
-        omitted, paired-end status
-        is inferred from metadata.
+        omitted, paired-end status is inferred from metadata. Used only
+        when by="mapped_reads"; ignored for by="auc", which does not
+        depend on it.
 
     Returns:
       A pandas Series of scale factors indexed by `external_id`. The Series name
@@ -1159,7 +1167,11 @@ def compute_scale_factors(
 
     Raises:
       ValueError: If `by` is invalid, required metadata columns are missing, or
-        non-numeric metadata values are present.
+        non-numeric metadata values are present. `auc_column`,
+        `avg_mapped_read_length_column`, `mapped_reads_column` and
+        `external_id` are required for both methods;
+        `avg_read_length_column` is required only by by="mapped_reads",
+        and only when `paired_end_status` is not supplied.
       TypeError: If `target_read_count` or `target_read_length_bp` are not
         numeric scalars.
 
@@ -1213,21 +1225,21 @@ def compute_scale_factors(
     avg_mapped_values.index = external_id
     mapped_reads_values.index = external_id
 
-    if paired_end_status is None:
-        paired_end_series = is_paired_end(
-            metadata,
-            avg_mapped_read_length_column=avg_mapped_read_length_column,
-        )
-    else:
-        paired_end_series = pd.Series(
-            paired_end_status,
-            index=external_id,
-            dtype="boolean",
-        )
-
     if by == "auc":
         scale_factor = float(target_read_count) / auc_values
     else:
+        if paired_end_status is None:
+            paired_end_series = is_paired_end(
+                metadata,
+                avg_mapped_read_length_column=avg_mapped_read_length_column,
+            )
+        else:
+            paired_end_series = pd.Series(
+                paired_end_status,
+                index=external_id,
+                dtype="boolean",
+            )
+
         pe_multiplier = pd.Series(np.nan, index=external_id, dtype=float)
         # pylint: disable=singleton-comparison
         pe_multiplier.loc[paired_end_series == True] = 2.0

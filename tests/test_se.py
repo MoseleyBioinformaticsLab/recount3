@@ -1155,6 +1155,75 @@ class TestIsPairedEnd:
         assert result.iloc[0] == False
 
 
+class TestAucScalingWithoutSequencingQc:
+    """AUC scaling must not depend on the ``recount_seq_qc`` table.
+
+    Paired-end status cancels out of the AUC formula. R reaches that
+    conclusion through lazy evaluation -- ``compute_scale_factors()``
+    defaults ``paired_end`` to an ``is_paired_end()`` call that the AUC
+    branch never forces -- so AUC scaling keeps working on projects whose
+    ``recount_seq_qc`` table is empty or was never published. recount3
+    documents exactly such a project in its own suite (SRP103067).
+
+    Executed against the R package's own ``R/transform_counts.R``, R gives
+    ``compute_scale_factors(meta, by="auc")`` -> ``0.04, 0.02`` on the
+    metadata below, and errors only for ``by="mapped_reads"``.
+    """
+
+    @staticmethod
+    def _meta_without_avg_len() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "external_id": ["s1", "s2"],
+                "recount_qc.bc_auc.all_reads_all_bases": [1e9, 2e9],
+                "recount_qc.star.average_mapped_length": [100.0, 100.0],
+                "recount_qc.star.all_mapped_reads": [1e7, 2e7],
+            }
+        )
+
+    def test_auc_does_not_need_the_average_read_length(self) -> None:
+        result = compute_scale_factors(
+            self._meta_without_avg_len(), by="auc", target_read_count=4e7
+        )
+        assert result["s1"] == pytest.approx(0.04)
+        assert result["s2"] == pytest.approx(0.02)
+
+    def test_mapped_reads_still_needs_the_average_read_length(self) -> None:
+        with pytest.raises(ValueError, match="recount_seq_qc.avg_len"):
+            compute_scale_factors(
+                self._meta_without_avg_len(), by="mapped_reads"
+            )
+
+    def test_auc_ignores_a_supplied_paired_end_status(self) -> None:
+        """It cancels out, so even an unusable value cannot matter."""
+        result = compute_scale_factors(
+            self._meta_without_avg_len(),
+            by="auc",
+            paired_end_status=[True, False, True],
+        )
+        assert list(result.index) == ["s1", "s2"]
+
+    def test_auc_matches_the_value_computed_with_the_table_present(
+        self,
+    ) -> None:
+        without = compute_scale_factors(self._meta_without_avg_len(), by="auc")
+        with_table = compute_scale_factors(
+            self._meta_without_avg_len().assign(
+                **{"recount_seq_qc.avg_len": [100.0, 100.0]}
+            ),
+            by="auc",
+        )
+        pd.testing.assert_series_equal(without, with_table)
+
+    def test_paired_end_is_not_resolved_for_auc(self) -> None:
+        with mock.patch(
+            "recount3.se.is_paired_end",
+            side_effect=AssertionError("must not be called for by='auc'"),
+        ) as never:
+            compute_scale_factors(self._meta_without_avg_len(), by="auc")
+        never.assert_not_called()
+
+
 class TestComputeScaleFactors:
     """Tests for compute_scale_factors."""
 

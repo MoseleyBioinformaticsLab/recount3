@@ -116,6 +116,7 @@ from recount3.se import (
 )
 from recount3.search import (
     annotation_ext,
+    annotation_label,
     annotation_options,
     available_projects,
     available_samples,
@@ -193,5 +194,6 @@ __all__ = [
     "search_data_source_metadata",
     "create_sample_project_lists",
     "annotation_ext",
+    "annotation_label",
     "annotation_options",
 ]

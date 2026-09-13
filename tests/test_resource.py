@@ -505,6 +505,53 @@ def test_cached_path_filename_contains_url_basename(cfg: Config) -> None:
     assert "sra.gene_sums.SRP014565.G026.gz" in cp.name
 
 
+class TestResourceEquality:
+    """Equality asks which file a resource is, not what it has parsed.
+
+    ``_cached_data`` holds whatever ``load()`` produced. For counts and
+    metadata that is a ``pandas.DataFrame``, whose ``==`` is element-wise,
+    so including it in the comparison made equality raise
+    ``ValueError: The truth value of a DataFrame is ambiguous`` for two
+    loaded resources naming the same file.
+    """
+
+    @staticmethod
+    def _resource(project: str = "P1") -> R3Resource:
+        return R3Resource(
+            R3ResourceDescription(
+                resource_type="count_files_gene_or_exon",
+                organism="human",
+                data_source="sra",
+                project=project,
+                genomic_unit="gene",
+                annotation_extension="G026",
+            )
+        )
+
+    def test_two_loaded_resources_for_the_same_file_compare_equal(
+        self,
+    ) -> None:
+        first, second = self._resource(), self._resource()
+        first._cached_data = pd.DataFrame({"x": [1, 2]})
+        second._cached_data = pd.DataFrame({"x": [3, 4]})
+        assert first == second
+        assert first in [second]
+
+    def test_loading_does_not_change_equality(self) -> None:
+        first, second = self._resource(), self._resource()
+        assert first == second
+        first._cached_data = pd.DataFrame({"x": [1]})
+        assert first == second
+
+    def test_different_files_are_still_unequal(self) -> None:
+        assert self._resource("P1") != self._resource("P2")
+
+    def test_a_materialized_path_still_distinguishes_resources(self) -> None:
+        first, second = self._resource(), self._resource()
+        first.filepath = "/tmp/one.gz"
+        assert first != second
+
+
 class TestEnsureCached:
     """`_cached_path()` computes a path; `ensure_cached()` guarantees a file.
 

@@ -56,6 +56,7 @@ from recount3.search import (
     _resolve_annotation_exts,
     _strip_metadata_column_prefix,
     annotation_ext,
+    annotation_label,
     annotation_options,
     _normalize_to_tuple,
     available_projects,
@@ -1407,15 +1408,57 @@ class TestSearchProjectAll:
         ]
         assert len(ann_resources) == len(_ANN_EXT_HUMAN)
 
-    def test_invalid_project_raises(self) -> None:
+    def test_invalid_project_raises_when_enumerating_bigwig_samples(
+        self,
+    ) -> None:
         with mock.patch(
             "recount3.search.samples_for_project",
             side_effect=ValueError("Project 'NOPE' not found"),
         ):
             with pytest.raises(ValueError, match="not found"):
                 search_project_all(
-                    organism="human", data_source="sra", project="NOPE"
+                    organism="human",
+                    data_source="sra",
+                    project="NOPE",
+                    include_bigwig=True,
                 )
+
+    def test_invalid_project_yields_no_bigwigs_when_not_strict(self) -> None:
+        with mock.patch(
+            "recount3.search.samples_for_project",
+            side_effect=ValueError("Project 'NOPE' not found"),
+        ):
+            found = search_project_all(
+                organism="human",
+                data_source="sra",
+                project="NOPE",
+                include_bigwig=True,
+                strict=False,
+            )
+        types = {r.description.resource_type for r in found}
+        assert "bigwig_files" not in types
+        assert found
+
+    def test_sample_index_is_untouched_without_bigwig(self) -> None:
+        """The data source's whole sample index is a large download.
+
+        Nothing but BigWig discovery consumes it, and R's
+        create_rse_manual() never reads it either, so a project that is
+        absent from it -- or a mirror that omits it -- must not stop a
+        gene, exon or junction bundle from being discovered.
+        """
+        with mock.patch(
+            "recount3.search.samples_for_project",
+            side_effect=AssertionError("sample index must not be read"),
+        ) as never:
+            found = search_project_all(
+                organism="human",
+                data_source="sra",
+                project="SRP009615",
+                include_bigwig=False,
+            )
+        never.assert_not_called()
+        assert found
 
     def test_result_is_deterministically_sorted(self) -> None:
         with self._patch_samples([]):
@@ -1478,6 +1521,54 @@ class TestSearchProjectAll:
         }
         assert "exon" in genomic_units_found
         assert "gene" not in genomic_units_found
+
+
+class TestAnnotationLabel:
+    """The inverse of ``annotation_ext``, used to name annotations."""
+
+    @pytest.mark.parametrize(
+        "organism,extension,expected",
+        [
+            ("human", "G026", "gencode_v26"),
+            ("human", "G029", "gencode_v29"),
+            ("human", "F006", "fantom6_cat"),
+            ("human", "R109", "refseq"),
+            ("human", "ERCC", "ercc"),
+            ("human", "SIRV", "sirv"),
+            ("mouse", "M023", "gencode_v23"),
+        ],
+    )
+    def test_known_extensions_are_named(
+        self, organism: str, extension: str, expected: str
+    ) -> None:
+        assert annotation_label(organism, extension) == expected
+
+    @pytest.mark.parametrize("organism", ["human", "mouse"])
+    def test_round_trips_with_annotation_ext(self, organism: str) -> None:
+        for name, extension in annotation_options(organism).items():
+            assert annotation_label(organism, extension) == name
+            assert annotation_ext(organism, name) == extension
+
+    def test_input_is_case_and_whitespace_insensitive(self) -> None:
+        assert annotation_label("  HUMAN ", "  g026 ") == "gencode_v26"
+
+    def test_an_unknown_build_is_reported_rather_than_refused(self) -> None:
+        """A custom mirror may publish a build this release never saw."""
+        assert annotation_label("human", "Z999") == "Z999"
+        assert annotation_label("mouse", "G026") == "G026"
+
+    @pytest.mark.parametrize("organism", [None, "", "hamster"])
+    def test_an_unknown_organism_returns_the_extension(
+        self, organism: str | None
+    ) -> None:
+        assert annotation_label(organism, "G026") == "G026"
+
+    @pytest.mark.parametrize("extension", ["", "   "])
+    def test_a_blank_extension_is_a_caller_mistake(
+        self, extension: str
+    ) -> None:
+        with pytest.raises(ValueError, match="non-empty"):
+            annotation_label("human", extension)
 
 
 class TestAnnotationConstants:

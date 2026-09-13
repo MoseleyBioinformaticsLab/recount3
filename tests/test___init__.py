@@ -94,6 +94,7 @@ def test_search_functions_are_callable() -> None:
         "project_homes",
         "create_sample_project_lists",
         "annotation_ext",
+        "annotation_label",
         "annotation_options",
     ):
         assert callable(getattr(recount3, name)), f"{name} should be callable"

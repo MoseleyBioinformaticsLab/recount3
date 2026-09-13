@@ -385,6 +385,16 @@ class R3Resource:
         config: An optional `Config` instance dictating strict network and cache
             behaviors. If omitted, the global default configuration is
             dynamically applied.
+
+    Note:
+        Two resources are equal when they identify the same file: equality
+        covers ``description``, ``url``, ``filepath`` and ``config``, and
+        deliberately excludes the parsed object held in ``_cached_data``.
+        Comparing that object would compare whatever it happens to be, and
+        for the ``pandas.DataFrame`` that counts and metadata parse into,
+        ``==`` is element-wise, so the truth value the comparison needs is
+        ambiguous and raises. Whether a resource has been loaded is not part
+        of which file it is, so leaving it out is also the right meaning.
     """
 
     description: R3ResourceDescription
@@ -393,7 +403,7 @@ class R3Resource:
     config: Config | None = None
 
     _cached_data: object | None = dataclasses.field(
-        default=None, init=False, repr=False
+        default=None, init=False, repr=False, compare=False
     )
 
     def __post_init__(self) -> None:
