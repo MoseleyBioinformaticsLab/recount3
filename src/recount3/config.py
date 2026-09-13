@@ -45,7 +45,10 @@ Environment variables (all optional):
   * ``RECOUNT3_URL``: base URL of the recount3 mirror
     (default: ``http://duffel.rail.bio/recount3/``).
   * ``RECOUNT3_CACHE_DIR``: directory for the on-disk file cache
-    (default: ``~/.cache/recount3/files``).
+    (default: ``~/.cache/recount3/files`` for ``filesystem``; R's
+    ``tools::R_user_dir("recount3", "cache")`` for ``pybiocfilecache``).
+  * ``RECOUNT3_CACHE_BACKEND``: ``filesystem`` (default) or optional
+    ``pybiocfilecache`` registry.
   * ``RECOUNT3_CACHE_DISABLE``: set to ``"1"`` to disable caching entirely.
   * ``RECOUNT3_HTTP_TIMEOUT``: HTTP request timeout in seconds (default: 60).
   * ``RECOUNT3_MAX_RETRIES``: maximum retry attempts for transient errors
@@ -79,7 +82,9 @@ Typical usage example::
 
     import dataclasses
     from pathlib import Path
-    from recount3.config import default_config, recount3_cache, recount3_cache_rm
+    from recount3.config import (
+        default_config, recount3_cache, recount3_cache_rm,
+    )
 
     # Read the current cache directory (creates it if absent):
     cache_dir = recount3_cache()
@@ -99,13 +104,19 @@ Typical usage example::
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from recount3.version import __version__
 
-from recount3._utils import _ensure_dir
+from recount3._utils import (
+    _ensure_dir,
+    _cache_internal,
+    _biocfilecache_paths,
+    _remove_biocfilecache_files,
+)
 
 _DEFAULT_CHUNK_SIZE: int = 1024 * 1024  # 1 MiB
 
@@ -126,6 +137,7 @@ class Config:
       user_agent: Custom HTTP User-Agent.
       cache_dir: Cache directory for downloaded files.
       cache_disabled: If True, disable cache behavior globally.
+      cache_backend: "filesystem" or opt-in "pybiocfilecache" registry.
       chunk_size: Default chunk size in bytes for streaming copies.
     """
 
@@ -137,10 +149,38 @@ class Config:
     cache_dir: Path
     cache_disabled: bool
     chunk_size: int = _DEFAULT_CHUNK_SIZE
+    cache_backend: str = "filesystem"
+
+    def __post_init__(self) -> None:
+        """Reject unsupported cache backends before performing any I/O."""
+        if self.cache_backend not in ("filesystem", "pybiocfilecache"):
+            raise ValueError(f"Unknown cache backend: {self.cache_backend!r}")
 
 
-def default_config() -> Config:
+def _default_cache_dir(backend: str) -> Path:
+    """Choose the native directory or mirror R's R_user_dir cache rules."""
+    if backend != "pybiocfilecache":
+        return Path.home() / ".cache" / "recount3" / "files"
+    root = os.environ.get("R_USER_CACHE_DIR") or os.environ.get(
+        "XDG_CACHE_HOME"
+    )
+    if root:
+        base = Path(root)
+    elif sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", "")) / "R" / "cache"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches" / "org.R-project.R"
+    else:
+        base = Path.home() / ".cache"
+    return base / "R" / "recount3"
+
+
+def default_config(*, cache_backend: str | None = None) -> Config:
     """Return configuration constructed from environment variables.
+
+    Args:
+      cache_backend: Override the environment's backend before selecting its
+        default directory. An explicit ``RECOUNT3_CACHE_DIR`` still wins.
 
     Returns:
       A :class:`Config` populated from the environment.
@@ -155,13 +195,10 @@ def default_config() -> Config:
         ).rstrip("/")
         + "/"
     )
+    if cache_backend is None:
+        cache_backend = os.environ.get("RECOUNT3_CACHE_BACKEND", "filesystem")
     cache_dir = Path(
-        os.environ.get(
-            "RECOUNT3_CACHE_DIR",
-            os.path.join(
-                os.path.expanduser("~"), ".cache", "recount3", "files"
-            ),
-        )
+        os.environ.get("RECOUNT3_CACHE_DIR", _default_cache_dir(cache_backend))
     )
     return Config(
         base_url=base,
@@ -176,6 +213,7 @@ def default_config() -> Config:
             )
         ),
         cache_dir=cache_dir,
+        cache_backend=cache_backend,
         cache_disabled=os.environ.get("RECOUNT3_CACHE_DISABLE", "0") == "1",
         chunk_size=int(
             os.environ.get("RECOUNT3_CHUNK_SIZE", str(_DEFAULT_CHUNK_SIZE))
@@ -217,9 +255,9 @@ def recount3_cache_files(
         all files are returned.
 
     Returns:
-      A sorted list of :class:`pathlib.Path` objects pointing to cached
-      files. If the cache directory does not exist yet, an empty list is
-      returned.
+      A sorted list of payload paths, excluding database internals. The
+      optional backend includes registered external or missing paths as well
+      as native files. An absent cache directory yields an empty list.
     """
     cfg = config or default_config()
     root = cfg.cache_dir
@@ -231,9 +269,13 @@ def recount3_cache_files(
     files: list[Path] = []
 
     for path in root.rglob(glob_pattern):
-        if path.is_file():
+        if path.is_file() and not _cache_internal(path, root):
             files.append(path)
-
+    if cfg.cache_backend == "pybiocfilecache":
+        for path in _biocfilecache_paths(root):
+            if not _cache_internal(path, root) and path.match(glob_pattern):
+                files.append(path)
+        files = list({path.resolve() for path in files})
     return sorted(files, key=str)
 
 
@@ -259,8 +301,11 @@ def recount3_cache_rm(
         paths would be removed.
 
     Returns:
-      A sorted list of :class:`pathlib.Path` objects that were removed (or
-      would be removed when ``dry_run`` is True).
+      A sorted list of :class:`pathlib.Path` objects that were removed from
+      the cache (or would be removed when ``dry_run`` is True). With the
+      optional backend, a registered payload outside the cache directory has
+      its registry row dropped while the external file is left in place,
+      matching R's ``action="asis"`` semantics.
 
     Raises:
       OSError: If filesystem operations fail during deletion.
@@ -289,17 +334,15 @@ def recount3_cache_rm(
             return True
         return predicate(path)
 
-    candidates: list[Path] = []
-    for path in root.rglob("*"):
-        if path.is_file() and _select(path):
-            candidates.append(path)
-
-    candidates = sorted(candidates, key=str)
+    candidates = [p for p in recount3_cache_files(cfg) if _select(p)]
 
     if dry_run:
         return candidates
 
-    for path in candidates:
-        path.unlink()
+    if cfg.cache_backend == "pybiocfilecache":
+        _remove_biocfilecache_files(root, candidates)
+    else:
+        for path in candidates:
+            path.unlink()
 
     return candidates

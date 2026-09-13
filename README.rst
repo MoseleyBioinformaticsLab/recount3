@@ -74,7 +74,7 @@ Installation
 ~~~~~~~~~~~~
 
 The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy. Four optional extras enable additional features:
+and SciPy. Five optional extras enable additional features:
 
 .. code:: bash
 
@@ -83,6 +83,7 @@ and SciPy. Four optional extras enable additional features:
    python3 -m pip install "recount3[bigwig]"      # + BigWig coverage access
    python3 -m pip install "recount3[parquet]"     # + .parquet output
    python3 -m pip install "recount3[anndata]"     # + .h5ad output
+   python3 -m pip install "recount3[pybiocfilecache]"  # shared R/Python cache
    python3 -m pip install "recount3[all]"         # every optional feature
 
 * ``biocpy`` (``biocframe``, ``genomicranges``, ``summarizedexperiment``) is
@@ -94,6 +95,13 @@ and SciPy. Four optional extras enable additional features:
   ``fastparquet`` installation is used as-is.
 * ``anndata`` (``anndata``, ``delayedarray``) is required only to write
   ``.h5ad`` output, and implies ``biocpy``.
+* ``pybiocfilecache`` enables opt-in R BiocFileCache interoperability.
+  The default URL-hash cache is ~3x faster and needs no extra. Select sharing
+  with ``RECOUNT3_CACHE_BACKEND=pybiocfilecache``; it defaults to R's recount3
+  cache directory (normally ``~/.cache/R/recount3`` on Linux/WSL).
+  Explicit cache directories still take precedence. See "Cache and
+  configuration" in the tutorial for concurrency, refresh semantics,
+  maintenance, and measured overhead.
 
 ``all`` installs every optional feature listed above. The ``dev`` and ``docs``
 extras hold the test and documentation toolchains and are installed separately.
@@ -104,10 +112,10 @@ installation with ``python3 -m pip install --upgrade recount3``.
 **Note:** The optional extras have platform constraints. The ``bigwig`` extra
 can be difficult or impossible to install on Windows and macOS. The ``biocpy``
 extra can be difficult or impossible to install on Windows, and ``anndata``
-inherits that constraint because it requires ``biocpy``. The ``parquet`` extra
-installs cleanly on every supported platform. The core package and the
-command-line workflow do not depend on any extra and work on all supported
-platforms.
+inherits that constraint because it requires ``biocpy``. The ``parquet`` and 
+``pybiocfilecache``` extra installs cleanly on every supported platform. The
+core package and the command-line workflow do not depend on any extra and work
+on all supported platforms.
 
 
 The three-layer API
@@ -264,6 +272,13 @@ Optional: AnnData output (``recount3[anndata]``, implies ``biocpy``):
 
    anndata>=0.11
    delayedarray>=0.5
+
+Optional: shared R/Python cache (``recount3[pybiocfilecache]``):
+
+.. code:: text
+
+   pybiocfilecache>=0.7.0,<0.8
+
 
 
 Questions, Feature Requests, and Bug Reports

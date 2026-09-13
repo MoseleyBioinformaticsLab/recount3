@@ -111,13 +111,20 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--cache-backend",
+        choices=("filesystem", "pybiocfilecache"),
+        default=None,
+        help="Cache registry. Env: RECOUNT3_CACHE_BACKEND.",
+    )
+    parser.add_argument(
         "--cache-dir",
         default=None,
         metavar="DIR",
         help=(
             "Local directory for caching downloaded files. "
             "Env: RECOUNT3_CACHE_DIR. "
-            "Default: ~/.cache/recount3/files."
+            "Default: ~/.cache/recount3/files for filesystem; "
+            "R's recount3 cache directory for pybiocfilecache."
         ),
     )
     parser.add_argument(
@@ -807,7 +814,7 @@ def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
     Raises:
       ConfigurationError: If a provided path is invalid or incompatible.
     """
-    base = default_config()
+    base = default_config(cache_backend=getattr(args, "cache_backend", None))
 
     base_url = args.base_url or base.base_url
     cache_dir = Path(args.cache_dir) if args.cache_dir else base.cache_dir
@@ -833,6 +840,7 @@ def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
         max_retries=int(retries),
         user_agent=str(user_agent),
         cache_dir=cache_dir,
+        cache_backend=base.cache_backend,
         cache_disabled=os.environ.get("RECOUNT3_CACHE_DISABLE", "0") == "1",
         chunk_size=int(chunk_size),
     )

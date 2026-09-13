@@ -33,10 +33,16 @@
 
 from __future__ import annotations
 
+import contextlib
+import dataclasses
 import gzip
+import hashlib
 import inspect
+import io
 import shutil
+import threading
 import warnings
+from concurrent import futures
 from pathlib import Path
 from unittest import mock
 
@@ -48,9 +54,14 @@ import scipy.sparse
 import recount3.resource as res_module
 from recount3._bigwig import BigWigFile
 from recount3._descriptions import R3ResourceDescription
-from recount3._utils import _cache_path, _derive_junction_sidecar_url
-from recount3.config import Config
-from recount3.errors import LoadError
+from recount3._utils import (
+    _cache_path,
+    _derive_junction_sidecar_url,
+    _path_lock_for_path,
+    import_optional_module,
+)
+from recount3.config import Config, recount3_cache_files, recount3_cache_rm
+from recount3.errors import DownloadError, LoadError
 from recount3.resource import (
     R3Resource,
     _detect_mmread_kwargs,
@@ -123,6 +134,9 @@ _BW_PATH = (
     / "77"
     / "sra.base_sums.SRP009615_SRR387777.ALL.bw"
 )
+
+# Stand-in remote payload for the cache tests, which never reach the network.
+_CACHE_URL = "https://example.org/a.gz"
 
 
 @pytest.fixture()
@@ -205,7 +219,9 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
         def __exit__(self, *args: object) -> bool:
             return False
 
-    with mock.patch.object(res_module, "_FILE_LOCK", _SeedOnEnter()):
+    with mock.patch.object(
+        res_module, "_path_lock_for_path", return_value=_SeedOnEnter()
+    ):
         with mock.patch("recount3.resource.download_to_file") as mock_dl:
             result = _ensure_cached_url(
                 url=url,
@@ -1731,3 +1747,344 @@ def test_read_metadata_table_maps_r_logicals_to_boolean(
     assert list(frame["flag"]) == [True, False, True]
     assert list(frame["note"]) == ["ok", "", "x"]
     assert list(frame["sample"]) == ["S1", "S2", "S3"]
+
+
+def _fetch(
+    cfg: Config, url: str = _CACHE_URL, *, refresh: bool = False
+) -> Path:
+    """Drive :func:`_ensure_cached_url` with a chunk size small enough to loop."""
+    return _ensure_cached_url(
+        url=url,
+        cache_root=cfg.cache_dir,
+        cfg=cfg,
+        chunk_size=32,
+        refresh=refresh,
+    )
+
+
+def _counts_resource(cfg: Config, project: str = "SRP001") -> R3Resource:
+    """Return a gene-counts resource wired to the temporary cache."""
+    return R3Resource(
+        R3ResourceDescription(
+            resource_type="count_files_gene_or_exon",
+            organism="human",
+            data_source="sra",
+            project=project,
+            genomic_unit="gene",
+            annotation_extension="G026",
+        ),
+        config=cfg,
+    )
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+@pytest.mark.parametrize("backend", ["filesystem", "pybiocfilecache"])
+def test_ensure_cached_url_lets_distinct_destinations_overlap(
+    cfg: Config, refresh: bool, backend: str
+) -> None:
+    """Every transfer enters before any can finish, with either backend.
+
+    The destination lock must not serialize unrelated URLs, so a barrier that
+    only trips once all four transfers are in flight has to be reachable.
+    """
+    if backend == "pybiocfilecache":
+        pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend=backend)
+    barrier = threading.Barrier(4, timeout=5)
+
+    def transfer(url: str, path: Path, **_: object) -> None:
+        barrier.wait()
+        path.write_bytes(url.encode())
+
+    with mock.patch.object(res_module, "download_to_file", transfer):
+        with futures.ThreadPoolExecutor(4) as pool:
+            pending = [
+                pool.submit(
+                    _fetch,
+                    cfg,
+                    f"https://example.org/{index}",
+                    refresh=refresh,
+                )
+                for index in range(4)
+            ]
+            paths = [future.result(timeout=10) for future in pending]
+
+    assert len(set(paths)) == 4
+    assert all(path.read_bytes() for path in paths)
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+def test_ensure_cached_url_same_destination_waits_and_recovers(
+    cfg: Config, refresh: bool, fail: bool
+) -> None:
+    """A confirmed waiter deduplicates misses or performs its own refresh.
+
+    The second caller is observed blocking on the destination lock while the
+    first transfer is still running. It then downloads only when it has to: a
+    forced refresh always transfers, and a failed first transfer leaves nothing
+    to reuse.
+    """
+    entered = threading.Event()
+    waiting = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+    real_lock = _path_lock_for_path
+
+    @contextlib.contextmanager
+    def observed_lock(path: Path):
+        if entered.is_set():
+            waiting.set()
+        with real_lock(path):
+            yield
+
+    def transfer(url: str, path: Path, **_: object) -> None:
+        calls.append(url)
+        if len(calls) == 1:
+            entered.set()
+            assert release.wait(5)
+            if fail:
+                raise DownloadError("controlled failure")
+        path.write_bytes(str(len(calls)).encode())
+
+    with mock.patch.object(res_module, "_path_lock_for_path", observed_lock):
+        with mock.patch.object(res_module, "download_to_file", transfer):
+            with futures.ThreadPoolExecutor(2) as pool:
+                first = pool.submit(_fetch, cfg, refresh=refresh)
+                try:
+                    assert entered.wait(5)
+                    second = pool.submit(_fetch, cfg, refresh=refresh)
+                    assert waiting.wait(5)
+                    assert len(calls) == 1
+                finally:
+                    release.set()
+                if fail:
+                    with pytest.raises(DownloadError):
+                        first.result(timeout=5)
+                else:
+                    first.result(timeout=5)
+                result = second.result(timeout=5)
+
+    assert len(calls) == (2 if refresh or fail else 1)
+    assert result.read_bytes() == str(len(calls)).encode()
+
+
+def test_ensure_cached_url_failed_refresh_keeps_the_old_payload(
+    cfg: Config,
+) -> None:
+    """A broken stream preserves the old file and cleans its temporary file."""
+    path = _cache_path(_CACHE_URL, cfg.cache_dir)
+    path.write_bytes(b"old")
+
+    class BrokenStream(io.BytesIO):
+        """Fails once the first chunk has been handed over."""
+
+        def read(self, *args: object) -> bytes:
+            if self.tell():
+                raise OSError("broken transfer")
+            return super().read(*args)
+
+    with mock.patch(
+        "recount3._utils.http_open", return_value=BrokenStream(b"new")
+    ):
+        with pytest.raises(DownloadError):
+            _fetch(cfg, refresh=True)
+
+    assert path.read_bytes() == b"old"
+    assert list(cfg.cache_dir.iterdir()) == [path]
+
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"new")
+    ):
+        _fetch(cfg, refresh=True)
+    assert path.read_bytes() == b"new"
+
+
+def test_ensure_cached_url_adopts_a_native_payload_into_the_registry(
+    cfg: Config,
+) -> None:
+    """An existing file is registered without a transfer and then re-used."""
+    module = pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    path = _cache_path(_CACHE_URL, cfg.cache_dir)
+    path.write_bytes(b"native")
+
+    with mock.patch.object(res_module, "download_to_file") as download:
+        assert _fetch(cfg) == path
+        assert _fetch(cfg) == path
+        download.assert_not_called()
+
+    with module.BiocFileCache(cfg.cache_dir) as registry:
+        record = registry.get(rname=_CACHE_URL)
+    assert Path(record["rpath"]) == path
+    assert record["etag"]
+
+
+def test_ensure_cached_url_refresh_rechecksums_the_registry_entry(
+    cfg: Config,
+) -> None:
+    """A refreshed payload replaces the recorded checksum, not the row."""
+    module = pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"old")
+    ):
+        path = _fetch(cfg)
+    with module.BiocFileCache(cfg.cache_dir) as registry:
+        checksum = registry.get(rname=_CACHE_URL)["etag"]
+
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"new")
+    ):
+        _fetch(cfg, refresh=True)
+
+    assert path.read_bytes() == b"new"
+    with module.BiocFileCache(cfg.cache_dir) as registry:
+        assert registry.get(rname=_CACHE_URL)["etag"] != checksum
+        assert len(registry) == 1
+
+
+def test_ensure_cached_url_recovers_after_the_cache_is_emptied(
+    cfg: Config,
+) -> None:
+    """Clearing the cache leaves the registry usable for the next transfer."""
+    pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"first")
+    ):
+        assert _fetch(cfg).read_bytes() == b"first"
+
+    assert recount3_cache_rm(config=cfg)
+    assert recount3_cache_rm(config=cfg) == []
+    assert (cfg.cache_dir / "BiocFileCache.sqlite").exists()
+
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"again")
+    ):
+        assert _fetch(cfg).read_bytes() == b"again"
+
+
+def test_ensure_cached_url_registry_failure_keeps_the_payload(
+    cfg: Config,
+) -> None:
+    """A registry error never destroys a completed download."""
+    pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"good")
+    ):
+        with mock.patch.object(
+            res_module, "_register_biocfilecache", side_effect=OSError
+        ):
+            with pytest.raises(OSError):
+                _fetch(cfg)
+
+    with mock.patch.object(res_module, "download_to_file") as download:
+        assert _fetch(cfg).read_bytes() == b"good"
+        download.assert_not_called()
+
+
+def test_ensure_cached_url_repairs_a_failed_refresh_on_the_next_hit(
+    cfg: Config,
+) -> None:
+    """A completed refresh with a failed DB update recovers without network."""
+    module = pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"old")
+    ):
+        _fetch(cfg)
+    with mock.patch.object(
+        res_module, "_register_biocfilecache", side_effect=OSError
+    ):
+        with mock.patch(
+            "recount3._utils.http_open", return_value=io.BytesIO(b"new")
+        ):
+            with pytest.raises(OSError):
+                _fetch(cfg, refresh=True)
+
+    with mock.patch.object(res_module, "download_to_file") as download:
+        assert _fetch(cfg).read_bytes() == b"new"
+        download.assert_not_called()
+
+    with module.BiocFileCache(cfg.cache_dir) as registry:
+        assert registry.get(rname=_CACHE_URL)["etag"] == (
+            hashlib.md5(b"new").hexdigest()
+        )
+
+
+def test_resource_reuses_and_repairs_an_r_created_relative_entry(
+    cfg: Config, tmp_path: Path
+) -> None:
+    """R-style relative entries are reused and atomically repaired in place."""
+    module = pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    res = _counts_resource(cfg)
+    source = tmp_path / "from-r.tsv.gz"
+    source.write_bytes(b"R bytes")
+    with module.BiocFileCache(cfg.cache_dir) as cache:
+        row = cache.add(rname=res.url, fpath=source, rtype="relative")
+        registered = Path(row["rpath"])
+
+    assert res._cached_path() == registered
+    with mock.patch.object(res_module, "download_to_file") as download:
+        assert res.ensure_cached(download=False) == registered
+        res.download()
+        download.assert_not_called()
+
+    registered.unlink()
+    assert registered in recount3_cache_files(cfg)
+    with mock.patch(
+        "recount3._utils.http_open", return_value=io.BytesIO(b"fixed")
+    ):
+        assert res.ensure_cached().read_bytes() == b"fixed"
+
+    with module.BiocFileCache(cfg.cache_dir) as cache:
+        assert cache.get(rname=res.url)["rtype"] == "relative"
+
+
+def test_download_to_a_new_directory_creates_the_parent(
+    cfg: Config, tmp_path: Path
+) -> None:
+    """Cached directory downloads work with a new destination hierarchy."""
+    res = _counts_resource(cfg)
+    res._cached_path().write_bytes(b"cached")
+
+    result = res.download(str(tmp_path / "new" / "nested"))
+
+    assert Path(result).read_bytes() == b"cached"
+
+
+def test_optional_backend_reports_the_extra_and_disable_bypasses_it(
+    cfg: Config, tmp_path: Path
+) -> None:
+    """The extra is requested lazily and is unnecessary for direct downloads."""
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    path = _cache_path(_CACHE_URL, cfg.cache_dir)
+    path.write_bytes(b"cached")
+    import_optional_module.cache_clear()
+    try:
+        with mock.patch(
+            "recount3._utils.importlib.import_module",
+            side_effect=ModuleNotFoundError("pybiocfilecache"),
+        ):
+            # Even a warm cache needs the registry to resolve the destination.
+            with pytest.raises(
+                ImportError, match=r"recount3\[pybiocfilecache\]"
+            ):
+                _fetch(cfg)
+            path.unlink()
+            with mock.patch.object(res_module, "download_to_file") as download:
+                with pytest.raises(
+                    ImportError, match=r"recount3\[pybiocfilecache\]"
+                ):
+                    _fetch(cfg)
+                download.assert_not_called()
+
+            res = _counts_resource(cfg)
+            with mock.patch.object(res_module, "download_to_file") as download:
+                res.download(str(tmp_path / "direct"), cache_mode="disable")
+                download.assert_called_once()
+    finally:
+        import_optional_module.cache_clear()

@@ -37,8 +37,10 @@ import dataclasses
 import gzip
 import io
 import logging
+import threading
 import urllib.error
 import urllib.parse
+import zipfile
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -50,6 +52,7 @@ import scipy.sparse
 
 import recount3._utils as _utils_module
 import recount3.bundle as bmod
+import recount3.resource as resource_module
 import recount3.search as search_module
 from recount3.bundle import (
     R3ResourceBundle,
@@ -2932,6 +2935,48 @@ class TestR3ResourceBundleDownload:
     def test_empty_bundle_parallel_noop(self) -> None:
         b = R3ResourceBundle()
         b.download(max_workers=4)
+
+    def test_parallel_cached_transfers_overlap_and_fill_one_zip(
+        self, local_config: Config, tmp_path: Path
+    ) -> None:
+        """Distinct cached transfers overlap and produce a complete ZIP.
+
+        The barrier only trips once every transfer is in flight, so a bundle
+        that serialized its downloads would hang instead of finishing. The
+        archive is then written under a single writer lock, which the ZIP's
+        own integrity check confirms.
+        """
+        barrier = threading.Barrier(4, timeout=5)
+        resources = [
+            R3Resource(
+                R3ResourceDescription(
+                    resource_type="count_files_gene_or_exon",
+                    organism="human",
+                    data_source="sra",
+                    project=f"SRP00{index}",
+                    genomic_unit="gene",
+                    annotation_extension="G026",
+                ),
+                config=local_config,
+            )
+            for index in range(4)
+        ]
+
+        def transfer(url: str, path: Path, **_: Any) -> None:
+            barrier.wait()
+            path.write_bytes(url.encode())
+
+        target = tmp_path / "bundle.zip"
+        with patch.object(resource_module, "download_to_file", transfer):
+            R3ResourceBundle(resources=resources).download(
+                dest=str(target), max_workers=4
+            )
+
+        with zipfile.ZipFile(target) as archive:
+            assert archive.testzip() is None
+            assert set(archive.namelist()) == {res.arcname for res in resources}
+            for res in resources:
+                assert archive.read(res.arcname) == res.url.encode()
 
 
 class TestModuleConstants:

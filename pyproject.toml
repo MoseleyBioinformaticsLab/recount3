@@ -73,6 +73,7 @@ recount3 = ["py.typed"]
 version = { attr = "recount3.version.__version__" }
 
 [project.optional-dependencies]
+pybiocfilecache = ["pybiocfilecache>=0.7.0,<0.8"]
 bigwig = [
   "pybigwig>=0.3.18",
 ]
@@ -104,7 +105,7 @@ dev = [
 ]
 
 all = [
-  "recount3[bigwig,biocpy,parquet,anndata]"
+  "recount3[bigwig,biocpy,parquet,anndata,pybiocfilecache]"
 ]
 
 [tool.black]

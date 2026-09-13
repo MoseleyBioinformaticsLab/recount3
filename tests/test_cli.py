@@ -276,6 +276,37 @@ class TestBuildParser:
 
 
 class TestBuildConfigFromEnvAndFlags:
+    @pytest.mark.parametrize("backend", ["filesystem", "pybiocfilecache"])
+    @pytest.mark.parametrize("directory_source", ["default", "env", "flag"])
+    def test_cache_directory_follows_selected_backend(
+        self, monkeypatch, tmp_path, backend, directory_source
+    ):
+        """CLI backend flags select defaults without losing path overrides."""
+        other = (
+            "filesystem" if backend == "pybiocfilecache" else "pybiocfilecache"
+        )
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", other)
+        monkeypatch.delenv("RECOUNT3_CACHE_DIR", raising=False)
+        monkeypatch.setenv("R_USER_CACHE_DIR", str(tmp_path / "shared"))
+        flags = ["--cache-backend", backend]
+        expected = (
+            tmp_path / "shared/R/recount3"
+            if backend == "pybiocfilecache"
+            else Path.home() / ".cache/recount3/files"
+        )
+        if directory_source != "default":
+            monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(tmp_path / "env"))
+            expected = tmp_path / "env"
+        if directory_source == "flag":
+            flags.extend(["--cache-dir", str(tmp_path / "flag")])
+            expected = tmp_path / "flag"
+        args = _build_parser().parse_args(
+            [*flags, "download", "--inline", "{}"]
+        )
+        cfg = _build_config_from_env_and_flags(args)
+        assert cfg.cache_backend == backend
+        assert cfg.cache_dir == expected.resolve()
+
     def test_all_none_uses_defaults(self) -> None:
         args = _make_namespace()
         cfg = _build_config_from_env_and_flags(args)
@@ -349,6 +380,24 @@ class TestBuildConfigFromEnvAndFlags:
         args = _make_namespace()
         cfg = _build_config_from_env_and_flags(args)
         assert cfg.cache_disabled is False
+
+    def test_cache_backend_env_var_used_when_flag_is_absent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "pybiocfilecache")
+        args = _build_parser().parse_args(["download", "--inline", "{}"])
+        cfg = _build_config_from_env_and_flags(args)
+        assert cfg.cache_backend == "pybiocfilecache"
+
+    def test_cache_backend_flag_overrides_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "pybiocfilecache")
+        args = _build_parser().parse_args(
+            ["--cache-backend", "filesystem", "download", "--inline", "{}"]
+        )
+        cfg = _build_config_from_env_and_flags(args)
+        assert cfg.cache_backend == "filesystem"
 
     def test_invalid_cache_dir_raises_configuration_error(self) -> None:
         args = _make_namespace(cache_dir="/some/path")

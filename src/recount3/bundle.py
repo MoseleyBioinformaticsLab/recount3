@@ -578,7 +578,8 @@ def _coerce_gtf_bp_length(
 
     Returns:
         Numeric lengths with missing scores preserved. Covered gene lengths
-        can differ from genomic spans, so coordinates are not used as a fallback.
+        can differ from genomic spans, so coordinates are not used as a
+        fallback.
 
     Raises:
         ValueError: If a nonmissing score cannot be converted to a number.
@@ -807,7 +808,8 @@ def _ranges_from_gtf(
         A table with one-based inclusive coordinates, ``feature_id``, source,
         feature type, covered ``bp_length``, nullable phase, and parsed GTF
         attributes. Gene IDs come from ``gene_id``; exon IDs prefer
-        ``recount_exon_id`` over ``exon_id``. Missing IDs fall back to coordinate
+        ``recount_exon_id`` over ``exon_id``. Missing IDs fall back to
+        coordinate
         strings. Duplicate IDs with identical ranges retain separate annotation
         rows. No matching features produces an empty coordinate/ID table.
 
@@ -1321,7 +1323,8 @@ def _construct_ranged_summarized_experiment(
     required = {"seqnames", "starts", "ends", "strand"}
     if required - set(ranges_df):
         raise ValueError(
-            f"ranges_df is missing required columns: {sorted(required-set(ranges_df))}."
+            "ranges_df is missing required columns: "
+            f"{sorted(required-set(ranges_df))}."
         )
     if len(ranges_df) != len(rows):
         raise ValueError(
@@ -2344,7 +2347,8 @@ class R3ResourceBundle:
 
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-          join_policy: ``"inner"`` intersects feature rows; ``"outer"`` unions them
+          join_policy: ``"inner"`` intersects feature rows; ``"outer"`` unions
+          them
             and fills newly introduced rows with zero.
           autoload: If :data:`True`, load resources on demand.
 
@@ -2355,7 +2359,8 @@ class R3ResourceBundle:
         Raises:
           ValueError: If no compatible count resources exist or stacking
             fails, including a required count resource failing to load.
-          recount3.errors.CompatibilityError: If feature spaces are incompatible.
+          recount3.errors.CompatibilityError: If feature spaces are
+          incompatible.
           recount3.errors.RangesError: If multi-project junction coordinates are
             missing or ambiguous.
         """
@@ -2372,7 +2377,8 @@ class R3ResourceBundle:
             )
         if not selected.resources:
             raise ValueError(
-                "No count-file resources available for the requested genomic unit."
+                "No count-file resources available for the requested "
+                "genomic unit."
             )
         feature_key = (
             "junction_type" if unit == "junction" else "annotation_extension"
@@ -2386,7 +2392,8 @@ class R3ResourceBundle:
         }
         if len(compatibility) > 1:
             raise errors.CompatibilityError(
-                "Selected counts have incompatible organisms, annotations or junction formats."
+                "Selected counts have incompatible organisms, annotations "
+                "or junction formats."
             )
         frames = []
         for res in selected.resources:
@@ -2400,7 +2407,8 @@ class R3ResourceBundle:
                     res.load()
                 except Exception as exc:
                     raise ValueError(
-                        f"Failed to load requested count matrix {res.url}: {exc}"
+                        "Failed to load requested count matrix "
+                        f"{res.url}: {exc}"
                     ) from exc
             frame = res.get_loaded()
             if not isinstance(frame, pd.DataFrame):
@@ -2440,10 +2448,12 @@ class R3ResourceBundle:
         Args:
             counts: Count table whose row order and length match the matrix's
                 coordinate sidecar.
-            autoload: Whether to retrieve the sidecar if it is not cached locally.
+            autoload: Whether to retrieve the sidecar if it is not cached
+            locally.
 
         Returns:
-            Range metadata indexed by ``chromosome:start-end:strand`` identities,
+            Range metadata indexed by ``chromosome:start-end:strand``
+            identities,
             with one-based inclusive integer coordinates.
 
         Raises:
@@ -2451,7 +2461,8 @@ class R3ResourceBundle:
                 exactly one junction matrix.
             recount3.errors.MissingRangesError: If exactly one sidecar matching
                 the matrix's project and junction format cannot be identified.
-            recount3.errors.RangesCoverageError: If required columns are missing,
+            recount3.errors.RangesCoverageError: If required columns are
+            missing,
                 row counts differ, or junction coordinates are duplicated.
             ValueError: If coordinates are invalid.
             recount3.errors.DownloadError: If sidecar retrieval fails.
@@ -2613,7 +2624,8 @@ class R3ResourceBundle:
                 where no match exists.
 
         Returns:
-            Metadata indexed by selected count sample IDs, with namespaced columns
+            Metadata indexed by selected count sample IDs, with namespaced
+            columns
             and column provenance in ``attrs``. A metadata-free bundle returns
             only an ``external_id`` column for all requested samples.
 
@@ -2767,8 +2779,10 @@ class R3ResourceBundle:
         """Prepare aligned counts, metadata, and provenance for either builder.
 
         Resources are selected by genomic unit and annotation, then metadata is
-        merged within each project before combining count tables. Sample URLs use
-        each project's source. Duplicate feature occurrences retain their original
+        merged within each project before combining count tables. Sample URLs
+        use
+        each project's source. Duplicate feature occurrences retain their
+        original
         identifiers in row metadata while receiving unique output names.
 
         Args:
@@ -2776,13 +2790,16 @@ class R3ResourceBundle:
             annotation_extension: Optional gene/exon annotation code to select.
             join_policy: ``"inner"`` intersects features; ``"outer"`` unions
                 features and inserts zeros for structural absence.
-            metadata_join: ``"inner"`` intersects nonempty metadata tables within
+            metadata_join: ``"inner"`` intersects nonempty metadata tables
+            within
                 each project; ``"outer"`` retains all count samples.
-            autoload: Whether to load missing count/metadata resources and retrieve
+            autoload: Whether to load missing count/metadata resources and
+            retrieve
                 coordinate sidecars needed for multi-project junction alignment.
 
         Returns:
-            A tuple containing counts, feature metadata, sample metadata, optional
+            A tuple containing counts, feature metadata, sample metadata,
+            optional
             aligned multi-project junction ranges, and experiment provenance.
             Gene/exon ranges are resolved separately by the ranged builder.
 
@@ -2793,7 +2810,8 @@ class R3ResourceBundle:
                 annotations, junction formats, or feature identities conflict.
             recount3.errors.RangesError: If multi-project junctions cannot be
                 aligned with their coordinate sidecars.
-            recount3.errors.LoadError: If a required metadata resource cannot load.
+            recount3.errors.LoadError: If a required metadata resource cannot
+            load.
             recount3.errors.DownloadError: If required resource retrieval fails.
         """
         unit = _utils._normalize_genomic_unit(genomic_unit)
@@ -2813,7 +2831,8 @@ class R3ResourceBundle:
             )
         if not selected.resources:
             raise ValueError(
-                "No count-file resources available for requested annotation/unit."
+                "No count-file resources available for requested "
+                "annotation/unit."
             )
         feature_key = (
             "junction_type" if unit == "junction" else "annotation_extension"
@@ -2916,7 +2935,8 @@ class R3ResourceBundle:
         from recount3.version import __version__
 
         def collapse(values: Iterable[str | None]) -> str | list[str]:
-            """Deduplicate provenance values and simplify a singleton to a string.
+            """Deduplicate provenance values and simplify a singleton to a
+            string.
 
             Args:
                 values: Ordered provenance values; ``None`` entries are omitted.
@@ -2994,7 +3014,8 @@ class R3ResourceBundle:
           join_policy: ``"inner"`` intersects feature rows; ``"outer"``
             unions them and fills only newly introduced rows with zero.
           metadata_join: ``"inner"`` selects the intersection of nonempty
-            metadata tables within each project. ``"outer"`` retains all count samples.
+            metadata tables within each project. ``"outer"`` retains all count
+            samples.
           autoload: If :data:`True`, load resources when needed. If False,
             count and metadata resources must already be loaded.
 
@@ -3066,13 +3087,15 @@ class R3ResourceBundle:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
           annotation_extension: Annotation code for gene/exon
             assays, if desired.
-          prefer_rr_junction_coordinates: Whether to use RR sidecars for junction
+          prefer_rr_junction_coordinates: Whether to use RR sidecars for
+          junction
             ranges. Junction ranges require these sidecars; disabling this
             option raises a range error or uses an explicitly enabled SE
             fallback. Ignored for gene/exon experiments.
           assay_name: Count assay name. The default ``"raw_counts"`` becomes
             ``"counts"`` for junction experiments.
-          join_policy: ``"inner"`` intersects features across projects; ``"outer"``
+          join_policy: ``"inner"`` intersects features across projects;
+          ``"outer"``
             unions them and inserts zeros only for structurally absent features.
           metadata_join: ``"inner"`` intersects nonempty metadata tables
             within each project. ``"outer"`` retains all count
@@ -3168,7 +3191,8 @@ class R3ResourceBundle:
                     .any()
                 ):
                     raise errors.RangesCoverageError(
-                        "Annotation does not contain ranges for all count feature IDs."
+                        "Annotation does not contain ranges for all "
+                        "count feature IDs."
                     )
                 ranges = aligned
             elif prefer_rr_junction_coordinates:
@@ -3217,7 +3241,8 @@ class R3ResourceBundle:
                     "retries retrieval nor repairs a mismatched annotation."
                 ) from exc
             logging.warning(
-                "Falling back to a plain SummarizedExperiment with no genomic ranges: %s (%s)",
+                "Falling back to a plain SummarizedExperiment with no "
+                "genomic ranges: %s (%s)",
                 _classify_ranges_failure(
                     exc,
                     source=_RR_SOURCE if unit == "junction" else "annotation",
@@ -3252,9 +3277,12 @@ class R3ResourceBundle:
         the command-line interface, ``recount3 download``.
 
         Concurrency is safe because per-resource downloads are coordinated by
-        a shared :class:`threading.Lock` over the on-disk cache and by
-        per-path locks for ``.zip`` archives, and files are materialized
-        atomically. See :mod:`recount3.resource` for details.
+        locks keyed by canonical cache destination and per-path locks for
+        ``.zip`` archives within one process. Files are materialized
+        atomically. These locks do not coordinate processes.
+        ``create_rse()`` does not call this method automatically; prefetch
+        explicitly to use worker threads before construction.
+        See :mod:`recount3.resource` for refresh and failure semantics.
 
         Args:
           dest: Destination directory or ``.zip`` path. When a directory

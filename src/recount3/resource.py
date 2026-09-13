@@ -69,9 +69,11 @@ Typical usage example::
     df = res.load()
 
 Note:
-    Downloads are protected by a module-level :class:`threading.Lock`, so
-    multiple threads can safely call :meth:`~R3Resource.download` on
-    resources sharing a common cache path without corrupting the cache.
+    Cache transfers use locks keyed by canonical destination. Distinct files
+    can transfer concurrently; missing-file requests for the same destination
+    share one successful transfer. Every update request transfers once, in
+    sequence for that destination. Locks coordinate threads in one process
+    only. Archive writes retain separate per-destination protection.
 
 Note:
     :meth:`~R3Resource.load` returns different types depending on the
@@ -92,7 +94,6 @@ import csv
 import errno
 import gzip
 import inspect
-import threading
 import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -107,6 +108,9 @@ from recount3._bigwig import BigWigFile
 from recount3._descriptions import R3ResourceDescription
 from recount3._utils import (
     _cache_path,
+    _biocfilecache_path,
+    _register_biocfilecache,
+    _path_lock_for_path,
     _derive_junction_sidecar_url,
     _ensure_dir,
     _hardlink_or_copy,
@@ -118,8 +122,6 @@ from recount3._utils import (
 from recount3.config import Config, default_config
 from recount3.errors import LoadError
 from recount3.types import CacheMode
-
-_FILE_LOCK = threading.Lock()
 
 
 def _detect_mmread_kwargs() -> dict[str, Any]:
@@ -203,12 +205,13 @@ def _ensure_cached_url(
     cache_root: Path,
     cfg: Config,
     chunk_size: int,
+    refresh: bool = False,
 ) -> Path:
     """Ensure a given URL is downloaded and cached locally.
 
-    Checks the specified cache root directory for the presence of the file
-    corresponding to the provided URL. If the file is missing, it acquires a
-    thread lock and downloads the file in chunks.
+    The destination lock covers the existence check, atomic download, and
+    optional registry update. Failure releases the lock so a waiter can retry.
+    Each forced refresh transfers once; a failed transfer keeps the old file.
 
     Args:
         url: The full, absolute remote URL of the file to download.
@@ -219,27 +222,32 @@ def _ensure_cached_url(
             preferences, and the user agent string.
         chunk_size: The specific number of bytes to read and write per chunk
             during the download process.
+        refresh: Download even when the destination already exists.
 
     Returns:
         The absolute path pointing to the locally cached file.
     """
-    cache_path = _cache_path(url, cache_root)
-    _ensure_dir(cache_path.parent)
-    if cache_path.exists():
-        return cache_path
-
-    with _FILE_LOCK:
-        if cache_path.exists():
-            return cache_path
-        download_to_file(
-            url,
-            cache_path,
-            chunk_size=chunk_size,
-            timeout=cfg.timeout,
-            insecure_ssl=cfg.insecure_ssl,
-            user_agent=cfg.user_agent,
-            attempts=cfg.max_retries,
-        )
+    cache_path = (
+        _biocfilecache_path(url, cache_root)
+        if cfg.cache_backend == "pybiocfilecache"
+        else _cache_path(url, cache_root)
+    )
+    with _path_lock_for_path(cache_path):
+        transferred = refresh or not cache_path.exists()
+        if transferred:
+            download_to_file(
+                url,
+                cache_path,
+                chunk_size=chunk_size,
+                timeout=cfg.timeout,
+                insecure_ssl=cfg.insecure_ssl,
+                user_agent=cfg.user_agent,
+                attempts=cfg.max_retries,
+            )
+        if cfg.cache_backend == "pybiocfilecache":
+            _register_biocfilecache(
+                cache_root, url, cache_path, transferred=transferred
+            )
     return cache_path
 
 
@@ -472,6 +480,9 @@ class R3Resource:
             resource's data persistently resides within the local cache
             hierarchy.
         """
+        cfg = self.config or default_config()
+        if cfg.cache_backend == "pybiocfilecache":
+            return _biocfilecache_path(self.url or "", self._cache_root())
         return _cache_path(self.url or "", self._cache_root())
 
     def _ensure_cached(self, *, mode: CacheMode, chunk_size: int) -> Path:
@@ -496,39 +507,25 @@ class R3Resource:
                 unrecognized.
         """
         cfg = self.config or default_config()
-        cache_path = self._cached_path()
-        match mode:
-            case "disable":
-                raise ValueError("Cache is not used in 'disable' mode")
-            case "enable":
-                return _ensure_cached_url(
-                    url=self.url or "",
-                    cache_root=self._cache_root(),
-                    cfg=cfg,
-                    chunk_size=chunk_size,
-                )
-            case "update":
-                with _FILE_LOCK:
-                    download_to_file(
-                        self.url or "",
-                        cache_path,
-                        chunk_size=chunk_size,
-                        timeout=cfg.timeout,
-                        insecure_ssl=cfg.insecure_ssl,
-                        user_agent=cfg.user_agent,
-                        attempts=cfg.max_retries,
-                    )
-                return cache_path
-            case _:
-                raise ValueError(f"Unknown cache mode: {mode!r}")
+        if mode == "disable":
+            raise ValueError("Cache is not used in 'disable' mode")
+        if mode not in ("enable", "update"):
+            raise ValueError(f"Unknown cache mode: {mode!r}")
+        return _ensure_cached_url(
+            url=self.url or "",
+            cache_root=self._cache_root(),
+            cfg=cfg,
+            chunk_size=chunk_size,
+            refresh=mode == "update",
+        )
 
     def ensure_cached(self, *, download: bool = True) -> Path:
         """Return the local path of this resource, fetching it if absent.
 
-        :meth:`_cached_path` only computes where the file would live; it
-        neither consults the filesystem nor downloads anything, so opening
-        its result directly fails with :exc:`FileNotFoundError` the first
-        time a resource is used. This method closes that gap for callers
+        :meth:`_cached_path` resolves a registered BiocFileCache path or the
+        native URL-hash destination without downloading. Opening that path
+        directly can raise :exc:`FileNotFoundError` on first use. This method
+        closes that gap for callers
         that read the cached file themselves rather than going through
         :meth:`load`.
 

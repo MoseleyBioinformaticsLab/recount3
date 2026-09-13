@@ -33,11 +33,13 @@ from __future__ import annotations
 
 import builtins
 import errno
+import gc
 import io
 import os
 import ssl
 import types
 import urllib.error
+import weakref
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -138,6 +140,39 @@ def test_zip_lock_for_path_different_paths(tmp_path: Path) -> None:
     lock_a = _utils._zip_lock_for_path(tmp_path / "a.zip")
     lock_b = _utils._zip_lock_for_path(tmp_path / "b.zip")
     assert lock_a is not lock_b
+
+
+def test_path_lock_for_path_shares_one_lock_per_canonical_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Aliases of one destination must resolve to the very same lock.
+
+    Relative paths and symlinked parents name the same payload, so writers
+    reaching it by different spellings have to serialize against each other.
+    """
+    target = tmp_path / "target"
+    target.mkdir()
+    alias = tmp_path / "alias"
+    alias.symlink_to(target, target_is_directory=True)
+    monkeypatch.chdir(tmp_path)
+
+    lock = _utils._path_lock_for_path(target / "file")
+
+    assert _utils._path_lock_for_path(Path("target/file")) is lock
+    assert _utils._path_lock_for_path(alias / "file") is lock
+
+
+def test_path_lock_for_path_does_not_accumulate_unused_locks(
+    tmp_path: Path,
+) -> None:
+    """The registry holds locks weakly, so idle destinations are collected."""
+    lock = _utils._path_lock_for_path(tmp_path / "file")
+    ref = weakref.ref(lock)
+
+    del lock
+    gc.collect()
+
+    assert ref() is None
 
 
 def test_sha256_returns_64_char_hex_digest() -> None:
@@ -1984,3 +2019,190 @@ def test_ensure_parquet_engine_tolerates_missing_pandas_internals() -> None:
 
     with mock.patch("builtins.__import__", _fake_import):
         assert _utils.ensure_parquet_engine() == "auto"
+
+
+_REGISTRY_URL = "https://example.org/a.gz"
+
+
+def _add_relative_record(root: Path, url: str, source: Path) -> Path:
+    """Register ``source`` the way an R session would and return its payload."""
+    module = pytest.importorskip("pybiocfilecache")
+    with module.BiocFileCache(root) as cache:
+        record = cache.add(rname=url, fpath=source, rtype="relative")
+        return (Path(cache.config.cache_dir) / record["rpath"]).resolve()
+
+
+def test_biocfilecache_path_reuses_a_registered_relative_entry(
+    tmp_path: Path,
+) -> None:
+    """An R-created record keeps its own destination instead of a hashed one."""
+    root = tmp_path / "cache"
+    source = tmp_path / "from-r.tsv.gz"
+    source.write_bytes(b"R bytes")
+    registered = _add_relative_record(root, _REGISTRY_URL, source)
+
+    assert _utils._biocfilecache_path(_REGISTRY_URL, root) == registered
+
+
+def test_biocfilecache_path_falls_back_to_the_native_destination(
+    tmp_path: Path,
+) -> None:
+    """An unregistered URL resolves to the hashed name inside the cache root."""
+    pytest.importorskip("pybiocfilecache")
+    root = tmp_path / "cache"
+
+    path = _utils._biocfilecache_path(_REGISTRY_URL, root)
+
+    assert path.name == _utils._cache_key_for_url(_REGISTRY_URL)
+    assert path.parent == root.resolve()
+
+
+def test_biocfilecache_path_rejects_duplicate_entries_for_one_url(
+    tmp_path: Path,
+) -> None:
+    """Ambiguous R-created duplicate names cannot silently return wrong data."""
+    module = pytest.importorskip("pybiocfilecache")
+    resource_model = pytest.importorskip("pybiocfilecache.models").Resource
+    root = tmp_path / "cache"
+    source = tmp_path / "source"
+    source.write_bytes(b"data")
+    with module.BiocFileCache(root) as cache:
+        for name in ("one", "two"):
+            cache.add(rname=name, fpath=source, rtype="relative")
+        with cache.get_session() as session:
+            session.query(resource_model).update({"rname": _REGISTRY_URL})
+
+    with pytest.raises(ValueError, match="Multiple BiocFileCache"):
+        _utils._biocfilecache_path(_REGISTRY_URL, root)
+
+
+def test_register_biocfilecache_keeps_web_validators_on_a_cache_hit(
+    tmp_path: Path,
+) -> None:
+    """A hit transfers nothing, so R's HTTP validators stay valid."""
+    module = pytest.importorskip("pybiocfilecache")
+    resource_model = pytest.importorskip("pybiocfilecache.models").Resource
+    root = tmp_path / "cache"
+    source = tmp_path / "source"
+    source.write_bytes(b"web")
+    registered = _add_relative_record(root, _REGISTRY_URL, source)
+    with module.BiocFileCache(root) as cache:
+        with cache.get_session() as session:
+            row = session.query(resource_model).first()
+            row.rtype = "web"
+            row.fpath = _REGISTRY_URL
+            row.etag = "remote-etag"
+
+    _utils._register_biocfilecache(
+        root, _REGISTRY_URL, registered, transferred=False
+    )
+
+    with _utils._biocfilecache(root) as cache:
+        assert (
+            _utils._biocfilecache_rows(cache, _REGISTRY_URL)[0]["etag"]
+            == "remote-etag"
+        )
+
+
+def test_register_biocfilecache_clears_web_validators_after_a_transfer(
+    tmp_path: Path,
+) -> None:
+    """An unconditional transfer collects no validators, so stale ones go.
+
+    The record itself stays a web record pointing at the remote URL, which is
+    what an R session reads back.
+    """
+    module = pytest.importorskip("pybiocfilecache")
+    resource_model = pytest.importorskip("pybiocfilecache.models").Resource
+    root = tmp_path / "cache"
+    source = tmp_path / "source"
+    source.write_bytes(b"web")
+    registered = _add_relative_record(root, _REGISTRY_URL, source)
+    with module.BiocFileCache(root) as cache:
+        with cache.get_session() as session:
+            row = session.query(resource_model).first()
+            row.rtype = "web"
+            row.fpath = _REGISTRY_URL
+            row.etag = "remote-etag"
+
+    _utils._register_biocfilecache(
+        root, _REGISTRY_URL, registered, transferred=True
+    )
+
+    with _utils._biocfilecache(root) as cache:
+        row = _utils._biocfilecache_rows(cache, _REGISTRY_URL)[0]
+    assert row["rtype"] == "web"
+    assert row["fpath"] == _REGISTRY_URL
+    assert row["etag"] is None
+    assert row["last_modified_time"] is None
+
+
+def test_register_biocfilecache_never_reuses_a_rid_after_removal(
+    tmp_path: Path,
+) -> None:
+    """Row ids follow the primary key, so a deletion cannot alias an old one."""
+    pytest.importorskip("pybiocfilecache")
+    root = tmp_path / "cache"
+    urls = [f"https://example.org/{index}.gz" for index in range(1, 5)]
+    paths = []
+    for url in urls[:3]:
+        path = _utils._biocfilecache_path(url, root)
+        path.write_bytes(url.encode())
+        _utils._register_biocfilecache(root, url, path, transferred=True)
+        paths.append(path)
+
+    _utils._remove_biocfilecache_files(root, [paths[0]])
+    last = _utils._biocfilecache_path(urls[3], root)
+    last.write_bytes(urls[3].encode())
+    _utils._register_biocfilecache(root, urls[3], last, transferred=True)
+
+    with _utils._biocfilecache(root) as cache:
+        rows = _utils._biocfilecache_rows(cache)
+    assert [row["rid"] for row in rows] == ["BFC2", "BFC3", "BFC4"]
+
+
+def test_biocfilecache_paths_reports_payloads_deleted_outside_the_cache(
+    tmp_path: Path,
+) -> None:
+    """A registered row survives its payload so the file can be repaired."""
+    pytest.importorskip("pybiocfilecache")
+    root = tmp_path / "cache"
+    source = tmp_path / "source"
+    source.write_bytes(b"data")
+    registered = _add_relative_record(root, _REGISTRY_URL, source)
+    registered.unlink()
+
+    assert _utils._biocfilecache_paths(root) == [registered]
+
+
+def test_biocfilecache_paths_without_a_database_is_empty(
+    tmp_path: Path,
+) -> None:
+    """Listing an untouched cache must not create a database to answer."""
+    pytest.importorskip("pybiocfilecache")
+    root = tmp_path / "cache"
+    root.mkdir()
+
+    assert _utils._biocfilecache_paths(root) == []
+    assert list(root.iterdir()) == []
+
+
+def test_remove_biocfilecache_files_drops_rows_and_native_payloads(
+    tmp_path: Path,
+) -> None:
+    """Selected rows and unregistered files go; unselected rows stay."""
+    pytest.importorskip("pybiocfilecache")
+    root = tmp_path / "cache"
+    source = tmp_path / "source"
+    source.write_bytes(b"data")
+    registered = _add_relative_record(root, _REGISTRY_URL, source)
+    kept = _add_relative_record(root, "https://example.org/b.gz", source)
+    native = root / "unregistered"
+    native.write_bytes(b"native")
+
+    _utils._remove_biocfilecache_files(root, [registered, native])
+
+    assert not registered.exists()
+    assert not native.exists()
+    assert kept.exists()
+    assert _utils._biocfilecache_paths(root) == [kept]

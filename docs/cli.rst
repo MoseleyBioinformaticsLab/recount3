@@ -241,6 +241,7 @@ and library defaults. The relevant environment variables are:
 
    RECOUNT3_URL               Base URL (trailing slash added automatically)
    RECOUNT3_CACHE_DIR         Directory for the on-disk cache
+   RECOUNT3_CACHE_BACKEND     filesystem (default) or pybiocfilecache
    RECOUNT3_CACHE_DISABLE     "1" disables cache, anything else enables
    RECOUNT3_HTTP_TIMEOUT      HTTP timeout in seconds (int)
    RECOUNT3_MAX_RETRIES       Max retry attempts for transient errors (int)
@@ -250,8 +251,17 @@ and library defaults. The relevant environment variables are:
    RECOUNT3_CHUNK_SIZE        Streaming chunk size in bytes
 
 Global flags mirror these settings: ``--base-url``, ``--cache-dir``,
+``--cache-backend``,
 ``--timeout``, ``--retries``, ``--insecure-ssl``, ``--user-agent``, and
 ``--chunk-size``.
+
+With ``--cache-backend pybiocfilecache`` (or the equivalent environment
+setting), the default directory matches R's recount3 cache: normally
+``~/.cache/R/recount3`` on Linux/WSL. R's ``R_USER_CACHE_DIR`` and
+``XDG_CACHE_HOME`` overrides and platform-specific defaults are respected.
+An explicit ``--cache-dir`` or ``RECOUNT3_CACHE_DIR`` still takes precedence.
+The ``filesystem`` default remains ``~/.cache/recount3/files``. See
+:ref:`cache-and-configuration` for platform paths and shared-cache examples.
 
 Logging
 -------

@@ -36,6 +36,7 @@ from pathlib import Path
 
 import pytest
 
+from recount3._utils import _remove_biocfilecache_files
 from recount3.config import (
     Config,
     _DEFAULT_CHUNK_SIZE,
@@ -46,6 +47,7 @@ from recount3.config import (
 )
 
 _BASE_URL = "https://example.org/recount3/"
+_REGISTRY_URL = "https://example.org/a.gz"
 
 
 def _minimal_cfg(tmp_path: Path) -> Config:
@@ -59,6 +61,39 @@ def _minimal_cfg(tmp_path: Path) -> Config:
         cache_dir=tmp_path / "cache",
         cache_disabled=False,
     )
+
+
+def _registry_cfg(tmp_path: Path) -> Config:
+    """Return a minimal :class:`Config` using the optional registry backend."""
+    return Config(
+        base_url=_BASE_URL,
+        timeout=30,
+        insecure_ssl=False,
+        max_retries=3,
+        user_agent="test-agent/1.0",
+        cache_dir=tmp_path / "cache",
+        cache_disabled=False,
+        cache_backend="pybiocfilecache",
+    )
+
+
+def _register_payload(cfg: Config, url: str, name: str) -> Path:
+    """Write a payload into the cache and register it the way recount3 does."""
+    module = pytest.importorskip("pybiocfilecache")
+    cfg.cache_dir.mkdir(parents=True, exist_ok=True)
+    payload = cfg.cache_dir / name
+    payload.write_bytes(b"payload")
+    with module.BiocFileCache(cfg.cache_dir) as cache:
+        cache.add(rname=url, fpath=payload, rtype="local", action="asis")
+    return payload.resolve()
+
+
+_DATABASE_NAMES = (
+    "BiocFileCache.sqlite",
+    "BiocFileCache.sqlite-wal",
+    "BiocFileCache.sqlite-shm",
+    "BiocFileCache.sqlite.LOCK",
+)
 
 
 class TestConfig:
@@ -137,6 +172,26 @@ class TestConfig:
         assert "Config" in r
         assert str(cfg.timeout) in r
 
+    def test_cache_backend_defaults_to_filesystem(self, tmp_path: Path) -> None:
+        """Omitting the backend keeps the dependency-free filesystem cache."""
+        assert _minimal_cfg(tmp_path).cache_backend == "filesystem"
+
+    def test_unknown_cache_backend_raises_value_error(
+        self, tmp_path: Path
+    ) -> None:
+        """An unsupported backend is rejected before any I/O happens."""
+        with pytest.raises(ValueError, match="Unknown cache backend"):
+            Config(
+                base_url=_BASE_URL,
+                timeout=30,
+                insecure_ssl=False,
+                max_retries=3,
+                user_agent="ua",
+                cache_dir=tmp_path / "cache",
+                cache_disabled=False,
+                cache_backend="invalid",
+            )
+
     def test_slots_no_dict(self, tmp_path: Path) -> None:
         """A slotted dataclass must not have __dict__."""
         cfg = _minimal_cfg(tmp_path)
@@ -144,6 +199,57 @@ class TestConfig:
 
 
 class TestDefaultConfig:
+    @pytest.mark.parametrize(
+        "platform, r_root, xdg_root, suffix",
+        [
+            ("linux", "", "", ".cache/R/recount3"),
+            ("darwin", "", "", "Library/Caches/org.R-project.R/R/recount3"),
+            ("win32", "", "", "local/R/cache/R/recount3"),
+            ("linux", "r-cache", "xdg-cache", "r-cache/R/recount3"),
+            ("darwin", "", "xdg-cache", "xdg-cache/R/recount3"),
+            ("win32", "r-cache", "", "r-cache/R/recount3"),
+        ],
+    )
+    def test_shared_cache_matches_r_directory_rules(
+        self, monkeypatch, tmp_path, platform, r_root, xdg_root, suffix
+    ):
+        """Select R's platform default, honoring its environment precedence."""
+        monkeypatch.delenv("RECOUNT3_CACHE_DIR", raising=False)
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "pybiocfilecache")
+        monkeypatch.setenv(
+            "R_USER_CACHE_DIR", str(tmp_path / r_root) if r_root else ""
+        )
+        monkeypatch.setenv(
+            "XDG_CACHE_HOME", str(tmp_path / xdg_root) if xdg_root else ""
+        )
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+        monkeypatch.setattr("recount3.config.sys.platform", platform)
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        cfg = default_config()
+        assert cfg.cache_dir == tmp_path / suffix
+        assert not cfg.cache_dir.exists()
+
+    @pytest.mark.parametrize("backend", ["filesystem", "pybiocfilecache"])
+    def test_explicit_directory_wins_for_either_backend(
+        self, monkeypatch, tmp_path, backend
+    ):
+        """Backend selection never replaces an explicit cache directory."""
+        monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(tmp_path / "explicit"))
+        monkeypatch.setenv("R_USER_CACHE_DIR", str(tmp_path / "r-cache"))
+        cfg = default_config(cache_backend=backend)
+        assert cfg.cache_dir == tmp_path / "explicit"
+        assert cfg.cache_backend == backend
+
+    def test_backend_argument_overrides_environment(self, monkeypatch):
+        """Select the backend before resolving its default directory."""
+        monkeypatch.delenv("RECOUNT3_CACHE_DIR", raising=False)
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "invalid")
+        monkeypatch.setenv("R_USER_CACHE_DIR", "/shared")
+        cfg = default_config(cache_backend="pybiocfilecache")
+        assert cfg.cache_dir == Path("/shared/R/recount3")
+        native = default_config(cache_backend="filesystem")
+        assert native.cache_dir == Path.home() / ".cache/recount3/files"
+
     def test_url_absent_uses_builtin_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -332,6 +438,7 @@ class TestDefaultConfig:
         monkeypatch.setenv("RECOUNT3_USER_AGENT", "CustomBot/9")
         monkeypatch.setenv("RECOUNT3_CACHE_DISABLE", "1")
         monkeypatch.setenv("RECOUNT3_CHUNK_SIZE", "8192")
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "pybiocfilecache")
 
         cfg = default_config()
 
@@ -343,6 +450,26 @@ class TestDefaultConfig:
         assert cfg.user_agent == "CustomBot/9"
         assert cfg.cache_disabled is True
         assert cfg.chunk_size == 8192
+        assert cfg.cache_backend == "pybiocfilecache"
+
+    def test_cache_backend_absent_defaults_to_filesystem(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("RECOUNT3_CACHE_BACKEND", raising=False)
+        assert default_config().cache_backend == "filesystem"
+
+    def test_cache_backend_present(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "pybiocfilecache")
+        assert default_config().cache_backend == "pybiocfilecache"
+
+    def test_cache_backend_unknown_value_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "invalid")
+        with pytest.raises(ValueError, match="Unknown cache backend"):
+            default_config()
 
     def test_returns_config_instance(self) -> None:
         cfg = default_config()
@@ -582,6 +709,68 @@ class TestRecount3CacheFiles:
         )
         result = recount3_cache_files(config=cfg)
         assert all(isinstance(p, Path) for p in result)
+
+    def test_database_internals_are_not_listed(self, tmp_path: Path) -> None:
+        """SQLite databases, journals, and R's lock file are not payloads."""
+        cfg = _minimal_cfg(tmp_path)
+        cfg.cache_dir.mkdir(parents=True)
+        for name in _DATABASE_NAMES:
+            (cfg.cache_dir / name).touch()
+
+        assert recount3_cache_files(cfg) == []
+
+    def test_optional_backend_lists_registered_and_native_payloads(
+        self, tmp_path: Path
+    ) -> None:
+        """Registered rows and plain files in the cache are both reported."""
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+        native = cfg.cache_dir / "native.bin"
+        native.write_bytes(b"native")
+
+        assert recount3_cache_files(cfg) == sorted(
+            [native, registered], key=str
+        )
+
+    def test_optional_backend_deduplicates_registered_native_payloads(
+        self, tmp_path: Path
+    ) -> None:
+        """A payload that is both on disk and registered is listed once."""
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+
+        assert recount3_cache_files(cfg) == [registered]
+
+    def test_optional_backend_applies_the_pattern_to_registered_rows(
+        self, tmp_path: Path
+    ) -> None:
+        """The glob filters registered paths just as it filters native ones."""
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+
+        assert recount3_cache_files(cfg, pattern="*.gz") == [registered]
+        assert recount3_cache_files(cfg, pattern="*.absent") == []
+
+    def test_optional_backend_lists_payloads_deleted_outside_the_cache(
+        self, tmp_path: Path
+    ) -> None:
+        """A row outlives its payload so the file can be repaired in place."""
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+        registered.unlink()
+
+        assert recount3_cache_files(cfg) == [registered]
+
+    def test_optional_backend_empty_cache_creates_no_database(
+        self, tmp_path: Path
+    ) -> None:
+        """Inspecting an empty cache must not create a BiocFileCache database."""
+        pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        cfg.cache_dir.mkdir(parents=True)
+
+        assert recount3_cache_files(cfg) == []
+        assert list(cfg.cache_dir.iterdir()) == []
 
 
 class TestRecount3CacheRm:
@@ -839,3 +1028,137 @@ class TestRecount3CacheRm:
         )
         removed = recount3_cache_rm(config=cfg)
         assert all(isinstance(p, Path) for p in removed)
+
+    def test_database_internals_are_preserved(self, tmp_path: Path) -> None:
+        """Cache cleanup never treats SQLite databases or R lock files as data."""
+        cfg = _minimal_cfg(tmp_path)
+        cfg.cache_dir.mkdir(parents=True)
+        for name in _DATABASE_NAMES:
+            (cfg.cache_dir / name).touch()
+
+        assert recount3_cache_rm(config=cfg) == []
+        assert sorted(p.name for p in cfg.cache_dir.iterdir()) == sorted(
+            _DATABASE_NAMES
+        )
+
+    def test_optional_backend_dry_run_keeps_the_registry_intact(
+        self, tmp_path: Path
+    ) -> None:
+        """A dry run reports the registered payload without touching it."""
+        module = pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+
+        assert recount3_cache_rm(config=cfg, dry_run=True) == [registered]
+
+        assert registered.exists()
+        with module.BiocFileCache(cfg.cache_dir) as registry:
+            assert len(registry) == 1
+
+    def test_optional_backend_removes_payloads_and_registry_rows(
+        self, tmp_path: Path
+    ) -> None:
+        """Removal empties the registry but keeps the database itself."""
+        module = pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+
+        assert recount3_cache_rm(config=cfg) == [registered]
+
+        assert not registered.exists()
+        with module.BiocFileCache(cfg.cache_dir) as registry:
+            assert len(registry) == 0
+        assert recount3_cache_rm(config=cfg) == []
+        assert (cfg.cache_dir / "BiocFileCache.sqlite").exists()
+
+    def test_optional_backend_predicate_spares_unselected_rows(
+        self, tmp_path: Path
+    ) -> None:
+        """An unregistered file can be removed while registered rows remain."""
+        cfg = _registry_cfg(tmp_path)
+        registered = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+        native = cfg.cache_dir / "unregistered"
+        native.write_bytes(b"native")
+
+        assert recount3_cache_rm(
+            config=cfg, predicate=lambda path: path == native
+        ) == [native]
+
+        assert not native.exists()
+        assert registered.exists()
+        assert recount3_cache_files(cfg) == [registered]
+
+    def test_optional_backend_empty_cache_dry_run_creates_no_database(
+        self, tmp_path: Path
+    ) -> None:
+        """Inspecting an empty cache must not create a BiocFileCache database."""
+        pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        cfg.cache_dir.mkdir(parents=True)
+
+        assert recount3_cache_rm(config=cfg, dry_run=True) == []
+        assert list(cfg.cache_dir.iterdir()) == []
+
+    def test_optional_backend_keeps_external_asis_payloads_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        """R registers external files ``asis`` and never deletes them."""
+        module = pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        cfg.cache_dir.mkdir(parents=True, exist_ok=True)
+        external = tmp_path / "outside" / "lab_data.tsv"
+        external.parent.mkdir(parents=True)
+        external.write_bytes(b"irreplaceable")
+        with module.BiocFileCache(cfg.cache_dir) as cache:
+            cache.add(
+                rname=_REGISTRY_URL,
+                fpath=external,
+                rtype="local",
+                action="asis",
+            )
+
+        assert recount3_cache_rm(config=cfg) == [external.resolve()]
+
+        assert external.exists()
+        assert external.read_bytes() == b"irreplaceable"
+        with module.BiocFileCache(cfg.cache_dir) as registry:
+            assert len(registry) == 0
+
+    def test_optional_backend_removes_owned_payloads_beside_external_rows(
+        self, tmp_path: Path
+    ) -> None:
+        """An owned payload is deleted even when an external row is selected."""
+        module = pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        owned = _register_payload(cfg, _REGISTRY_URL, "a.gz")
+        external = tmp_path / "outside" / "lab_data.tsv"
+        external.parent.mkdir(parents=True)
+        external.write_bytes(b"irreplaceable")
+        with module.BiocFileCache(cfg.cache_dir) as cache:
+            cache.add(
+                rname="http://example.com/other.gz",
+                fpath=external,
+                rtype="local",
+                action="asis",
+            )
+
+        removed = recount3_cache_rm(config=cfg)
+
+        assert removed == sorted([owned, external.resolve()], key=str)
+        assert not owned.exists()
+        assert external.exists()
+
+    def test_optional_backend_keeps_external_native_candidates_on_disk(
+        self, tmp_path: Path
+    ) -> None:
+        """An unregistered path outside the cache is never unlinked."""
+        pytest.importorskip("pybiocfilecache")
+        cfg = _registry_cfg(tmp_path)
+        _register_payload(cfg, _REGISTRY_URL, "a.gz")
+        external = tmp_path / "outside" / "keep.tsv"
+        external.parent.mkdir(parents=True)
+        external.write_bytes(b"keep")
+
+        _remove_biocfilecache_files(cfg.cache_dir, [external])
+
+        assert external.exists()

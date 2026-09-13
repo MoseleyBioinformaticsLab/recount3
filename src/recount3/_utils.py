@@ -54,16 +54,17 @@ Examples:
         path = _cache_path("https://example.com/data.tsv", Path("/tmp/cache"))
 
 Attributes:
-    _ZIP_LOCKS_GUARD: Threading lock to safely interact with the weakref
+    _PATH_LOCKS_GUARD: Threading lock to safely interact with the weakref
         dictionary.
-    _ZIP_LOCKS: A weak reference dictionary mapping ZIP file paths to specific
-        threading locks. This synchronizes ZIP mutations per-file, preventing
+    _PATH_LOCKS: A weak reference dictionary mapping canonical paths to locks.
+        This synchronizes cache and archive writes per file, preventing
         race conditions without leaking memory for inactive cache paths.
 """
 
 from __future__ import annotations
 
 import contextlib
+import datetime
 import errno
 import hashlib
 import http.client
@@ -95,8 +96,8 @@ if TYPE_CHECKING:  # pragma: no cover
     import genomicranges  # type: ignore[import-not-found]
     import summarizedexperiment  # type: ignore[import-not-found]
 
-_ZIP_LOCKS_GUARD = threading.Lock()
-_ZIP_LOCKS: weakref.WeakValueDictionary[str, _WeakRefLock] = (
+_PATH_LOCKS_GUARD = threading.Lock()
+_PATH_LOCKS: weakref.WeakValueDictionary[str, _WeakRefLock] = (
     weakref.WeakValueDictionary()
 )
 
@@ -121,22 +122,165 @@ class _WeakRefLock:
         return self._lock.__exit__(*args)
 
 
-def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
-    """Return the shared lock for a specific ZIP path.
+def _path_lock_for_path(path: Path) -> _WeakRefLock:
+    """Return a weakly retained lock for a canonical filesystem destination.
 
     Args:
-        zip_path: Target ZIP file path.
+        path: Target cache payload, registry directory, or archive path.
 
     Returns:
-        A lock object shared by all operations writing to this ZIP path.
+        A lock shared by all writers to this canonical destination.
     """
-    key = str(zip_path.expanduser().resolve())
-    with _ZIP_LOCKS_GUARD:
-        lock = _ZIP_LOCKS.get(key)
+    key = str(path.expanduser().resolve())
+    with _PATH_LOCKS_GUARD:
+        lock = _PATH_LOCKS.get(key)
         if lock is None:
             lock = _WeakRefLock()
-            _ZIP_LOCKS[key] = lock
+            _PATH_LOCKS[key] = lock
         return lock
+
+
+def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
+    """Return the process-local lock protecting writes to this archive."""
+    return _path_lock_for_path(zip_path)
+
+
+@contextlib.contextmanager
+def _biocfilecache(root: Path):
+    """Open the optional shared R/Python registry under a process-local lock.
+
+    Network transfers must take place outside this context. Separate processes
+    and R sessions require external coordination when mutating the same cache.
+    """
+    module = import_optional_module("pybiocfilecache")
+    root = root.expanduser().resolve()
+    with _path_lock_for_path(root / "BiocFileCache.sqlite"):
+        with module.BiocFileCache(root) as cache:
+            yield cache
+
+
+def _biocfilecache_rows(cache, url: str | None = None) -> list[dict]:
+    """Read records without the upstream get() wait for missing payloads."""
+    model = import_optional_module("pybiocfilecache.models").Resource
+    with cache.get_session() as session:
+        query = session.query(model)
+        if url is not None:
+            query = query.filter(model.rname == url)
+        return [row.to_dict() for row in query.all()]
+
+
+def _biocfilecache_path(url: str, root: Path) -> Path:
+    """Resolve an R- or Python-registered URL, or its native cache destination.
+
+    Relative database paths are resolved against the cache root, including R's
+    web records. Missing payloads retain their registered destination for
+    atomic repair. Duplicate URL names are ambiguous and raise ValueError.
+    """
+    with _biocfilecache(root) as cache:
+        rows = _biocfilecache_rows(cache, url)
+        if len(rows) > 1:
+            raise ValueError(f"Multiple BiocFileCache entries for URL: {url}")
+        if rows:
+            return (cache.config.cache_dir / rows[0]["rpath"]).resolve()
+        return _cache_path(url, cache.config.cache_dir)
+
+
+def _register_biocfilecache(
+    root: Path, url: str, path: Path, *, transferred: bool = False
+) -> None:
+    """Register a complete payload while preserving R resource paths/types.
+
+    Callers hold the payload lock. Local records use the optional package's
+    checksum implementation. A refreshed web record loses old HTTP validators,
+    because recount3's unconditional transfer does not collect new validators.
+    The registry and payload are not a single cross-process transaction.
+    """
+    model = import_optional_module("pybiocfilecache.models").Resource
+    utilities = import_optional_module("pybiocfilecache.utils")
+    with _biocfilecache(root) as cache:
+        rows = _biocfilecache_rows(cache, url)
+        if not rows:
+            record = cache.add(
+                rname=url, fpath=path.resolve(), rtype="local", action="asis"
+            )
+            expected_rid = f"BFC{record['id']}"
+            if record["rid"] != expected_rid:
+                with cache.get_session() as session:
+                    session.query(model).filter(
+                        model.id == record["id"]
+                    ).update({"rid": expected_rid}, synchronize_session=False)
+            return
+        record = rows[0]
+        values = {
+            "access_time": datetime.datetime.now(),
+            "last_modified_time": record["last_modified_time"],
+        }
+        if record["rtype"] == "web":
+            if transferred:
+                values.update(etag=None, last_modified_time=None, expires=None)
+        else:
+            values["etag"] = utilities.calculate_file_hash(
+                path, cache.config.hash_algorithm
+            )
+        with cache.get_session() as session:
+            session.query(model).filter(model.id == record["id"]).update(
+                values, synchronize_session=False
+            )
+
+
+def _biocfilecache_paths(root: Path) -> list[Path]:
+    """List registered paths, including payloads removed outside the cache."""
+    if not (root / "BiocFileCache.sqlite").exists():
+        return []
+    with _biocfilecache(root) as cache:
+        return [
+            (cache.config.cache_dir / row["rpath"]).resolve()
+            for row in _biocfilecache_rows(cache)
+        ]
+
+
+def _cache_owned(path: Path, root: Path) -> bool:
+    """Report whether the cache owns this payload and may delete it.
+
+    R registers external files with ``action="asis"`` and leaves them in place
+    on ``bfcremove``; only payloads inside the cache directory are owned.
+    """
+    path = path.resolve()
+    root = root.resolve()
+    return path == root or root in path.parents
+
+
+def _remove_biocfilecache_files(root: Path, paths: list[Path]) -> None:
+    """Remove selected payloads and registry rows while the cache is idle.
+
+    Relative R paths are resolved against the cache root before unlinking.
+    Native, unregistered payloads are also removed. Database files are retained.
+    Registered files outside the cache directory keep R's ``asis`` semantics:
+    their rows are dropped, but the external payloads are never deleted.
+    """
+    model = import_optional_module("pybiocfilecache.models").Resource
+    with _biocfilecache(root) as cache:
+        cache_dir = cache.config.cache_dir
+        selected = {path.resolve() for path in paths}
+        with cache.get_session() as session:
+            for row in session.query(model).all():
+                path = (cache_dir / row.rpath).resolve()
+                if path in selected:
+                    if _cache_owned(path, cache_dir):
+                        path.unlink(missing_ok=True)
+                    session.delete(row)
+            for path in paths:
+                if _cache_owned(path, cache_dir):
+                    path.unlink(missing_ok=True)
+
+
+def _cache_internal(path: Path, root: Path) -> bool:
+    """Identify SQLite databases, journals, and R's database lock file."""
+    return path.parent.resolve() == root.resolve() and (
+        path.name == "BiocFileCache.sqlite"
+        or path.name.startswith("BiocFileCache.sqlite-")
+        or path.name == "BiocFileCache.sqlite.LOCK"
+    )
 
 
 def _sha256(text: str) -> str:
@@ -223,6 +367,7 @@ def _hardlink_or_copy(src: Path, dst: Path) -> None:
         OSError: On unexpected filesystem errors beyond the handled cases.
         FileNotFoundError: If source file doesn't exist.
     """
+    _ensure_dir(dst.parent)
     tmp_dst = dst.parent / (
         f".{dst.name}.{os.getpid()}_"
         f"{threading.get_ident()}_{time.time_ns()}.tmp"
@@ -909,6 +1054,9 @@ _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
             'pip install "recount3[bigwig]"\n'
             "  conda install -c conda-forge -c bioconda pybigwig"
         ),
+        "pybiocfilecache": 'pip install "recount3[pybiocfilecache]"',
+        "pybiocfilecache.models": 'pip install "recount3[pybiocfilecache]"',
+        "pybiocfilecache.utils": 'pip install "recount3[pybiocfilecache]"',
         "pyarrow": 'pip install "recount3[parquet]"',
         "anndata": 'pip install "recount3[anndata]"',
         "delayedarray": 'pip install "recount3[anndata]"',

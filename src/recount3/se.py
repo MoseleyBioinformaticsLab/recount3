@@ -273,7 +273,8 @@ def build_summarized_experiment(
       join_policy: ``"inner"`` intersects features; ``"outer"`` unions them
         and inserts zeros for features absent from an input project.
       metadata_join: ``"inner"`` intersects nonempty
-        metadata tables within each project; ``"outer"`` retains every count sample.
+        metadata tables within each project; ``"outer"`` retains every
+        count sample.
       autoload: If :data:`True`, load resources transparently. If False,
         counts and metadata must already be loaded.
 
@@ -336,7 +337,8 @@ def build_ranged_summarized_experiment(
       join_policy: ``"inner"`` intersects features; ``"outer"`` unions them
         and inserts zeros for features absent from an input project.
       metadata_join: ``"inner"`` intersects nonempty
-        metadata tables within each project; ``"outer"`` retains every count sample.
+        metadata tables within each project; ``"outer"`` retains every
+        count sample.
       autoload: If :data:`True`, download and load resources as needed.
         If False, counts and metadata must already be loaded, and range
         files must be cached.
@@ -431,7 +433,8 @@ def create_ranged_summarized_experiment(
       join_policy: Join policy across projects when stacking count matrices
         (passed to :func:`build_ranged_summarized_experiment`).
       metadata_join: ``"inner"`` intersects nonempty
-        metadata tables within each project; ``"outer"`` retains every count sample.
+        metadata tables within each project; ``"outer"`` retains every
+        count sample.
       autoload: If :data:`True`, download and load resources as needed.
         If False, counts and metadata must already be loaded, and range
         files must be cached.
@@ -587,7 +590,8 @@ def create_rse(
       join_policy: Join policy across projects when stacking count matrices
         (passed to :func:`build_ranged_summarized_experiment`).
       metadata_join: ``"inner"`` intersects nonempty
-        metadata tables within each project; ``"outer"`` retains every count sample.
+        metadata tables within each project; ``"outer"`` retains every
+        count sample.
       autoload: If :data:`True`, download and load resources as needed.
         If False, counts and metadata must already be loaded, and range
         files must be cached.
@@ -803,10 +807,12 @@ def _assay_frame(
         matrix: Two-dimensional assay values. SciPy sparse inputs are converted
             to pandas sparse columns without densifying the matrix.
         row_names: Feature labels in assay order, or ``None`` for a RangeIndex.
-        column_names: Sample labels in assay order, or ``None`` for a RangeIndex.
+        column_names: Sample labels in assay order, or ``None`` for
+            a RangeIndex.
 
     Returns:
-        A DataFrame preserving assay values and sparse storage where applicable.
+        A DataFrame preserving assay values and sparse storage where
+        applicable.
         Dense output may share storage with the input array.
 
     Raises:
