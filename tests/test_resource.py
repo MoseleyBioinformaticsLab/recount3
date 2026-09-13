@@ -1635,3 +1635,30 @@ def test_from_mapping_defaults_config_when_omitted(tmp_path: Path) -> None:
         )
     assert res.config is None
     assert res.url.startswith("https://fallback.org/recount3/")
+
+
+def test_read_metadata_table_maps_r_logicals_to_boolean(
+    tmp_path: Path,
+) -> None:
+    """R writes logicals as TRUE/FALSE/T/F; they must round-trip as booleans.
+
+    Anything else stays as written: a text column with blanks keeps them, and
+    ``NA`` becomes a missing value rather than the string.
+    """
+    path = tmp_path / "metadata.tsv"
+    path.write_text(
+        "sample\tpaired\tflag\tnote\n"
+        "S1\tTRUE\tT\tok\n"
+        "S2\tFALSE\tF\t\n"
+        "S3\tNA\tTRUE\tx\n",
+        encoding="utf-8",
+    )
+
+    frame = res_module._read_metadata_table(path)
+
+    assert frame["paired"].dtype == "boolean"
+    assert list(frame["paired"]) == [True, False, pd.NA]
+    assert frame["flag"].dtype == "boolean"
+    assert list(frame["flag"]) == [True, False, True]
+    assert list(frame["note"]) == ["ok", "", "x"]
+    assert list(frame["sample"]) == ["S1", "S2", "S3"]

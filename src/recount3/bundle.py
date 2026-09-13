@@ -87,6 +87,7 @@ Note:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import concurrent.futures
 import dataclasses
 import functools
@@ -95,11 +96,12 @@ import io
 import logging
 import re
 from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Optional, Mapping, TYPE_CHECKING
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from typing import Any, Optional, TYPE_CHECKING
 
 import pandas as pd
 import numpy as np
+from scipy import sparse
 
 from recount3 import _bigwig
 from recount3 import _utils
@@ -109,6 +111,8 @@ from recount3 import search
 from recount3 import types as r3_types
 
 if TYPE_CHECKING:  # pragma: no cover
+    import biocframe
+    from numpy.typing import NDArray
     import summarizedexperiment  # type: ignore[import-not-found]
     import genomicranges  # type: ignore[import-not-found]
 
@@ -142,16 +146,22 @@ def _ensure_unique_columns(
     Returns:
       A copy of ``df`` with deduplicated, non-empty column names.
     """
-    out = df.copy()
+    out = df.copy(deep=False)
     raw_cols = [("" if c is None else str(c)) for c in out.columns]
     counts: dict[str, int] = {}
+    reserved = {name or empty_prefix for name in raw_cols}
     new_cols: list[str] = []
 
     for name in raw_cols:
         base = name or empty_prefix
         n = counts.get(base, 0) + 1
+        candidate = base if n == 1 else f"{base}__{n}"
+        while n > 1 and candidate in reserved:
+            n += 1
+            candidate = f"{base}__{n}"
         counts[base] = n
-        new_cols.append(base if n == 1 else f"{base}__{n}")
+        reserved.add(candidate)
+        new_cols.append(candidate)
 
     out.columns = new_cols
     return out
@@ -160,17 +170,13 @@ def _ensure_unique_columns(
 def _default_assay_name(genomic_unit: str, assay_name: str) -> str:
     """Return the appropriate assay name for the given genomic unit.
 
-    The R reference package uses ``"raw_counts"`` for gene and exon assays
-    (which represent base-pair coverage sums) and ``"counts"`` for junction
-    assays (which are actual read counts). This helper applies the same
-    convention when the caller uses the default assay name.
-
     Args:
       genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
       assay_name: The caller-provided assay name.
 
     Returns:
-      The resolved assay name.
+      ``"counts"`` for junctions when the caller supplies ``"raw_counts"``;
+      otherwise the caller-provided name is returned unchanged.
     """
     if assay_name == "raw_counts" and genomic_unit == "junction":
         return "counts"
@@ -333,7 +339,18 @@ def _maybe_relabel_counts_columns_to_external_id(
     counts_df: pd.DataFrame,
     col_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Relabel assay columns to external_id when a complete mapping exists."""
+    """Relabel count columns and sample metadata with verified external IDs.
+
+    Args:
+        counts_df: Feature-by-sample counts whose columns match the metadata
+            row order.
+        col_df: Sample metadata with an optional ``external_id`` column.
+
+    Returns:
+        Count and metadata frames with matching external-ID labels. The inputs
+        are returned unchanged if IDs are absent, incomplete, duplicated, or
+        already match. Relabeling shares count storage without modifying it.
+    """
     if "external_id" not in col_df.columns:
         return counts_df, col_df
 
@@ -356,7 +373,7 @@ def _maybe_relabel_counts_columns_to_external_id(
     if current_ids == external_ids_str:
         return counts_df, col_df
 
-    renamed_counts = counts_df.copy()
+    renamed_counts = counts_df.copy(deep=False)
     renamed_counts.columns = external_ids_str
 
     renamed_col = col_df.copy()
@@ -411,36 +428,23 @@ _GTF_ATTR_PAIR_RE = re.compile(
 def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     """Parse a GTF attributes column into a wide (column-per-key) DataFrame.
 
+    Repeated keys retain their last value. Missing attribute strings produce
+    rows with missing values; the input index is preserved.
+
     Args:
       attrs: Series containing raw GTF attribute strings.
 
     Returns:
       DataFrame indexed like attrs, with one column per attribute key.
     """
-    if attrs.empty:
-        return pd.DataFrame(index=attrs.index)
-
-    extracted = (
-        attrs.fillna("").astype("string").str.extractall(_GTF_ATTR_PAIR_RE)
-    )
-    if extracted.empty:
-        return pd.DataFrame(index=attrs.index)
-
-    extracted = extracted.reset_index(level=1, drop=True)
-    extracted.index.name = "_row"
-
-    wide = (
-        extracted.reset_index()
-        .pivot_table(
-            index="_row",
-            columns="key",
-            values="value",
-            aggfunc="first",  # pyright: ignore[reportArgumentType]
-        )
-        .reindex(attrs.index)
-    )
-    wide.columns = [str(c) for c in wide.columns]
-    return wide
+    rows = []
+    for value in attrs.fillna(""):
+        row = {}
+        for match in _GTF_ATTR_PAIR_RE.finditer(str(value)):
+            key, val = match.group("key", "value")
+            row[key] = val
+        rows.append(row)
+    return pd.DataFrame(rows, index=attrs.index)
 
 
 def _coerce_gtf_phase_column(phase_column: pd.Series) -> pd.Series:
@@ -488,44 +492,24 @@ def _coerce_gtf_bp_length(
     starts: pd.Series,
     ends: pd.Series,
 ) -> pd.Series:
-    """Derive a bp_length column for GTF features.
+    """Parse covered feature lengths from the GTF score column.
 
     Args:
-      score: GTF "score" column (6th column). Often "." in standard GTFs.
-      starts: Numeric start positions (1-based, inclusive).
-      ends: Numeric end positions (1-based, inclusive).
+        score: GTF score values encoding covered lengths in bases. Dots and
+            empty strings denote missing lengths.
+        starts: One-based start coordinates, retained for call compatibility;
+            these do not participate in the conversion.
+        ends: Inclusive end coordinates, retained for call compatibility;
+            these do not participate in the conversion.
 
     Returns:
-      A pandas Series of dtype Int64 giving bp_length (width).
+        Numeric lengths with missing scores preserved. Covered gene lengths
+        can differ from genomic spans, so coordinates are not used as a fallback.
+
+    Raises:
+        ValueError: If a nonmissing score cannot be converted to a number.
     """
-    starts_num = pd.to_numeric(starts, errors="coerce").astype("Int64")
-    ends_num = pd.to_numeric(ends, errors="coerce").astype("Int64")
-    width = (ends_num - starts_num + 1).astype("Int64")
-
-    score_str = (
-        score.astype("string")
-        .str.strip()
-        .replace({".": pd.NA, "": pd.NA})  # pyright: ignore[reportArgumentType]
-    )  # pyright: ignore[reportArgumentType]
-    score_num = pd.to_numeric(score_str, errors="coerce")
-
-    comparable = score_num.notna() & width.notna()
-    if not comparable.any():
-        return width
-
-    score_rounded = score_num.round()
-    is_integer_like = (score_num - score_rounded).abs() <= 1e-6
-
-    score_int = score_rounded.astype("Int64")
-    matches_width = comparable & is_integer_like & (score_int == width)
-
-    match_rate = float(matches_width.sum()) / float(comparable.sum())
-
-    # Tolerate small noise.
-    if match_rate >= 0.95:
-        return score_int.where(score_int.notna(), width)
-
-    return width
+    return pd.to_numeric(score.replace({".": pd.NA, "": pd.NA}), errors="raise")
 
 
 _ENSEMBL_VERSION_SUFFIX_RE = r"\.\d+$"
@@ -558,6 +542,10 @@ def _align_ranges_to_features(
     tries a secondary match after stripping Ensembl version suffixes
     ('.<digits>') on both sides.
 
+    Duplicate IDs are matched by occurrence when multiplicities agree. An empty
+    feature request produces a valid empty range table. Output order always
+    follows the requested features.
+
     Args:
       ranges: DataFrame containing a 'feature_id' column and coordinate columns.
       feature_ids: Feature IDs from the counts matrix (in desired order).
@@ -565,11 +553,14 @@ def _align_ranges_to_features(
     Returns:
       DataFrame reindexed to feature_ids order, containing the same columns as
       `ranges` except for 'feature_id' (which is used as the index).
+      Unmatched unique IDs retain missing coordinates for the caller to handle.
 
     Raises:
       ValueError: If required coordinate columns are missing from `ranges`,
         or if version-stripped matching is ambiguous (conflicting
         coordinates).
+      recount3.errors.RangesCoverageError: If duplicate occurrences cannot
+        be matched completely and unambiguously.
     """
     required = {"feature_id", "seqnames", "starts", "ends", "strand"}
     missing_cols = required - set(ranges.columns)
@@ -580,6 +571,45 @@ def _align_ranges_to_features(
 
     feature_index = pd.Index([str(x) for x in feature_ids])
 
+    ids = pd.Index(ranges["feature_id"].astype(str))
+    if ids.equals(feature_index):
+        exact = ranges.drop(columns="feature_id").copy(deep=False)
+        exact.index = feature_index
+        return exact
+    if ids.has_duplicates or feature_index.has_duplicates:
+        available = pd.Series(ids).value_counts()
+        requested = pd.Series(feature_index).value_counts()
+        for name, count in requested.items():
+            if (
+                name in available
+                and available[name] != count
+                and (count > 1 or available[name] > 1)
+            ):
+                raise errors.RangesCoverageError(
+                    f"Ambiguous duplicate feature occurrences for {name!r}."
+                )
+        source_index = pd.MultiIndex.from_arrays(
+            [ids, pd.Series(ids).groupby(pd.Series(ids), sort=False).cumcount()]
+        )
+        target_index = pd.MultiIndex.from_arrays(
+            [
+                feature_index,
+                pd.Series(feature_index)
+                .groupby(pd.Series(feature_index), sort=False)
+                .cumcount(),
+            ]
+        )
+        exact = (
+            ranges.drop(columns="feature_id")
+            .set_axis(source_index)
+            .reindex(target_index)
+        )
+        exact.index = feature_index
+        if exact[["seqnames", "starts", "ends", "strand"]].isna().any().any():
+            raise errors.RangesCoverageError(
+                "Cannot match duplicate feature occurrences to annotation."
+            )
+        return exact
     exact = ranges.set_index("feature_id").reindex(feature_index)
 
     coord_cols = ["seqnames", "starts", "ends", "strand"]
@@ -587,7 +617,6 @@ def _align_ranges_to_features(
     if not missing_any.any():
         return exact
 
-    # Build a version-stripped index for the annotation ranges.
     ranges_uv = ranges.copy()
     ranges_uv["_feature_id_unversioned"] = _strip_ensembl_version(
         ranges_uv["feature_id"]
@@ -619,7 +648,7 @@ def _align_ranges_to_features(
     fallback.index = feature_index
 
     # Fill missing exact matches with version-stripped matches.
-    filled = exact.combine_first(fallback)
+    filled = exact.combine_first(fallback).reindex(feature_index)
 
     if filled[coord_cols].isna().any(axis=1).any():
         # Left to caller to decide whether to error
@@ -692,16 +721,26 @@ def _ranges_from_gtf(
     *,
     feature_kind: str,
 ) -> pd.DataFrame:
-    """Convert a GTF table to feature ranges for genes or exons.
+    """Extract feature coordinates and annotation metadata from a GTF table.
 
     Args:
-      gtf: GTF DataFrame with an ``attributes`` column.
-      feature_kind: Either ``"gene"`` or ``"exon"``.
+        gtf: Parsed GTF columns including ``feature``, ``seqname``, ``start``,
+            ``end``, ``strand``, ``source``, ``score``, ``frame``, and
+            ``attributes``.
+        feature_kind: Feature type to retain: ``"gene"`` or ``"exon"``.
 
     Returns:
-      A DataFrame with columns ``["seqnames", "starts", "ends",
-      "strand", "feature_id"]``. The ``feature_id`` column is derived
-      from the GTF attributes (for example, ``gene_id`` or ``exon_id``).
+        A table with one-based inclusive coordinates, ``feature_id``, source,
+        feature type, covered ``bp_length``, nullable phase, and parsed GTF
+        attributes. Gene IDs come from ``gene_id``; exon IDs prefer
+        ``recount_exon_id`` over ``exon_id``. Missing IDs fall back to coordinate
+        strings. Duplicate IDs with identical ranges retain separate annotation
+        rows. No matching features produces an empty coordinate/ID table.
+
+    Raises:
+        KeyError: If a required GTF column is missing.
+        ValueError: If coordinates or covered lengths cannot be parsed, or
+            duplicate feature IDs describe conflicting genomic ranges.
     """
     df = gtf.loc[gtf["feature"] == feature_kind].copy()
     if df.empty:
@@ -788,14 +827,6 @@ def _ranges_from_gtf(
                 f"genomic ranges (example feature_id values: {example_ids})."
             )
 
-        dropped = int(dup["feature_id"].nunique())
-        logging.info(
-            "Dropping duplicate GTF rows for %d feature_id values with "
-            "identical ranges.",
-            dropped,
-        )
-        out = out.drop_duplicates(subset=["feature_id"], keep="first")
-
     return out
 
 
@@ -881,7 +912,8 @@ def _select_gtf_resource_for_unit(
 ) -> Optional[resource.R3Resource]:
     """Pick the most appropriate annotation resource for gene/exon ranges.
 
-    Candidates are ranked by their description and URL, then confirmed by
+    An unambiguous matching descriptor is selected without file I/O.
+    Otherwise candidates are ranked by description and URL and confirmed by
     peeking at the file itself. Confirmation needs the annotation on disk,
     so with ``autoload`` enabled a candidate that is not cached yet is
     downloaded first; with ``autoload`` disabled, uncached candidates are
@@ -906,6 +938,17 @@ def _select_gtf_resource_for_unit(
         ann = ann.filter(annotation_extension=annotation_extension)
 
     candidates = list(ann.resources)
+    exact = [
+        r
+        for r in candidates
+        if _description_value(r, "genomic_unit") == genomic_unit
+    ]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        raise errors.CompatibilityError(
+            "Multiple matching annotations; select one annotation resource."
+        )
     if not candidates:
         return None
 
@@ -971,16 +1014,152 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
 
     Args:
       ranges_df: DataFrame with at least ``seqnames``, ``starts``,
-        ``ends``, and ``strand`` columns.
+        ``ends``, and ``strand`` columns using one-based inclusive coordinates.
+        The index supplies range names; other columns become range metadata.
 
     Returns:
       A :class:`genomicranges.GenomicRanges` instance.
 
     Raises:
-      ImportError: If :mod:`genomicranges` cannot be imported.
+      ImportError: If required BiocPy packages cannot be imported.
+      KeyError: If a required coordinate column is absent.
+      ValueError: If the range constructor rejects the coordinates.
     """
     genomic_ranges_cls = _utils.get_genomicranges_class()
-    return genomic_ranges_cls.from_pandas(ranges_df)
+    coords = ["seqnames", "starts", "ends", "strand"]
+    gr = genomic_ranges_cls.from_pandas(
+        ranges_df[coords].reset_index(drop=True)
+    )
+    extras = {
+        col: ranges_df[col].to_numpy() for col in ranges_df if col not in coords
+    }
+    if extras:
+        gr = gr.set_mcols(_utils.get_biocframe_class()(extras))
+    return gr.set_names([str(x) for x in ranges_df.index])
+
+
+def _numeric_assay(
+    counts_df: pd.DataFrame, *, copy: bool = True
+) -> NDArray[Any] | sparse.csc_matrix:
+    """Convert count data to a validated dense array or CSC sparse matrix.
+
+    Args:
+        counts_df: Feature-by-sample counts. Sparse columns must all use zero
+            fill values. Dense numeric strings are converted when necessary.
+        copy: Whether to copy assay storage. With ``False``, dense output may
+            share storage with the input; sparse conversion may still allocate.
+
+    Returns:
+        A two-dimensional numeric array, or a CSC matrix when all input columns
+        are sparse. Numeric dtypes are preserved when conversion is unnecessary.
+
+    Raises:
+        ValueError: If counts are nonnumeric, missing, nonfinite, negative,
+            not two-dimensional, or use a nonzero sparse fill value.
+    """
+    if not isinstance(counts_df, pd.DataFrame) or counts_df.ndim != 2:
+        raise ValueError("counts_df must be a 2D DataFrame.")
+    is_sparse = len(counts_df.columns) > 0 and all(
+        isinstance(dtype, pd.SparseDtype) for dtype in counts_df.dtypes
+    )
+    if is_sparse:
+        if any(dtype.fill_value != 0 for dtype in counts_df.dtypes):
+            raise ValueError("Sparse counts must have zero fill values.")
+        matrix = sparse.csc_matrix(counts_df.sparse.to_coo(), copy=copy)
+        values = matrix.data
+    else:
+        if not all(pd.api.types.is_numeric_dtype(d) for d in counts_df.dtypes):
+            try:
+                counts_df = counts_df.apply(pd.to_numeric, errors="raise")
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    "counts_df contains non-numeric values."
+                ) from exc
+        matrix = counts_df.to_numpy(copy=copy)
+        if matrix.dtype.kind == "O":
+            matrix = counts_df.to_numpy(dtype=float, na_value=np.nan, copy=copy)
+        values = matrix
+    if not np.isfinite(values).all():
+        raise ValueError("counts_df contains missing or non-finite counts.")
+    if (values < 0).any():
+        raise ValueError("counts_df contains negative counts.")
+    return matrix
+
+
+def _validate_count_frame(frame: pd.DataFrame) -> None:
+    """Validate count columns without materializing a complete second assay.
+
+    Sparse columns are checked through their stored values, preserving implicit
+    zeros. Validation does not modify the input frame.
+
+    Args:
+        frame: Feature-by-sample count table with unique column labels.
+
+    Raises:
+        ValueError: If a column contains nonnumeric, missing, nonfinite, or
+            negative counts, or has a nonzero sparse fill value.
+    """
+    for name in frame.columns:
+        column = frame[name]
+        if isinstance(column.dtype, pd.SparseDtype):
+            if column.dtype.fill_value != 0:
+                raise ValueError("Sparse counts must have zero fill values.")
+            values = column.array.sp_values
+        else:
+            try:
+                numeric = pd.to_numeric(column, errors="raise")
+                values = numeric.to_numpy()
+                if values.dtype.kind == "O":
+                    values = numeric.to_numpy(dtype=float, na_value=np.nan)
+            except (ValueError, TypeError) as exc:
+                raise ValueError(
+                    "counts_df contains non-numeric values."
+                ) from exc
+        if not np.isfinite(values).all() or (values < 0).any():
+            raise ValueError(
+                "Counts must be finite, non-missing and nonnegative."
+            )
+
+
+def _experiment_frame(
+    frame: pd.DataFrame, names: list[str], label: str
+) -> biocframe.BiocFrame:
+    """Align metadata with an assay dimension and construct a BiocFrame.
+
+    Args:
+        frame: Feature or sample metadata. A RangeIndex denotes positional
+            alignment; other indices must identify the requested rows uniquely.
+        names: Assay identifiers in the required order.
+        label: Metadata dimension name used in errors and empty column labels.
+
+    Returns:
+        Metadata with the requested row names, unique nonempty column names,
+        and copied column arrays independent of the input.
+
+    Raises:
+        ValueError: If metadata length or identifiers do not match the assay.
+        ImportError: If BiocFrame is unavailable.
+    """
+    if len(frame) != len(names):
+        raise ValueError(
+            f"{label} length {len(frame)} != assay dimension {len(names)}."
+        )
+    frame = frame.copy(deep=False)
+    if not isinstance(frame.index, pd.RangeIndex):
+        frame.index = frame.index.map(str)
+        if list(frame.index) != names:
+            if not frame.index.is_unique or set(frame.index) != set(names):
+                raise ValueError(
+                    f"{label} identifiers do not match assay identifiers."
+                )
+            frame = frame.reindex(names)
+    frame.index = names
+    frame = _ensure_unique_columns(frame, empty_prefix=label)
+    return _utils.get_biocframe_class()(
+        {col: frame[col].to_numpy(copy=True) for col in frame.columns},
+        row_names=names,
+        number_of_rows=len(names),
+    )
 
 
 def _construct_summarized_experiment(
@@ -989,100 +1168,40 @@ def _construct_summarized_experiment(
     row_df: pd.DataFrame,
     col_df: pd.DataFrame,
     assay_name: str,
-    metadata: Optional[Mapping[str, Any]] = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> summarizedexperiment.SummarizedExperiment:
-    """Construct a :class:`~summarizedexperiment.SummarizedExperiment`.
-
-    This function targets the modern `summarizedexperiment.SummarizedExperiment`
-    constructor that accepts:
-
-      - assays: dict[str, 2D matrix]
-      - row_data: feature metadata (coerced to
-        :class:`~biocframe.BiocFrame` by BiocPy)
-      - column_data: sample metadata (coerced to
-        :class:`~biocframe.BiocFrame` by BiocPy)
-      - row_names / column_names: optional but provided explicitly here
-      - metadata: optional experiment-level metadata
-
-    It enforces:
-      - non-empty assay matrix
-      - strict shape agreement between assay and row/column data
-      - numeric assay values (raises on non-numeric, fills missing with 0)
+    """Construct a validated experiment with independently owned assay storage.
 
     Args:
-      counts_df: Feature-by-sample counts matrix.
-      row_df: Feature metadata DataFrame (will be reindexed to counts_df.index).
-      col_df: Sample metadata DataFrame (reindexed to counts_df.columns).
-      assay_name: Name of the assay (e.g. "raw_counts").
-      metadata: Optional experiment-level metadata.
+        counts_df: Feature-by-sample counts with feature and sample identifiers
+            on the index and columns. Sparse inputs remain sparse.
+        row_df: Feature metadata aligned by identifier, or position for a
+            RangeIndex.
+        col_df: Sample metadata aligned by identifier, or position for a
+            RangeIndex.
+        assay_name: Name assigned to the count assay.
+        metadata: Experiment-level annotations, copied into a new dictionary.
 
     Returns:
-      A :class:`~summarizedexperiment.SummarizedExperiment` instance.
+        A SummarizedExperiment with synchronized names, metadata, and a dense
+        or CSC sparse count assay.
 
     Raises:
-      ValueError: If shapes are inconsistent or assay contains invalid values.
+        ValueError: If counts are invalid or metadata cannot be aligned.
+        TypeError: If the experiment constructor rejects an input type.
+        ImportError: If the required BiocPy packages are unavailable.
     """
-    summarized_experiment_cls = _utils.get_summarizedexperiment_class()
-
-    if counts_df.ndim != 2:
-        raise ValueError("counts_df must be a 2D DataFrame.")
-
-    n_features, n_samples = counts_df.shape
-    if n_features == 0 or n_samples == 0:
-        raise ValueError(
-            "Empty assay matrix; cannot build SummarizedExperiment."
-        )
-
-    row_names = [str(x) for x in counts_df.index]
-    col_names = [str(x) for x in counts_df.columns]
-
-    row_data = row_df.copy()
-    col_data = col_df.copy()
-    row_data.index = row_names
-    col_data.index = col_names
-
-    row_data = _ensure_unique_columns(row_data, empty_prefix="row")
-    col_data = _ensure_unique_columns(col_data, empty_prefix="col")
-
-    if len(row_data) != n_features:
-        raise ValueError(
-            f"row_data length {len(row_data)} != assay features {n_features}."
-        )
-    if len(col_data) != n_samples:
-        raise ValueError(
-            f"column_data length {len(col_data)} != assay samples {n_samples}."
-        )
-
-    raw = counts_df.copy()
-    numeric = raw.apply(pd.to_numeric, errors="coerce")
-
-    invalid = raw.notna() & numeric.isna()
-    if invalid.any().any():
-        bad_positions = list(zip(*np.where(invalid.to_numpy())))
-        examples = []
-        for r, c in bad_positions[:5]:
-            examples.append(
-                {
-                    "row": row_names[r],
-                    "col": col_names[c],
-                    "value": raw.iat[r, c],
-                }
-            )
-        raise ValueError(
-            "counts_df contains non-numeric values that cannot be coerced. "
-            f"Examples: {examples!r}"
-        )
-
-    counts_np = numeric.fillna(0).to_numpy(dtype=float, copy=False)
-
-    biocframe_cls = _utils.get_biocframe_class()
-    return summarized_experiment_cls(
-        assays={assay_name: counts_np},
-        row_data=biocframe_cls.from_pandas(row_data),
-        column_data=biocframe_cls.from_pandas(col_data),
-        row_names=row_names,
-        column_names=col_names,
-        metadata=dict(metadata) if metadata is not None else None,
+    matrix = _numeric_assay(counts_df)
+    rows, cols = list(counts_df.index.map(str)), list(
+        counts_df.columns.map(str)
+    )
+    return _utils.get_summarizedexperiment_class()(
+        assays={assay_name: matrix},
+        row_data=_experiment_frame(row_df, rows, "row_data"),
+        column_data=_experiment_frame(col_df, cols, "column_data"),
+        row_names=rows,
+        column_names=cols,
+        metadata=dict(metadata or {}),
     )
 
 
@@ -1093,136 +1212,174 @@ def _construct_ranged_summarized_experiment(
     col_df: pd.DataFrame,
     ranges_df: pd.DataFrame,
     assay_name: str,
-    metadata: Optional[Mapping[str, Any]] = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> summarizedexperiment.RangedSummarizedExperiment:
-    """Construct a :class:`~summarizedexperiment.RangedSummarizedExperiment`.
-
-    This targets the modern `summarizedexperiment.RangedSummarizedExperiment`
-    constructor with kwargs:
-
-      - assays: dict[str, 2D matrix]
-      - row_ranges: :class:`~genomicranges.GenomicRanges`
-      - row_data / column_data: pandas DataFrames (coerced to
-        :class:`~biocframe.BiocFrame` by BiocPy)
-      - row_names / column_names: provided explicitly for stability
-      - metadata: optional experiment metadata
-
-    Enforces:
-      - non-empty 2D counts matrix
-      - strict shape agreement between assay, metadata, and ranges
-      - numeric assay values (raises on non-numeric non-missing values)
+    """Construct a validated experiment with genomic ranges and owned counts.
 
     Args:
-      counts_df: Feature-by-sample counts matrix.
-      row_df: Feature metadata (reindexed to counts_df.index).
-      col_df: Sample metadata (reindexed to counts_df.columns).
-      ranges_df: DataFrame with at least
-        ["seqnames", "starts", "ends", "strand"]. Must have the same
-        number/order of rows as counts_df.
-      assay_name: Name of the assay (e.g. "raw_counts").
-      metadata: Optional experiment-level metadata.
+        counts_df: Feature-by-sample counts with named rows and columns.
+            Sparse inputs remain sparse.
+        row_df: Feature metadata aligned by identifier, or position for a
+            RangeIndex.
+        col_df: Sample metadata aligned by identifier, or position for a
+            RangeIndex.
+        ranges_df: One row per feature with ``seqnames``, ``starts``, ``ends``,
+            and ``strand`` columns. Coordinates are one-based and inclusive;
+            additional columns become range metadata. A RangeIndex denotes
+            positional alignment; other indices must match feature identifiers.
+        assay_name: Name assigned to the count assay.
+        metadata: Experiment-level annotations, copied into a new dictionary.
 
     Returns:
-      A :class:`~summarizedexperiment.RangedSummarizedExperiment` instance.
+        A RangedSummarizedExperiment with aligned feature ranges, metadata,
+        names, and a dense or CSC sparse count assay.
 
     Raises:
-      ValueError: If shapes/columns are inconsistent or counts are not numeric.
+        ValueError: If counts, coordinates, dimensions, or identifiers are
+            invalid or required range columns are absent.
+        TypeError: If the experiment constructor rejects an input type.
+        ImportError: If the required BiocPy packages are unavailable.
     """
-    ranged_summarized_experiment_cls = (
-        _utils.get_ranged_summarizedexperiment_class()
+    matrix = _numeric_assay(counts_df)
+    rows, cols = list(counts_df.index.map(str)), list(
+        counts_df.columns.map(str)
     )
-
-    if counts_df.ndim != 2:
-        raise ValueError("counts_df must be a 2D DataFrame.")
-
-    n_features, n_samples = counts_df.shape
-    if n_features == 0 or n_samples == 0:
+    required = {"seqnames", "starts", "ends", "strand"}
+    if required - set(ranges_df):
         raise ValueError(
-            "Empty assay matrix; cannot build RangedSummarizedExperiment."
+            f"ranges_df is missing required columns: {sorted(required-set(ranges_df))}."
         )
-
-    required_range_cols = {"seqnames", "starts", "ends", "strand"}
-    missing = required_range_cols - set(ranges_df.columns)
-    if missing:
+    if len(ranges_df) != len(rows):
         raise ValueError(
-            f"ranges_df is missing required columns: {sorted(missing)!r}."
+            f"ranges_df length {len(ranges_df)} != assay features {len(rows)}."
         )
-
-    if len(ranges_df) != n_features:
-        raise ValueError(
-            f"ranges_df length {len(ranges_df)} != assay features {n_features}."
-        )
-
-    row_names = [str(x) for x in counts_df.index]
-    col_names = [str(x) for x in counts_df.columns]
-
-    row_data = row_df.copy()
-    col_data = col_df.copy()
-    row_data.index = row_names
-    col_data.index = col_names
-
-    row_data = _ensure_unique_columns(row_data, empty_prefix="row")
-    col_data = _ensure_unique_columns(col_data, empty_prefix="col")
-
-    if len(row_data) != n_features:
-        raise ValueError(
-            f"row_data length {len(row_data)} != assay features {n_features}."
-        )
-    if len(col_data) != n_samples:
-        raise ValueError(
-            f"column_data length {len(col_data)} != assay samples {n_samples}."
-        )
-
-    ranges_aligned = ranges_df.copy()
-    ranges_aligned.index = row_names
-    ranges_aligned["starts"] = pd.to_numeric(
-        ranges_aligned["starts"], errors="coerce"
-    )
-    ranges_aligned["ends"] = pd.to_numeric(
-        ranges_aligned["ends"], errors="coerce"
-    )
+    ranges = ranges_df.copy(deep=False)
     if (
-        ranges_aligned[["seqnames", "starts", "ends", "strand"]]
-        .isna()
-        .any()
-        .any()
+        not isinstance(ranges.index, pd.RangeIndex)
+        and list(ranges.index.map(str)) != rows
     ):
+        if not ranges.index.is_unique or set(ranges.index.map(str)) != set(
+            rows
+        ):
+            raise ValueError(
+                "ranges_df identifiers do not match assay identifiers."
+            )
+        ranges = ranges.reindex(rows)
+    ranges.index = rows
+    _validate_coordinates(ranges)
+    return _utils.get_ranged_summarizedexperiment_class()(
+        assays={assay_name: matrix},
+        row_ranges=_to_genomic_ranges(ranges),
+        row_data=_experiment_frame(row_df, rows, "row_data"),
+        column_data=_experiment_frame(col_df, cols, "column_data"),
+        row_names=rows,
+        column_names=cols,
+        metadata=dict(metadata or {}),
+    )
+
+
+def _validate_coordinates(frame: pd.DataFrame) -> None:
+    """Validate one-based inclusive coordinates and normalized strand values.
+
+    Args:
+        frame: Range table containing ``seqnames``, ``starts``, ``ends``, and
+            ``strand``. Starts and ends must be finite integers with
+            ``1 <= starts <= ends``; strands must be ``+``, ``-``, or ``*``.
+
+    Raises:
+        KeyError: If a required coordinate column is absent.
+        ValueError: If coordinates or strands are missing or invalid.
+    """
+    if frame[["seqnames", "starts", "ends", "strand"]].isna().any().any():
         raise ValueError(
             "ranges_df contains missing values in coordinate columns."
         )
-
-    raw = counts_df.copy()
-    numeric = raw.apply(pd.to_numeric, errors="coerce")
-    invalid = raw.notna() & numeric.isna()
-    if invalid.any().any():
-        bad_positions = list(zip(*np.where(invalid.to_numpy())))
-        examples = []
-        for r, c in bad_positions[:5]:
-            examples.append(
-                {
-                    "row": row_names[r],
-                    "col": col_names[c],
-                    "value": raw.iat[r, c],
-                }
-            )
+    for col in ("starts", "ends"):
+        values = pd.to_numeric(frame[col], errors="raise").to_numpy(dtype=float)
+        if not np.isfinite(values).all() or (values != np.floor(values)).any():
+            raise ValueError("Genomic coordinates must be finite integers.")
+    if (pd.to_numeric(frame["starts"]) < 1).any() or (
+        pd.to_numeric(frame["ends"]) < pd.to_numeric(frame["starts"])
+    ).any():
         raise ValueError(
-            "counts_df contains non-numeric values that cannot be coerced. "
-            f"Examples: {examples!r}"
+            "Genomic coordinates must be positive inclusive intervals."
         )
+    if not frame["strand"].isin(["+", "-", "*"]).all():
+        raise ValueError("Invalid genomic strand.")
 
-    counts_np = numeric.fillna(0).to_numpy(dtype=float, copy=False)
 
-    gr = _to_genomic_ranges(ranges_aligned)
+def _description_value(res: resource.R3Resource, key: str) -> str | None:
+    """Read a string-valued resource description field.
 
-    biocframe_cls = _utils.get_biocframe_class()
-    return ranged_summarized_experiment_cls(
-        assays={assay_name: counts_np},
-        row_ranges=gr,
-        row_data=biocframe_cls.from_pandas(row_data),
-        column_data=biocframe_cls.from_pandas(col_data),
-        row_names=row_names,
-        column_names=col_names,
-        metadata=dict(metadata) if metadata is not None else None,
+    Args:
+        res: Resource whose description supplies the field.
+        key: Description attribute name.
+
+    Returns:
+        The field value if it is a string, otherwise ``None``.
+    """
+    value = getattr(res.description, key, None)
+    return value if isinstance(value, str) else None
+
+
+def _project_key(
+    res: resource.R3Resource,
+) -> tuple[str | None, str | None, str | None]:
+    """Identify the organism, source, and project associated with a resource.
+
+    Args:
+        res: Resource to identify.
+
+    Returns:
+        An ``(organism, data_source, project)`` tuple. Missing or nonstring
+        fields are represented by ``None``.
+    """
+    return tuple(
+        _description_value(res, key)
+        for key in ("organism", "data_source", "project")
+    )
+
+
+def _merge_count_frames(
+    frames: Sequence[pd.DataFrame], join_policy: str
+) -> pd.DataFrame:
+    """Combine count tables by feature identity while preserving sample order.
+
+    Args:
+        frames: Nonempty sequence of validated feature-by-sample count tables.
+            Repeated feature IDs are allowed only when all feature indices
+            have exactly the same ordering.
+        join_policy: ``"inner"`` intersects feature IDs; ``"outer"`` takes
+            their union and fills newly introduced feature rows with zeros.
+
+    Returns:
+        Counts with columns concatenated in input order. Existing missing
+        values are preserved. A single input returns a shallow copy.
+
+    Raises:
+        ValueError: If the join policy is unsupported.
+        recount3.errors.CompatibilityError: If duplicate feature IDs prevent
+            unambiguous alignment across different feature indices.
+    """
+    if join_policy not in ("inner", "outer"):
+        raise ValueError("join_policy must be 'inner' or 'outer'.")
+    if len(frames) == 1:
+        return frames[0].copy(deep=False)
+    if all(frame.index.equals(frames[0].index) for frame in frames[1:]):
+        return pd.concat(frames, axis=1)
+    if any(not frame.index.is_unique for frame in frames):
+        raise errors.CompatibilityError(
+            "Cannot align duplicate feature IDs across projects."
+        )
+    index = frames[0].index
+    for frame in frames[1:]:
+        index = (
+            index.intersection(frame.index, sort=False)
+            if join_policy == "inner"
+            else index.union(frame.index, sort=False)
+        )
+    return pd.concat(
+        [frame.reindex(index, fill_value=0) for frame in frames], axis=1
     )
 
 
@@ -1249,9 +1406,7 @@ def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
     rtype = getattr(res.description, "resource_type", None)
     match rtype:
         case "count_files_gene_or_exon":
-            genomic_unit = (
-                getattr(res.description, "genomic_unit", None) or ""
-            )
+            genomic_unit = getattr(res.description, "genomic_unit", None) or ""
             family = "gene_or_exon"
             feature_key = f"{family}:{genomic_unit}"
             return family, feature_key
@@ -1277,19 +1432,34 @@ def _make_unique_names(
     *,
     suffix: str = "__dup",
 ) -> list[str]:
-    """Return a stable, order-preserving unique-ified version of `names`.
+    """Make feature names unique while preserving their order.
 
-    Example:
-      ["a", "b", "a"] -> ["a", "b", "a__dup2"]
+    Args:
+        names: Original feature names, including possible duplicates.
+        suffix: Text inserted before the occurrence number on duplicates.
+
+    Returns:
+        Names with later occurrences suffixed starting at two. Generated names
+        avoid collisions with both original and previously generated names.
+
+    Examples:
+        >>> _make_unique_names(["a", "b", "a"])
+        ['a', 'b', 'a__dup2']
     """
     seen: Counter[str] = Counter()
+    reserved = set(names)
     out: list[str] = []
     for name in names:
         seen[name] += 1
         if seen[name] == 1:
             out.append(name)
         else:
-            out.append(f"{name}{suffix}{seen[name]}")
+            candidate = f"{name}{suffix}{seen[name]}"
+            while candidate in reserved:
+                seen[name] += 1
+                candidate = f"{name}{suffix}{seen[name]}"
+            out.append(candidate)
+            reserved.add(candidate)
     return out
 
 
@@ -1359,6 +1529,9 @@ class R3ResourceBundle:
     organism: Optional[str] = None
     data_source: Optional[str] = None
     project: Optional[str] = None
+    _range_cache: Any = dataclasses.field(
+        default=None, repr=False, compare=False
+    )
 
     # -------------------------------------------------------------------
     # Construction and basic mutators
@@ -2037,9 +2210,9 @@ class R3ResourceBundle:
                         f"Found families: {sorted(families)} ({details}). "
                         "Stack gene/exon with gene/exon, and junctions with "
                         "junctions. Hint: filter first, for example, "
-                        'bundle.filter('
+                        "bundle.filter("
                         'resource_type="count_files_gene_or_exon") '
-                        'or bundle.filter('
+                        "or bundle.filter("
                         'resource_type="count_files_junctions").'
                     )
             case "feature":
@@ -2097,7 +2270,8 @@ class R3ResourceBundle:
 
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-          join_policy: Join mode for concatenation (see :func:`pandas.concat`).
+          join_policy: ``"inner"`` intersects feature rows; ``"outer"`` unions them
+            and fills newly introduced rows with zero.
           autoload: If :data:`True`, load resources on demand.
 
         Returns:
@@ -2106,68 +2280,175 @@ class R3ResourceBundle:
 
         Raises:
           ValueError: If no compatible count resources exist or stacking
-            fails.
+            fails, including a required count resource failing to load.
+          recount3.errors.CompatibilityError: If feature spaces are incompatible.
+          recount3.errors.RangesError: If multi-project junction coordinates are
+            missing or ambiguous.
         """
-        load_errors: list[tuple[str, Exception]] = []
-
-        if genomic_unit in {"gene", "exon"}:
-            sel = self.filter(resource_type="count_files_gene_or_exon").filter(
-                genomic_unit=genomic_unit
+        if join_policy not in ("inner", "outer"):
+            raise ValueError("join_policy must be 'inner' or 'outer'.")
+        unit = _utils._normalize_genomic_unit(genomic_unit)
+        if unit == "junction":
+            selected = self.filter(
+                resource_type="count_files_junctions", junction_extension="MM"
             )
-
-            if autoload:
-                for res in sel.resources:
-                    try:
-                        res.load()
-                    except Exception as exc:  # pylint: disable=broad-except
-                        url = (
-                            res.url or f"<no-url:{res.description.url_path()}>"
-                        )
-                        load_errors.append((url, exc))
-
-            try:
-                return sel.stack_count_matrices(
-                    join_policy=join_policy,
-                    axis=1,
-                    autoload=False,
-                    compat="feature",
-                )
-            except ValueError as exc:
-                if load_errors:
-                    first_url, first_exc = load_errors[0]
-                    raise ValueError(
-                        "Failed to load any gene/exon count matrix. "
-                        f"First error: {first_exc!r} (while loading "
-                        f"{first_url})."
-                    ) from exc
-                raise
-
-        sel = self.filter(resource_type="count_files_junctions").filter(
-            junction_extension="MM"
+        else:
+            selected = self.filter(
+                resource_type="count_files_gene_or_exon", genomic_unit=unit
+            )
+        if not selected.resources:
+            raise ValueError(
+                "No count-file resources available for the requested genomic unit."
+            )
+        feature_key = (
+            "junction_type" if unit == "junction" else "annotation_extension"
         )
-        if autoload:
-            for res in sel.resources:
+        compatibility = {
+            (
+                _description_value(res, "organism"),
+                _description_value(res, feature_key),
+            )
+            for res in selected.resources
+        }
+        if len(compatibility) > 1:
+            raise errors.CompatibilityError(
+                "Selected counts have incompatible organisms, annotations or junction formats."
+            )
+        frames = []
+        for res in selected.resources:
+            if not res.is_loaded():
+                if not autoload:
+                    raise ValueError(
+                        f"Count resource is not loaded: {res.url}. "
+                        "Load it first or use autoload=True."
+                    )
                 try:
                     res.load()
-                except Exception as exc:  # pylint: disable=broad-except
-                    url = res.url or f"<no-url:{res.description.url_path()}>"
-                    load_errors.append((url, exc))
+                except Exception as exc:
+                    raise ValueError(
+                        f"Failed to load requested count matrix {res.url}: {exc}"
+                    ) from exc
+            frame = res.get_loaded()
+            if not isinstance(frame, pd.DataFrame):
+                raise TypeError(f"Loaded counts are not a DataFrame: {res.url}")
+            if frame.columns.has_duplicates:
+                raise ValueError(f"Duplicate sample identifiers in {res.url}")
+            for names in (frame.index, frame.columns):
+                if names.isna().any() or any(not str(x).strip() for x in names):
+                    raise ValueError(
+                        f"Missing feature or sample identifiers in {res.url}"
+                    )
+            _validate_count_frame(frame)
+            frame = frame.copy(deep=False)
+            frame.index = frame.index.map(str)
+            frame.columns = frame.columns.map(str)
+            if unit == "junction" and len(selected.resources) > 1:
+                group = R3ResourceBundle(
+                    [
+                        r
+                        for r in self.resources
+                        if _project_key(r) == _project_key(res)
+                    ]
+                )
+                ranges = group._junction_ranges(frame, autoload=autoload)
+                frame.index = ranges.index
+            frames.append(frame)
+        return _merge_count_frames(frames, join_policy)
 
-        try:
-            return sel.stack_count_matrices(
-                join_policy=join_policy,
-                axis=1,
-                autoload=False,
-                compat="family",
+    def _junction_ranges(
+        self, counts: pd.DataFrame, *, autoload: bool
+    ) -> pd.DataFrame:
+        """Resolve the coordinate sidecar for a single junction count matrix.
+
+        Loaded sidecars are reused; newly parsed sidecars are cached on their
+        resource. Missing and unknown strands are normalized to ``*``.
+
+        Args:
+            counts: Count table whose row order and length match the matrix's
+                coordinate sidecar.
+            autoload: Whether to retrieve the sidecar if it is not cached locally.
+
+        Returns:
+            Range metadata indexed by ``chromosome:start-end:strand`` identities,
+            with one-based inclusive integer coordinates.
+
+        Raises:
+            recount3.errors.CompatibilityError: If the bundle does not contain
+                exactly one junction matrix.
+            recount3.errors.MissingRangesError: If exactly one sidecar matching
+                the matrix's project and junction format cannot be identified.
+            recount3.errors.RangesCoverageError: If required columns are missing,
+                row counts differ, or junction coordinates are duplicated.
+            ValueError: If coordinates are invalid.
+            recount3.errors.DownloadError: If sidecar retrieval fails.
+            OSError: If the cached sidecar cannot be read.
+        """
+        mm = self.filter(
+            resource_type="count_files_junctions", junction_extension="MM"
+        ).resources
+        rr = self.filter(
+            resource_type="count_files_junctions", junction_extension="RR"
+        ).resources
+        if len(mm) != 1:
+            raise errors.CompatibilityError(
+                "Each junction matrix needs its own project and RR sidecar."
             )
-        except ValueError as exc:
-            if load_errors:
-                first_url, first_exc = load_errors[0]
-                raise ValueError(
-                    "Failed to load any junction count matrix. "
-                    f"First error: {first_exc!r} (while loading {first_url})."
-                ) from exc
-            raise
+        rr = [
+            res
+            for res in rr
+            if _project_key(res) == _project_key(mm[0])
+            and _description_value(res, "junction_type")
+            == _description_value(mm[0], "junction_type")
+        ]
+        if len(rr) != 1:
+            raise errors.MissingRangesError(
+                "Expected exactly one matching RR junction coordinate resource."
+            )
+        res = rr[0]
+        if res.is_loaded() and isinstance(res.get_loaded(), pd.DataFrame):
+            frame = res.get_loaded()
+        else:
+            res.ensure_cached(download=autoload)
+            frame = pd.read_table(res._cached_path(), compression="infer")
+            res._cached_data = frame
+        frame = frame.rename(
+            columns={
+                "chromosome": "seqnames",
+                "chrom": "seqnames",
+                "chr": "seqnames",
+                "start": "starts",
+                "end": "ends",
+            }
+        ).copy()
+        if {"seqnames", "starts", "ends"} - set(frame):
+            raise errors.RangesCoverageError(
+                "RR file missing required columns."
+            )
+        if "strand" not in frame:
+            frame["strand"] = "*"
+        frame["strand"] = frame["strand"].replace({"?": "*"}).fillna("*")
+        if len(frame) != len(counts):
+            raise errors.RangesCoverageError(
+                f"RR row count {len(frame)} != MM feature count {len(counts)}."
+            )
+        _validate_coordinates(frame)
+        frame["starts"] = pd.to_numeric(frame["starts"]).astype("int64")
+        frame["ends"] = pd.to_numeric(frame["ends"]).astype("int64")
+        names = [
+            f"{seq}:{start}-{end}:{strand}"
+            for seq, start, end, strand in zip(
+                frame["seqnames"],
+                frame["starts"],
+                frame["ends"],
+                frame["strand"],
+            )
+        ]
+        if pd.Index(names).has_duplicates:
+            raise errors.RangesCoverageError(
+                "RR contains duplicate junction coordinates."
+            )
+        frame.index = names
+        return frame
 
     def _add_bigwig_urls(
         self,
@@ -2177,11 +2458,10 @@ class R3ResourceBundle:
 
         For each sample (identified by ``external_id`` in ``col_df``), this
         method constructs the recount3 mirror URL for its BigWig coverage file
-        by inspecting the bundle's count resources to infer ``organism``,
-        ``data_source``, and ``project``.
-
-        This matches the R reference behavior in ``create_rse_manual()``
-        where ``metadata$BigWigURL`` is populated via ``locate_url()``.
+        by matching each sample's ``study`` to a count resource. A bundle with
+        only one project supplies the project identity when ``study`` is absent.
+        Sample ``file_source`` metadata overrides the source when available;
+        each resource's configuration supplies the mirror base URL.
 
         Args:
           col_df: Sample metadata DataFrame with an ``external_id`` column.
@@ -2189,65 +2469,50 @@ class R3ResourceBundle:
         Returns:
           A copy of ``col_df`` with a ``BigWigURL`` column appended. If
           the necessary resource attributes cannot be inferred, the column
-          contains ``pd.NA``.
+          contains ``None`` for the affected samples.
         """
         out = col_df.copy()
-
-        if "external_id" not in out.columns:
-            out["BigWigURL"] = pd.NA
-            return out
-
         count_types = {"count_files_gene_or_exon", "count_files_junctions"}
-        organism = data_source = project = None
-        for res in self.resources:
-            desc = res.description
-            rt = getattr(desc, "resource_type", None)
-            if rt in count_types:
-                organism = getattr(desc, "organism", None)
-                data_source = getattr(desc, "data_source", None)
-                project = getattr(desc, "project", None)
-                if organism and data_source and project:
-                    break
-
-        if not (organism and data_source and project):
-            out["BigWigURL"] = pd.NA
-            return out
-
-        file_source_col = None
-        for col in out.columns:
-            if col.lower().endswith("file_source"):
-                file_source_col = col
-                break
-        if file_source_col is not None:
-            first_source = (
-                out[file_source_col].dropna().iloc[0]
-                if not out[file_source_col].dropna().empty
-                else None
-            )
-            if first_source and isinstance(first_source, str):
-                resolved = first_source.strip().rstrip("/").rsplit("/", 1)[-1]
-                if resolved:
-                    data_source = resolved
-
-        urls: list[str | None] = []
-        for ext_id in out["external_id"]:
-            ext_id_str = str(ext_id).strip()
-            if not ext_id_str or ext_id_str == "<NA>":
+        candidates = [
+            r
+            for r in self.resources
+            if getattr(r.description, "resource_type", None) in count_types
+        ]
+        urls = []
+        for _, row in out.iterrows():
+            study = row.get("study")
+            matching = [
+                r
+                for r in candidates
+                if pd.notna(study)
+                and _description_value(r, "project") == str(study)
+            ]
+            if not matching and len({_project_key(r) for r in candidates}) == 1:
+                matching = candidates[:1]
+            res = matching[0] if matching else None
+            external = row.get("external_id")
+            if res is None or pd.isna(external) or not str(external).strip():
                 urls.append(None)
                 continue
-            try:
-                urls.append(
-                    resource.build_url(
-                        "bigwig_files",
-                        organism=organism,
-                        data_source=data_source,
-                        project=project,
-                        sample=ext_id_str,
-                    )
-                )
-            except Exception:  # pylint: disable=broad-except
+            org, source, project = _project_key(res)
+            source_fields = [
+                c for c in out.columns if c.lower().endswith("file_source")
+            ]
+            if source_fields and isinstance(row[source_fields[0]], str):
+                source = row[source_fields[0]].rstrip("/").rsplit("/", 1)[-1]
+            if not all((org, source, project)):
                 urls.append(None)
-
+                continue
+            urls.append(
+                resource.build_url(
+                    "bigwig_files",
+                    organism=org,
+                    data_source=source,
+                    project=project,
+                    sample=str(external),
+                    config=res.config,
+                )
+            )
         out["BigWigURL"] = urls
         return out
 
@@ -2256,76 +2521,339 @@ class R3ResourceBundle:
         *,
         sample_ids: Sequence[str],
         autoload: bool = True,
+        metadata_join: str = "inner",
     ) -> pd.DataFrame:
-        """Merge available metadata tables and align rows to samples.
+        """Merge metadata within each project and align it to count samples.
 
-        1. Load each per-project metadata table.
-        2. Standardize column names and key fields.
-        3. Namespace non-key columns with the metadata table name.
-        4. Outer-merge all tables on ``rail_id``, ``external_id``, and
-            ``study``.
-        5. Align the merged rows to ``sample_ids``.
+        Empty tables are ignored when another nonempty table is available.
+        External and rail identifiers must define consistent sample mappings.
 
         Args:
-            sample_ids: Column names of the counts matrix to align to.
-            autoload: If True, load metadata resources on demand.
+            sample_ids: Count sample identifiers in the desired output order.
+            autoload: Whether to load metadata resources that are not already
+                in memory.
+            metadata_join: ``"inner"`` intersects nonempty tables per project;
+                ``"outer"`` retains every count sample with missing metadata
+                where no match exists.
 
         Returns:
-            A DataFrame indexed by ``sample_ids`` containing merged, namespaced
-            metadata.
-
-        The returned DataFrame columns are guaranteed to be unique.
+            Metadata indexed by selected count sample IDs, with namespaced columns
+            and column provenance in ``attrs``. A metadata-free bundle returns
+            only an ``external_id`` column for all requested samples.
 
         Raises:
-            ValueError: If metadata cannot be aligned to the requested samples.
+            ValueError: If the join policy is invalid, all supplied tables are
+                empty, identifiers conflict, table columns overlap, required
+                samples are absent, or unloaded resources cannot be autoloaded.
+            TypeError: If a loaded metadata resource is not a DataFrame.
+            recount3.errors.LoadError: If a metadata resource cannot be loaded.
+            recount3.errors.DownloadError: If metadata retrieval fails.
         """
-        sample_ids = [str(s) for s in sample_ids]
-        frames: list[pd.DataFrame] = []
-        provenance: dict[str, tuple[str, str]] = {}
-
-        for res, obj in self.only_metadata().iter_loaded(autoload=autoload):
-            if not isinstance(obj, pd.DataFrame):
+        if metadata_join not in ("inner", "outer"):
+            raise ValueError("metadata_join must be 'inner' or 'outer'.")
+        sample_ids = [str(x) for x in sample_ids]
+        groups = {}
+        provenance = {}
+        for res in self.only_metadata().resources:
+            if not res.is_loaded():
+                if not autoload:
+                    raise ValueError(
+                        f"Metadata resource is not loaded: {res.url}"
+                    )
+                res.load()
+            frame = res.get_loaded()
+            if not isinstance(frame, pd.DataFrame):
+                raise TypeError(
+                    f"Metadata resource is not a DataFrame: {res.url}"
+                )
+            if len(frame) == 0:
+                logging.warning("Dropping empty metadata table %s", res.url)
                 continue
-            origin = _metadata_origin(res)
-            standardized = _standardize_metadata_frame(obj)
-            namespaced, prov = _namespace_metadata_columns(
-                standardized,
-                origin=origin,
+            frame = _standardize_metadata_frame(frame)
+            frame, origin = _namespace_metadata_columns(
+                frame, origin=_metadata_origin(res)
             )
-            frames.append(namespaced)
-            provenance.update(prov)
-
-        if not frames:
-            out = pd.DataFrame(
-                index=sample_ids,
-                data={"external_id": sample_ids},
-            )
-            out.index.name = None
-            return _ensure_unique_columns(out, empty_prefix="col")
-
-        merged = _outer_merge_metadata_frames(frames)
-
-        align_key = _choose_alignment_key(sample_ids=sample_ids, merged=merged)
-        merged = _collapse_rows_by_key(merged, key=align_key)
-
-        if align_key not in merged.columns:
-            raise ValueError(
-                f"Cannot align metadata: missing alignment key {align_key!r}."
-            )
-
-        aligned = merged.set_index(align_key, drop=False).reindex(sample_ids)
-        aligned.index.name = None
-
-        if "external_id" not in aligned.columns:
-            aligned["external_id"] = sample_ids
-        elif aligned["external_id"].isna().any():
-            aligned["external_id"] = aligned["external_id"].fillna(
-                pd.Series(sample_ids, index=aligned.index)
-            )
-
-        aligned = _ensure_unique_columns(aligned, empty_prefix="col")
+            provenance.update(origin)
+            if frame.duplicated(list(_METADATA_MERGE_KEYS)).any():
+                raise ValueError(f"Duplicate sample metadata keys in {res.url}")
+            groups.setdefault(_project_key(res), []).append(frame)
+        if not groups:
+            result = pd.DataFrame({"external_id": sample_ids}, index=sample_ids)
+            if self.only_metadata().resources:
+                raise ValueError("All supplied metadata tables are empty.")
+            return result
+        merged_groups = []
+        for frames in groups.values():
+            identities = pd.concat(
+                [f[list(_METADATA_MERGE_KEYS)] for f in frames]
+            ).drop_duplicates()
+            for key, other in (
+                ("rail_id", "external_id"),
+                ("external_id", "rail_id"),
+            ):
+                if (
+                    identities.dropna(subset=[key, other])
+                    .groupby(key)[other]
+                    .nunique()
+                    > 1
+                ).any():
+                    raise ValueError(
+                        f"Conflicting {key}/{other} mappings in metadata."
+                    )
+            merged = frames[0]
+            for frame in frames[1:]:
+                overlap = set(merged.columns).intersection(frame.columns) - set(
+                    _METADATA_MERGE_KEYS
+                )
+                if overlap:
+                    raise ValueError(
+                        f"Repeated metadata table columns: {sorted(overlap)}"
+                    )
+                merged = pd.merge(
+                    merged,
+                    frame,
+                    on=list(_METADATA_MERGE_KEYS),
+                    how=metadata_join,
+                    sort=False,
+                    validate="one_to_one",
+                )
+            merged_groups.append(merged)
+        merged = pd.concat(merged_groups, ignore_index=True)
+        lookup = {}
+        for position, row in merged.iterrows():
+            for key in ("external_id", "rail_id"):
+                value = row[key]
+                if pd.notna(value):
+                    name = str(value)
+                    if name in lookup and lookup[name] != position:
+                        raise ValueError(
+                            f"Ambiguous sample identifier {name!r} in metadata."
+                        )
+                    lookup[name] = position
+        if metadata_join == "inner":
+            represented = {
+                lookup[name] for name in sample_ids if name in lookup
+            }
+            if len(represented) != len(merged):
+                raise ValueError(
+                    "Metadata contains samples missing from the counts matrix."
+                )
+        selected = [
+            name
+            for name in sample_ids
+            if name in lookup or metadata_join == "outer"
+        ]
+        positions = [lookup.get(name, -1) for name in selected]
+        aligned = merged.reindex(positions).copy()
+        aligned.index = selected
+        missing = aligned["external_id"].isna()
+        if missing.any():
+            if metadata_join == "inner":
+                raise ValueError(
+                    "Matched metadata rows have missing external_id values."
+                )
+            aligned.loc[missing, "external_id"] = pd.Series(
+                selected, index=selected
+            )[missing]
         aligned.attrs["recount3_metadata_provenance"] = provenance
         return aligned
+
+    def _prepare_experiment(
+        self,
+        *,
+        genomic_unit: str,
+        annotation_extension: str | None,
+        join_policy: str,
+        metadata_join: str,
+        autoload: bool,
+    ) -> tuple[
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame,
+        pd.DataFrame | None,
+        dict[str, Any],
+    ]:
+        """Prepare aligned counts, metadata, and provenance for either builder.
+
+        Resources are selected by genomic unit and annotation, then metadata is
+        merged within each project before combining count tables. Sample URLs use
+        each project's source. Duplicate feature occurrences retain their original
+        identifiers in row metadata while receiving unique output names.
+
+        Args:
+            genomic_unit: ``"gene"``, ``"exon"``, or ``"junction"``.
+            annotation_extension: Optional gene/exon annotation code to select.
+            join_policy: ``"inner"`` intersects features; ``"outer"`` unions
+                features and inserts zeros for structural absence.
+            metadata_join: ``"inner"`` intersects nonempty metadata tables within
+                each project; ``"outer"`` retains all count samples.
+            autoload: Whether to load missing count/metadata resources and retrieve
+                coordinate sidecars needed for multi-project junction alignment.
+
+        Returns:
+            A tuple containing counts, feature metadata, sample metadata, optional
+            aligned multi-project junction ranges, and experiment provenance.
+            Gene/exon ranges are resolved separately by the ranged builder.
+
+        Raises:
+            ValueError: If no counts match, count values or sample mappings are
+                invalid, sample names repeat, or a join policy is unsupported.
+            recount3.errors.CompatibilityError: If selected organisms,
+                annotations, junction formats, or feature identities conflict.
+            recount3.errors.RangesError: If multi-project junctions cannot be
+                aligned with their coordinate sidecars.
+            recount3.errors.LoadError: If a required metadata resource cannot load.
+            recount3.errors.DownloadError: If required resource retrieval fails.
+        """
+        unit = _utils._normalize_genomic_unit(genomic_unit)
+        if metadata_join not in ("inner", "outer"):
+            raise ValueError("metadata_join must be 'inner' or 'outer'.")
+        if unit == "junction":
+            selected = self.filter(
+                resource_type="count_files_junctions", junction_extension="MM"
+            )
+        else:
+            selected = self.filter(
+                resource_type="count_files_gene_or_exon", genomic_unit=unit
+            )
+        if annotation_extension and unit != "junction":
+            selected = selected.filter(
+                annotation_extension=annotation_extension
+            )
+        if not selected.resources:
+            raise ValueError(
+                "No count-file resources available for requested annotation/unit."
+            )
+        feature_key = (
+            "junction_type" if unit == "junction" else "annotation_extension"
+        )
+        signatures = {
+            (
+                _description_value(res, "organism"),
+                _description_value(res, feature_key),
+            )
+            for res in selected.resources
+        }
+        if len(signatures) > 1:
+            raise errors.CompatibilityError(
+                "Ambiguous annotation, organism or junction format; "
+                "select compatible counts explicitly."
+            )
+        annotation = next(iter(signatures))[1] if unit != "junction" else None
+        keys = list(dict.fromkeys(_project_key(r) for r in selected.resources))
+        frames, columns, range_frames = [], [], []
+        used_resources = []
+        for key in keys:
+            selected_counts = [
+                r for r in selected.resources if _project_key(r) == key
+            ]
+            related = [
+                res
+                for res in self.resources
+                if _project_key(res) == key
+                and getattr(res.description, "resource_type", None)
+                in {"metadata_files", "count_files_junctions"}
+                and res not in selected_counts
+                and getattr(res.description, "junction_extension", None) != "MM"
+            ]
+            group = R3ResourceBundle(selected_counts + related)
+            used_resources.extend(group.resources)
+            for res in group.only_metadata().resources:
+                if not res.is_loaded():
+                    if not autoload:
+                        raise ValueError(
+                            f"Metadata resource is not loaded: {res.url}"
+                        )
+                    res.load()
+            counts = group._stack_counts_for(
+                genomic_unit=unit, join_policy=join_policy, autoload=autoload
+            )
+            col = group._normalize_sample_metadata(
+                sample_ids=list(counts.columns),
+                autoload=autoload,
+                metadata_join=metadata_join,
+            )
+            counts = counts.loc[:, col.index]
+            counts, col = _maybe_relabel_counts_columns_to_external_id(
+                counts, col
+            )
+            col = group._add_bigwig_urls(col)
+            if unit == "junction" and len(keys) > 1:
+                ranges = group._junction_ranges(counts, autoload=autoload)
+                counts.index = ranges.index
+                range_frames.append(ranges)
+            frames.append(counts)
+            columns.append(col)
+        counts = _merge_count_frames(frames, join_policy)
+        if counts.columns.has_duplicates:
+            raise ValueError(
+                "Duplicate sample identifiers across selected count resources."
+            )
+        col = pd.concat(columns, axis=0)
+        col.attrs["recount3_metadata_provenance"] = {
+            key: value
+            for frame in columns
+            for key, value in frame.attrs.get(
+                "recount3_metadata_provenance", {}
+            ).items()
+        }
+        original_ids = list(counts.index)
+        if counts.index.has_duplicates:
+            logging.warning(
+                "Counts contain duplicate feature IDs; making row names "
+                "unique and preserving feature_id."
+            )
+            counts.index = _make_unique_names(original_ids)
+        rows = pd.DataFrame({"feature_id": original_ids}, index=counts.index)
+        from recount3.version import __version__
+
+        def collapse(values: Iterable[str | None]) -> str | list[str]:
+            """Deduplicate provenance values and simplify a singleton to a string.
+
+            Args:
+                values: Ordered provenance values; ``None`` entries are omitted.
+
+            Returns:
+                The single distinct value, or a list of distinct values in their
+                original order. An empty input produces an empty list.
+            """
+            values = list(dict.fromkeys(x for x in values if x is not None))
+            return values[0] if len(values) == 1 else values
+
+        metadata = {
+            "time_created": datetime.now(timezone.utc).isoformat(),
+            "recount3_version": __version__,
+            "project": collapse(key[2] for key in keys),
+            "organism": collapse(key[0] for key in keys),
+            "project_home": collapse(
+                f"data_sources/{key[1]}" for key in keys if key[1]
+            ),
+            "type": unit,
+            "annotation": annotation,
+            "resource_urls": list(
+                dict.fromkeys(
+                    res.url
+                    for res in used_resources
+                    if isinstance(res.url, str)
+                )
+            ),
+            "metadata_columns": col.attrs["recount3_metadata_provenance"],
+            "metadata_join": metadata_join,
+            "join_policy": join_policy,
+            "recount3_url": collapse(
+                (res.config or resource.default_config()).base_url
+                for res in selected.resources
+                if isinstance(res, resource.R3Resource)
+            ),
+        }
+        if unit == "junction":
+            metadata["jxn_format"] = next(iter(signatures))[1]
+        ranges = pd.concat(range_frames) if range_frames else None
+        if ranges is not None:
+            ranges = ranges.loc[~ranges.index.duplicated()].reindex(
+                counts.index
+            )
+        return counts, rows, col, ranges, metadata
 
     def to_summarized_experiment(
         self,
@@ -2334,15 +2862,16 @@ class R3ResourceBundle:
         annotation_extension: Optional[str] = None,
         assay_name: str = "raw_counts",
         join_policy: str = "inner",
+        metadata_join: str = "inner",
         autoload: bool = True,
     ) -> summarizedexperiment.SummarizedExperiment:
         """Build a BiocPy :class:`SummarizedExperiment` from this bundle.
 
         This method stacks compatible count matrices, merges available
         sample metadata, and constructs a BiocPy
-        :class:`SummarizedExperiment` using a compatibility-aware
-        constructor that supports multiple versions of the
-        :mod:`summarizedexperiment` package.
+        :class:`SummarizedExperiment` using the public, validated
+        :mod:`summarizedexperiment` constructor (version 0.7.1 or newer).
+        Sparse count inputs remain sparse in the assay.
 
         Args:
           genomic_unit: Genomic unit to summarize, such as ``"gene"``,
@@ -2351,77 +2880,46 @@ class R3ResourceBundle:
             exon summarizations (for example, ``"G026"``). When provided
             and ``genomic_unit`` is gene or exon, only count resources
             with matching annotation are used.
-          assay_name: Name assigned to the coverage-sum assay within the
-            :class:`SummarizedExperiment`. (default: ``"raw_counts"``).
-          join_policy: Join policy used when concatenating counts across
-            resources.
-          autoload: If :data:`True`, load resources when needed.
+          assay_name: Count assay name. The default ``"raw_counts"`` becomes
+            ``"counts"`` for junction experiments.
+          join_policy: ``"inner"`` intersects feature rows; ``"outer"``
+            unions them and fills only newly introduced rows with zero.
+          metadata_join: ``"inner"`` selects the intersection of nonempty
+            metadata tables within each project. ``"outer"`` retains all count samples.
+          autoload: If :data:`True`, load resources when needed. If False,
+            count and metadata resources must already be loaded.
 
         Returns:
           A BiocPy :class:`SummarizedExperiment` instance.
 
         Raises:
           ImportError: If BiocPy packages are not installed.
-          ValueError: If no counts are found or shapes are inconsistent.
+          ValueError: If counts, sample mappings, dimensions, or join policies
+            are invalid, or no selected counts are available.
+          recount3.errors.CompatibilityError: If selected resources or feature
+            identities cannot be combined unambiguously.
+          recount3.errors.RangesError: If multi-project junction sidecars cannot
+            supply valid coordinate identities.
+          recount3.errors.LoadError: If required metadata cannot be loaded.
+          recount3.errors.DownloadError: If required resource retrieval fails.
           TypeError: If the underlying
-            :class:`SummarizedExperiment` constructor rejects all
-            compatibility variants.
+            :class:`SummarizedExperiment` constructor rejects input types.
         """
-        working = self
-        if genomic_unit in {"gene", "exon"} and annotation_extension:
-            working = self.filter(
-                resource_type="count_files_gene_or_exon"
-            ).filter(
-                genomic_unit=genomic_unit,
-                annotation_extension=annotation_extension,
-            )
-
-        counts_df = working._stack_counts_for(
+        counts, rows, columns, _, metadata = self._prepare_experiment(
             genomic_unit=genomic_unit,
+            annotation_extension=annotation_extension,
             join_policy=join_policy,
+            metadata_join=metadata_join,
             autoload=autoload,
         )
-
-        counts_df.index = [str(i) for i in counts_df.index]
-        counts_df.columns = [str(c) for c in counts_df.columns]
-
-        col_df = self._normalize_sample_metadata(
-            sample_ids=list(counts_df.columns),
-            autoload=autoload,
-        )
-        counts_df, col_df = _maybe_relabel_counts_columns_to_external_id(
-            counts_df,
-            col_df,
-        )
-
-        col_df = self._add_bigwig_urls(col_df)
-
-        original_feature_ids = list(counts_df.index)
-        dup_count = int(pd.Index(original_feature_ids).duplicated().sum())
-
-        row_names = original_feature_ids
-        if dup_count:
-            logging.warning(
-                "Counts contain %d duplicate feature IDs; generating "
-                "unique row_names and preserving originals in "
-                "row_data['feature_id'].",
-                dup_count,
-            )
-            row_names = _make_unique_names(original_feature_ids)
-
-        counts_df = counts_df.copy()
-        counts_df.index = row_names
-
-        row_df = pd.DataFrame(
-            {"feature_id": original_feature_ids},
-            index=row_names,
-        )
-
         return _construct_summarized_experiment(
-            counts_df=counts_df,
-            row_df=row_df,
-            col_df=col_df,
-            assay_name=_default_assay_name(genomic_unit, assay_name),
+            counts_df=counts,
+            row_df=rows,
+            col_df=columns,
+            assay_name=_default_assay_name(
+                _utils._normalize_genomic_unit(genomic_unit), assay_name
+            ),
+            metadata=metadata,
         )
 
     def to_ranged_summarized_experiment(
@@ -2432,6 +2930,7 @@ class R3ResourceBundle:
         prefer_rr_junction_coordinates: bool = True,
         assay_name: str = "raw_counts",
         join_policy: str = "inner",
+        metadata_join: str = "inner",
         autoload: bool = True,
         allow_fallback_to_se: bool = False,
     ) -> (
@@ -2458,16 +2957,20 @@ class R3ResourceBundle:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
           annotation_extension: Annotation code for gene/exon
             assays, if desired.
-          prefer_rr_junction_coordinates: If :data:`True`, prefer RR junction
-            files for coordinate definitions when they are available.
-          assay_name: Name assigned to the coverage-sum assay within the
-            :class:`SummarizedExperiment` (default: ``"raw_counts"``).
-          join_policy: Join policy across projects when stacking.
-          autoload: If :data:`True`, download and load resources as they
-            are needed, including the annotation that has to be read to
-            confirm which GTF supplies the requested feature type. If
-            :data:`False`, only already-cached resources are used and
-            nothing is fetched.
+          prefer_rr_junction_coordinates: Whether to use RR sidecars for junction
+            ranges. Junction ranges require these sidecars; disabling this
+            option raises a range error or uses an explicitly enabled SE
+            fallback. Ignored for gene/exon experiments.
+          assay_name: Count assay name. The default ``"raw_counts"`` becomes
+            ``"counts"`` for junction experiments.
+          join_policy: ``"inner"`` intersects features across projects; ``"outer"``
+            unions them and inserts zeros only for structurally absent features.
+          metadata_join: ``"inner"`` intersects nonempty metadata tables
+            within each project. ``"outer"`` retains all count
+            samples. This is independent of the feature ``join_policy``.
+          autoload: Whether to download and load resources as needed. With
+            :data:`False`, counts and metadata must already be loaded and
+            range files must be cached locally; no resources are retrieved.
           allow_fallback_to_se: If :data:`True`, return a plain
             :class:`SummarizedExperiment` instead of raising when genomic
             ranges cannot be derived. That object carries no genomic
@@ -2476,7 +2979,8 @@ class R3ResourceBundle:
             operations, coordinate-based subsetting -- will not work on
             it. It only changes what is returned on failure: it does not
             retry a failed retrieval and does not repair a mismatched
-            annotation.
+            annotation. Failures in count or sample preparation, including
+            multi-project junction alignment, always propagate.
 
         Returns:
           A :class:`RangedSummarizedExperiment` instance, or a plain
@@ -2485,290 +2989,140 @@ class R3ResourceBundle:
 
         Raises:
           ImportError: If BiocPy packages are not installed.
-          ValueError: If counts are missing or ranges cannot be
-            determined and ``allow_fallback_to_se`` is :data:`False`.
+          ValueError: If counts, sample mappings, dimensions, or join policies
+            are invalid, or no selected counts are available.
+          recount3.errors.CompatibilityError: If selected resources or feature
+            identities cannot be combined unambiguously.
+          recount3.errors.RangesError: If ranges cannot be resolved and fallback
+            is disabled, or multi-project junction alignment fails even with
+            fallback enabled.
+          recount3.errors.LoadError: If required metadata cannot be loaded.
+          recount3.errors.DownloadError: If retrieval fails during count or
+            metadata preparation.
           TypeError: If the
-            :class:`RangedSummarizedExperiment` constructor rejects all
-            compatibility variants.
+            :class:`RangedSummarizedExperiment` constructor rejects input types.
         """
-        last_ranges_error: Exception | None = None
-        ranges_source = "annotation"
-
-        working = self
-        counts_df = working._stack_counts_for(
-            genomic_unit=genomic_unit,
+        unit = _utils._normalize_genomic_unit(genomic_unit)
+        counts, rows, columns, ranges, metadata = self._prepare_experiment(
+            genomic_unit=unit,
+            annotation_extension=annotation_extension,
             join_policy=join_policy,
+            metadata_join=metadata_join,
             autoload=autoload,
         )
-
-        counts_df.index = [str(i) for i in counts_df.index]
-        counts_df.columns = [str(c) for c in counts_df.columns]
-
-        col_df = self._normalize_sample_metadata(
-            sample_ids=list(counts_df.columns),
-            autoload=autoload,
-        )
-        counts_df, col_df = _maybe_relabel_counts_columns_to_external_id(
-            counts_df,
-            col_df,
-        )
-
-        col_df = self._add_bigwig_urls(col_df)
-
-        original_feature_ids = list(counts_df.index)
-        dup_count = int(pd.Index(original_feature_ids).duplicated().sum())
-
-        row_names = original_feature_ids
-        if dup_count:
-            logging.warning(
-                "Counts contain %d duplicate feature IDs; generating "
-                "unique row_names and preserving originals in "
-                "row_data['feature_id'].",
-                dup_count,
-            )
-            row_names = _make_unique_names(original_feature_ids)
-
-        counts_df = counts_df.copy()
-        counts_df.index = row_names
-
-        row_data_df = pd.DataFrame(
-            {"feature_id": original_feature_ids},
-            index=row_names,
-        )
-
-        feature_ids = original_feature_ids
-
-        ranges_df: Optional[pd.DataFrame] = None
-
-        if genomic_unit in {"gene", "exon"}:
-            gtf_res = _select_gtf_resource_for_unit(
-                self,
-                genomic_unit=genomic_unit,
-                annotation_extension=annotation_extension,
-                autoload=autoload,
-            )
-            if gtf_res is not None:
-                try:
-                    gtf_res.ensure_cached(download=autoload)
-                    gtf = _read_gtf_dataframe(gtf_res)
-                    feature_kind = "gene" if genomic_unit == "gene" else "exon"
-                    ranges = _ranges_from_gtf(
-                        gtf,
-                        feature_kind=feature_kind,
-                    )
-                    ranges = _dedupe_ranges_on_feature_id(ranges)
-                    idxed = _align_ranges_to_features(
-                        ranges, feature_ids=feature_ids
-                    )
-                    missing_mask = (
-                        idxed["seqnames"].isna()
-                        | idxed["starts"].isna()
-                        | idxed["ends"].isna()
-                        | idxed["strand"].isna()
-                    )
-                    if missing_mask.any():
-                        missing_ids = [
-                            str(feature_ids[i])
-                            for i, m in enumerate(missing_mask)
-                            if m
-                        ][:10]
-                        raise errors.RangesCoverageError(
-                            "Annotation does not contain ranges for some "
-                            "feature IDs present in the counts matrix. "
-                            "Example missing feature_ids: "
-                            f"{missing_ids}. This usually indicates an "
-                            "annotation mismatch; try setting "
-                            "annotation_extension to match the counts "
-                            "resource."
-                        )
-
-                    ranges_df = idxed[
-                        ["seqnames", "starts", "ends", "strand"]
-                    ].copy()
-                    ranges_df.index = row_names
-                    enrich_cols = [
-                        col
-                        for col in ranges.columns
-                        if col
-                        not in {
-                            "seqnames",
-                            "starts",
-                            "ends",
-                            "strand",
-                            "feature_id",
-                        }
-                    ]
-
-                    base_cols = ["seqnames", "starts", "ends", "strand"]
-                    ranges_df = idxed[base_cols + enrich_cols].copy()
-                    ranges_df.index = row_names
-
-                    if enrich_cols:  # pragma: no branch
-                        row_data_df = row_data_df.join(ranges_df[enrich_cols])
-                except Exception as exc:  # pylint: disable=broad-except
-                    logging.info(
-                        "Could not derive %s ranges from annotation %s: %s "
-                        "(%r).",
-                        genomic_unit,
-                        gtf_res.url,
-                        _classify_ranges_failure(exc),
-                        exc,
-                    )
-                    last_ranges_error = exc
-
-        elif genomic_unit == "junction" and prefer_rr_junction_coordinates:
-            try:
-                n_features, _ = counts_df.shape
-
-                rr_candidates = (
-                    self.filter(resource_type="count_files_junctions")
-                    .filter(junction_extension="RR")
-                    .resources
-                )
-                rr_res = rr_candidates[0] if rr_candidates else None
-                if rr_res is None:
-                    raise errors.MissingRangesError(
-                        "No RR junction coordinate resource found in bundle."
-                    )
-
-                if autoload:
-                    rr_res.download(path=None, cache_mode="enable")
-
-                rr = _read_rr_table(rr_res)
-
-                std = rr.rename(
-                    columns={
-                        "chromosome": "seqnames",
-                        "chrom": "seqnames",
-                        "chr": "seqnames",
-                        "start": "starts",
-                        "end": "ends",
-                    }
-                ).copy()
-
-                required = {"seqnames", "starts", "ends"}
-                missing = required.difference(std.columns)
-                if missing:
-                    raise ValueError(
-                        f"RR file missing required columns: {sorted(missing)}"
-                    )
-
-                if "strand" not in std.columns:
-                    std["strand"] = "*"
-
-                std["seqnames"] = std["seqnames"].astype(str)
-                std["strand"] = (
-                    std["strand"].astype(str).replace({"?": "*"}).fillna("*")
-                )
-                std["starts"] = pd.to_numeric(
-                    std["starts"], errors="raise"
-                ).astype(int)
-                std["ends"] = pd.to_numeric(std["ends"], errors="raise").astype(
-                    int
-                )
-
-                if len(std) != n_features:
-                    raise errors.RangesCoverageError(
-                        f"RR row count {len(std)} != MM feature count "
-                        f"{n_features}; cannot build junction ranges."
-                    )
-
-                id_candidates = ("junction_id", "jxn_id", "jid", "id", "name")
-                id_col = next(
-                    (c for c in id_candidates if c in std.columns), None
-                )
-
-                if id_col is not None:
-                    row_names_from_rr = std[id_col].astype(str).tolist()
-                else:
-                    row_names_from_rr = [
-                        f"{seq}:{start}-{end}:{strand}"
-                        for seq, start, end, strand in zip(
-                            std["seqnames"],
-                            std["starts"],
-                            std["ends"],
-                            std["strand"],
-                        )
-                    ]
-
-                if pd.Index(row_names_from_rr).duplicated().any():
-                    row_names_from_rr = _make_unique_names(row_names_from_rr)
-
-                counts_df = counts_df.copy()
-                counts_df.index = row_names_from_rr
-
-                ranges_df = std[["seqnames", "starts", "ends", "strand"]].copy()
-                ranges_df.index = row_names_from_rr
-
-                row_data_df = pd.DataFrame(
-                    {
-                        "feature_id": row_names_from_rr,
-                        "mm_row": original_feature_ids,
-                    },
-                    index=row_names_from_rr,
-                )
-
-            except Exception as exc:  # pylint: disable=broad-except
-                logging.info(
-                    "Could not derive junction ranges: %s (%r).",
-                    _classify_ranges_failure(exc, source=_RR_SOURCE),
-                    exc,
-                )
-                last_ranges_error = exc
-                ranges_source = _RR_SOURCE
-                ranges_df = None
-
-        if ranges_df is None:
-            if (
-                genomic_unit == "junction"
-                and not prefer_rr_junction_coordinates
-                and last_ranges_error is None
-            ):
-                reason = (
-                    "junction ranges come from the RR coordinate file and "
-                    "prefer_rr_junction_coordinates is False"
-                )
-            else:
-                reason = _classify_ranges_failure(
-                    last_ranges_error, source=ranges_source
-                )
-
-            if allow_fallback_to_se:
-                logging.warning(
-                    "Falling back to a plain SummarizedExperiment for %s "
-                    "because %s. The returned object carries no genomic "
-                    "ranges, so operations that require a "
-                    "RangedSummarizedExperiment will not work on it.",
-                    genomic_unit,
-                    reason,
-                )
-                return self.to_summarized_experiment(
-                    genomic_unit=genomic_unit,
-                    annotation_extension=annotation_extension,
-                    assay_name=assay_name,
-                    join_policy=join_policy,
+        try:
+            if unit in {"gene", "exon"}:
+                annotation = metadata["annotation"]
+                annotations = self
+                if isinstance(metadata["organism"], str):
+                    annotations = self.filter(organism=metadata["organism"])
+                selected = _select_gtf_resource_for_unit(
+                    annotations,
+                    genomic_unit=unit,
+                    annotation_extension=annotation,
                     autoload=autoload,
                 )
-            message = (
-                "Could not derive genomic ranges for the requested object "
-                f"because {reason}. Pass allow_fallback_to_se=True to "
-                "receive a plain SummarizedExperiment instead; that object "
-                "has no genomic ranges and cannot be used where a "
-                "RangedSummarizedExperiment is required, and it neither "
-                "retries the retrieval nor repairs a mismatch between the "
-                "counts and the ranges."
+                if selected is None:
+                    raise errors.MissingRangesError(
+                        "No matching annotation resource is available."
+                    )
+                selected.ensure_cached(download=autoload)
+                if selected.url not in metadata["resource_urls"]:
+                    metadata["resource_urls"].append(selected.url)
+                path = selected._cached_path()
+                stat = path.stat()
+                cache_key = (
+                    str(path),
+                    stat.st_size,
+                    stat.st_mtime_ns,
+                    unit,
+                    tuple(rows["feature_id"]),
+                )
+                if (
+                    self._range_cache is not None
+                    and self._range_cache[0] == cache_key
+                ):
+                    aligned = self._range_cache[1]
+                else:
+                    gtf = _read_gtf_dataframe(selected)
+                    features = _ranges_from_gtf(gtf, feature_kind=unit)
+                    del gtf
+                    aligned = _align_ranges_to_features(
+                        features, feature_ids=list(rows["feature_id"])
+                    )
+                    aligned.index = counts.index
+                    self._range_cache = (cache_key, aligned)
+                if (
+                    aligned[["seqnames", "starts", "ends", "strand"]]
+                    .isna()
+                    .any()
+                    .any()
+                ):
+                    raise errors.RangesCoverageError(
+                        "Annotation does not contain ranges for all count feature IDs."
+                    )
+                ranges = aligned
+            elif prefer_rr_junction_coordinates:
+                if ranges is None:
+                    ranges = self._junction_ranges(counts, autoload=autoload)
+                    original = list(rows["feature_id"])
+                    counts.index = ranges.index
+                    rows = pd.DataFrame(
+                        {"feature_id": list(ranges.index), "mm_row": original},
+                        index=ranges.index,
+                    )
+            else:
+                raise errors.MissingRangesError(
+                    "prefer_rr_junction_coordinates is False; junction "
+                    "ranges require RR coordinates."
+                )
+            extra = ranges.drop(
+                columns=["seqnames", "starts", "ends", "strand", "feature_id"],
+                errors="ignore",
             )
-            if last_ranges_error is not None:
-                raise errors.RangesError(message) from last_ranges_error
-            raise errors.RangesError(message)
-
-        return _construct_ranged_summarized_experiment(
-            counts_df=counts_df,
-            row_df=row_data_df,
-            col_df=col_df,
-            ranges_df=ranges_df,
-            assay_name=_default_assay_name(genomic_unit, assay_name),
-        )
+            rows = rows.join(extra)
+            return _construct_ranged_summarized_experiment(
+                counts_df=counts,
+                row_df=rows,
+                col_df=columns,
+                ranges_df=ranges,
+                assay_name=_default_assay_name(unit, assay_name),
+                metadata=metadata,
+            )
+        except (
+            errors.RangesError,
+            errors.DownloadError,
+            errors.LoadError,
+            ValueError,
+            OSError,
+        ) as exc:
+            if not allow_fallback_to_se:
+                reason = _classify_ranges_failure(
+                    exc,
+                    source=_RR_SOURCE if unit == "junction" else "annotation",
+                )
+                raise errors.RangesError(
+                    f"Could not derive genomic ranges: {reason}. "
+                    "Pass allow_fallback_to_se=True to receive a plain "
+                    "SummarizedExperiment with no genomic ranges; this neither "
+                    "retries retrieval nor repairs a mismatched annotation."
+                ) from exc
+            logging.warning(
+                "Falling back to a plain SummarizedExperiment with no genomic ranges: %s (%s)",
+                _classify_ranges_failure(
+                    exc,
+                    source=_RR_SOURCE if unit == "junction" else "annotation",
+                ),
+                exc,
+            )
+            metadata["ranges_error"] = str(exc)
+            return _construct_summarized_experiment(
+                counts_df=counts,
+                row_df=rows,
+                col_df=columns,
+                assay_name=_default_assay_name(unit, assay_name),
+                metadata=metadata,
+            )
 
     def download(
         self,

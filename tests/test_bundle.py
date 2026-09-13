@@ -46,6 +46,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+import scipy.sparse
 
 import recount3._utils as _utils_module
 import recount3.bundle as bmod
@@ -154,6 +155,7 @@ def _mock_resource(
 ) -> MagicMock:
     """Return a MagicMock shaped like an R3Resource."""
     res = MagicMock(spec=R3Resource)
+    res.config = None
     res.url = url
     desc = MagicMock()
     desc.resource_type = resource_type
@@ -608,13 +610,13 @@ class TestCoerceGtfPhase:
 
 
 class TestCoerceGtfBpLength:
-    def test_dot_score_returns_width(self) -> None:
+    def test_dot_score_preserves_missing_length(self) -> None:
         score = pd.Series([".", ".", "."])
         starts = pd.Series([1, 100, 200])
         ends = pd.Series([10, 110, 210])
         result = _coerce_gtf_bp_length(score, starts=starts, ends=ends)
-        assert result.iloc[0] == 10  # 10 - 1 + 1
-        assert result.iloc[1] == 11  # 110 - 100 + 1
+        assert pd.isna(result.iloc[0])
+        assert pd.isna(result.iloc[1])
 
     def test_score_matches_width_uses_score(self) -> None:
         starts = pd.Series([1, 1, 1])
@@ -629,15 +631,15 @@ class TestCoerceGtfBpLength:
         ends = pd.Series([10, 20])
         score = pd.Series(["999", "999"])
         result = _coerce_gtf_bp_length(score, starts=starts, ends=ends)
-        assert int(result.iloc[0]) == 10  # 10 - 1 + 1
-        assert int(result.iloc[1]) == 20  # 20 - 1 + 1
+        assert int(result.iloc[0]) == 999
+        assert int(result.iloc[1]) == 999
 
     def test_score_none_comparable(self) -> None:
         starts = pd.Series([5])
         ends = pd.Series([14])
         score = pd.Series(["."])
         result = _coerce_gtf_bp_length(score, starts=starts, ends=ends)
-        assert int(result.iloc[0]) == 10
+        assert pd.isna(result.iloc[0])
 
 
 class TestStripEnsemblVersion:
@@ -815,7 +817,7 @@ class TestRangesFromGtf:
         feat_id = str(result["feature_id"].iloc[0])
         assert "chr1" in feat_id
 
-    def test_duplicate_gene_ids_same_coords_dropped(
+    def test_duplicate_gene_ids_same_coords_preserved(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         gtf = pd.DataFrame(
@@ -846,7 +848,7 @@ class TestRangesFromGtf:
         )
         with caplog.at_level(logging.INFO):
             result = _ranges_from_gtf(gtf, feature_kind="gene")
-        assert len(result) == 1
+        assert len(result) == 2
 
     def test_duplicate_gene_ids_conflicting_coords_raises(self) -> None:
         gtf = pd.DataFrame(
@@ -1047,7 +1049,7 @@ class TestAnnotationCachePreparation:
                 bundle, genomic_unit="gene", annotation_extension="G026"
             )
         assert picked is res
-        assert res._cached_path().exists()
+        assert not res._cached_path().exists()  # Selection needs no file I/O.
         assert _warnings(caplog) == []
 
     def test_selection_on_a_warm_cache_issues_no_request(
@@ -1136,8 +1138,7 @@ class TestAnnotationCachePreparation:
         # Unusable, but still the best-ranked candidate on offer.
         assert picked is res
         messages = _warnings(caplog)
-        assert len(messages) == 1
-        assert "could not inspect" in messages[0]
+        assert messages == []  # Selection uses the unambiguous descriptor.
 
     def test_corrupt_cache_entry_is_reported_as_a_parse_failure(
         self, local_config: Config
@@ -1327,8 +1328,11 @@ class TestToGenomicRanges:
             _utils_module, "get_genomicranges_class", return_value=mock_gr_cls
         ):
             result = _to_genomic_ranges(ranges_df)
-        assert result is mock_instance
-        mock_gr_cls.from_pandas.assert_called_once_with(ranges_df)
+        assert result is mock_instance.set_names.return_value
+        pd.testing.assert_frame_equal(
+            mock_gr_cls.from_pandas.call_args.args[0],
+            ranges_df.reset_index(drop=True),
+        )
 
 
 @pytest.mark.requires_biocpy
@@ -1343,15 +1347,14 @@ class TestConstructSummarizedExperiment:
                 assay_name="counts",
             )
 
-    def test_raises_empty_assay(self) -> None:
-        counts = pd.DataFrame()
-        with pytest.raises(ValueError, match="Empty assay"):
-            _construct_summarized_experiment(
-                counts_df=counts,
-                row_df=pd.DataFrame(),
-                col_df=pd.DataFrame(),
-                assay_name="counts",
-            )
+    def test_empty_assay_is_valid(self) -> None:
+        result = _construct_summarized_experiment(
+            counts_df=pd.DataFrame(),
+            row_df=pd.DataFrame(),
+            col_df=pd.DataFrame(),
+            assay_name="counts",
+        )
+        assert result.shape == (0, 0)
 
     def test_raises_non_numeric_values(self) -> None:
         counts = pd.DataFrame({"s1": ["abc", "def"]}, index=["g1", "g2"])
@@ -1414,15 +1417,17 @@ class TestConstructRangedSummarizedExperiment:
                 assay_name="raw",
             )
 
-    def test_raises_empty_assay(self) -> None:
-        with pytest.raises(ValueError, match="Empty assay"):
-            _construct_ranged_summarized_experiment(
-                counts_df=pd.DataFrame(),
-                row_df=pd.DataFrame(),
-                col_df=pd.DataFrame(),
-                ranges_df=pd.DataFrame(),
-                assay_name="raw",
-            )
+    def test_empty_assay_is_valid_with_empty_ranges(self) -> None:
+        result = _construct_ranged_summarized_experiment(
+            counts_df=pd.DataFrame(),
+            row_df=pd.DataFrame(),
+            col_df=pd.DataFrame(),
+            ranges_df=pd.DataFrame(
+                columns=["seqnames", "starts", "ends", "strand"]
+            ),
+            assay_name="counts",
+        )
+        assert result.shape == (0, 0)
 
     def test_raises_missing_range_columns(self) -> None:
         counts = _gene_df()
@@ -2165,7 +2170,9 @@ class TestR3ResourceBundleStackCountsFor:
         res = _mock_resource("count_files_gene_or_exon", genomic_unit="gene")
         res.load.side_effect = RuntimeError("load failed")
         b = R3ResourceBundle(resources=[res])
-        with pytest.raises(ValueError, match="Failed to load any gene/exon"):
+        with pytest.raises(
+            ValueError, match="Failed to load requested count matrix"
+        ):
             b._stack_counts_for(genomic_unit="gene", autoload=True)
 
     def test_raises_with_load_errors_junction(self) -> None:
@@ -2176,7 +2183,9 @@ class TestR3ResourceBundleStackCountsFor:
         )
         res.load.side_effect = RuntimeError("load failed")
         b = R3ResourceBundle(resources=[res])
-        with pytest.raises(ValueError, match="Failed to load any junction"):
+        with pytest.raises(
+            ValueError, match="Failed to load requested count matrix"
+        ):
             b._stack_counts_for(genomic_unit="junction", autoload=True)
 
 
@@ -2216,7 +2225,9 @@ class TestNormalizeSampleMetadata:
             "metadata_files", loaded_data=meta_df, table_name="recount_qc"
         )
         b = R3ResourceBundle(resources=[res])
-        result = b._normalize_sample_metadata(sample_ids=["1", "SRR002"])
+        result = b._normalize_sample_metadata(
+            sample_ids=["1", "SRR002"], metadata_join="outer"
+        )
         assert result["external_id"].notna().all()
 
     def test_provenance_stored_in_attrs(self) -> None:
@@ -2381,7 +2392,11 @@ class TestToRangedSummarizedExperiment:
 
     @pytest.mark.requires_biocpy
     def test_junction_with_rr_coordinates(self, tmp_path: Path) -> None:
-        rr_content = "seqnames\tstarts\tends\tstrand\tjunction_id\nchr1\t1\t100\t+\tJX001\nchr1\t200\t300\t+\tJX002\n"
+        rr_content = (
+            "seqnames\tstarts\tends\tstrand\tjunction_id\n"
+            "chr1\t1\t100\t+\tJX001\n"
+            "chr1\t200\t300\t+\tJX002\n"
+        )
         rr_gz = tmp_path / "jxn.RR.gz"
         with gzip.open(rr_gz, "wt") as f:
             f.write(rr_content)
@@ -2403,6 +2418,7 @@ class TestToRangedSummarizedExperiment:
         desc_rr.resource_type = "count_files_junctions"
         desc_rr.url_path.return_value = "jxn/RR.gz"
         desc_rr.junction_extension = "RR"
+        desc_rr.junction_type = "ALL"
         desc_rr.junction_type = "ALL"
         res_rr.description = desc_rr
         res_rr.url = "http://example.com/jxn/RR.gz"
@@ -2435,6 +2451,7 @@ class TestToRangedSummarizedExperiment:
         desc_rr.resource_type = "count_files_junctions"
         desc_rr.url_path.return_value = "jxn/RR.gz"
         desc_rr.junction_extension = "RR"
+        desc_rr.junction_type = "ALL"
         desc_rr.junction_type = "ALL"
         res_rr.description = desc_rr
         res_rr.url = "http://example.com/jxn/RR.gz"
@@ -2533,6 +2550,7 @@ class TestToRangedSummarizedExperiment:
         desc_rr.url_path.return_value = "jxn/RR.gz"
         desc_rr.junction_extension = "RR"
         desc_rr.junction_type = "ALL"
+        desc_rr.junction_type = "ALL"
         res_rr.description = desc_rr
         res_rr.url = "http://example.com/jxn/RR.gz"
         res_rr.load.return_value = rr_df
@@ -2573,6 +2591,7 @@ class TestToRangedSummarizedExperiment:
         desc_rr.url_path.return_value = "jxn/RR.gz"
         desc_rr.junction_extension = "RR"
         desc_rr.junction_type = "ALL"
+        desc_rr.junction_type = "ALL"
         res_rr.description = desc_rr
         res_rr.url = "http://example.com/jxn/RR.gz"
         res_rr.load.return_value = rr_df
@@ -2609,6 +2628,7 @@ class TestToRangedSummarizedExperiment:
         desc_rr.resource_type = "count_files_junctions"
         desc_rr.url_path.return_value = "jxn/RR.gz"
         desc_rr.junction_extension = "RR"
+        desc_rr.junction_type = "ALL"
         res_rr.description = desc_rr
         res_rr.url = "http://example.com/jxn/RR.gz"
         res_rr.load.return_value = rr_df
@@ -2986,20 +3006,14 @@ class TestStackCountsForRaise:
 
 
 class TestNormalizeSampleMetadataNonDataFrame:
-    def test_non_dataframe_metadata_object_skipped(self) -> None:
-        res = MagicMock(spec=R3Resource)
-        desc = MagicMock()
-        desc.resource_type = "metadata_files"
-        desc.url_path.return_value = "meta/file.gz"
-        desc.table_name = "qc"
-        res.description = desc
-        res.url = "http://example.com/meta.gz"
-        res.is_loaded.return_value = True
-        res.get_loaded.return_value = "not-a-dataframe"
-
-        b = R3ResourceBundle(resources=[res])
-        result = b._normalize_sample_metadata(sample_ids=["SRR001"])
-        assert "external_id" in result.columns
+    def test_non_dataframe_metadata_is_an_error(self) -> None:
+        res = _mock_resource(
+            "metadata_files", loaded_data="bad table", table_name="sra"
+        )
+        with pytest.raises(TypeError, match="not a DataFrame"):
+            R3ResourceBundle([res])._normalize_sample_metadata(
+                sample_ids=["SRR001"]
+            )
 
 
 class TestNormalizeSampleMetadataExternalIdFillback:
@@ -3015,7 +3029,9 @@ class TestNormalizeSampleMetadataExternalIdFillback:
             "metadata_files", loaded_data=meta_df, table_name="qc"
         )
         b = R3ResourceBundle(resources=[res])
-        result = b._normalize_sample_metadata(sample_ids=["1", "2"])
+        result = b._normalize_sample_metadata(
+            sample_ids=["1", "2"], metadata_join="outer"
+        )
         assert "external_id" in result.columns
 
 
@@ -3192,6 +3208,7 @@ class TestToRangedSEAutoload:
         desc_rr.url_path.return_value = "jxn/RR.gz"
         desc_rr.junction_extension = "RR"
         desc_rr.junction_type = "ALL"
+        desc_rr.junction_type = "ALL"
         res_rr.description = desc_rr
         res_rr.url = "http://example.com/jxn/RR.gz"
         res_rr.load.return_value = rr_df
@@ -3204,7 +3221,7 @@ class TestToRangedSEAutoload:
             prefer_rr_junction_coordinates=True,
             autoload=True,
         )
-        res_rr.download.assert_called()
+        res_rr.download.assert_not_called()  # Already-loaded RR is reused.
         assert rse is not None
 
 
@@ -3372,175 +3389,6 @@ class TestSelectGtfResourcePeekException:
         assert result is res
 
 
-@pytest.mark.requires_biocpy
-class TestConstructSELengthGuards:
-    def test_raises_when_row_data_length_changed_by_unique_columns(
-        self,
-    ) -> None:
-        counts = _gene_df()
-        row_df = pd.DataFrame({"a": [1, 2]})
-        col_df = pd.DataFrame({"b": ["x", "y"]})
-
-        original = bmod._ensure_unique_columns
-        call_count: dict[str, int] = {"n": 0}
-
-        def patched(
-            df: pd.DataFrame, *, empty_prefix: str = "col"
-        ) -> pd.DataFrame:
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return df.iloc[:1]
-            return original(df, empty_prefix=empty_prefix)
-
-        with patch.object(bmod, "_ensure_unique_columns", side_effect=patched):
-            with pytest.raises(ValueError, match="row_data length"):
-                _construct_summarized_experiment(
-                    counts_df=counts,
-                    row_df=row_df,
-                    col_df=col_df,
-                    assay_name="counts",
-                )
-
-    def test_raises_when_col_data_length_changed_by_unique_columns(
-        self,
-    ) -> None:
-        counts = _gene_df()
-        row_df = pd.DataFrame({"a": [1, 2]})
-        col_df = pd.DataFrame({"b": ["x", "y"]})
-
-        original = bmod._ensure_unique_columns
-        call_count: dict[str, int] = {"n": 0}
-
-        def patched(
-            df: pd.DataFrame, *, empty_prefix: str = "col"
-        ) -> pd.DataFrame:
-            call_count["n"] += 1
-            if call_count["n"] == 2:
-                return df.iloc[:1]
-            return original(df, empty_prefix=empty_prefix)
-
-        with patch.object(bmod, "_ensure_unique_columns", side_effect=patched):
-            with pytest.raises(ValueError, match="column_data length"):
-                _construct_summarized_experiment(
-                    counts_df=counts,
-                    row_df=row_df,
-                    col_df=col_df,
-                    assay_name="counts",
-                )
-
-
-@pytest.mark.requires_biocpy
-class TestConstructRSELengthGuards:
-    def _ranges(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            {
-                "seqnames": ["chr1", "chr1"],
-                "starts": [1, 200],
-                "ends": [100, 300],
-                "strand": ["+", "+"],
-            }
-        )
-
-    def test_raises_when_row_data_length_changed_by_unique_columns(
-        self,
-    ) -> None:
-        counts = _gene_df()
-        row_df = pd.DataFrame({"a": [1, 2]})
-        col_df = pd.DataFrame({"b": ["x", "y"]})
-
-        original = bmod._ensure_unique_columns
-        call_count: dict[str, int] = {"n": 0}
-
-        def patched(
-            df: pd.DataFrame, *, empty_prefix: str = "col"
-        ) -> pd.DataFrame:
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return df.iloc[:1]
-            return original(df, empty_prefix=empty_prefix)
-
-        with patch.object(bmod, "_ensure_unique_columns", side_effect=patched):
-            with pytest.raises(ValueError, match="row_data length"):
-                _construct_ranged_summarized_experiment(
-                    counts_df=counts,
-                    row_df=row_df,
-                    col_df=col_df,
-                    ranges_df=self._ranges(),
-                    assay_name="raw_counts",
-                )
-
-    def test_raises_when_col_data_length_changed_by_unique_columns(
-        self,
-    ) -> None:
-        counts = _gene_df()
-        row_df = pd.DataFrame({"a": [1, 2]})
-        col_df = pd.DataFrame({"b": ["x", "y"]})
-
-        original = bmod._ensure_unique_columns
-        call_count: dict[str, int] = {"n": 0}
-
-        def patched(
-            df: pd.DataFrame, *, empty_prefix: str = "col"
-        ) -> pd.DataFrame:
-            call_count["n"] += 1
-            if call_count["n"] == 2:
-                return df.iloc[:1]
-            return original(df, empty_prefix=empty_prefix)
-
-        with patch.object(bmod, "_ensure_unique_columns", side_effect=patched):
-            with pytest.raises(ValueError, match="column_data length"):
-                _construct_ranged_summarized_experiment(
-                    counts_df=counts,
-                    row_df=row_df,
-                    col_df=col_df,
-                    ranges_df=self._ranges(),
-                    assay_name="raw_counts",
-                )
-
-
-class TestNormalizeSampleMetadataMissingAlignKey:
-    def test_raises_when_collapse_drops_align_key(self) -> None:
-        meta_df = pd.DataFrame({"external_id": ["SRR001", "SRR002"]})
-        res = _mock_resource(
-            "metadata_files", loaded_data=meta_df, table_name="qc"
-        )
-        b = R3ResourceBundle(resources=[res])
-
-        def drop_key(df: pd.DataFrame, *, key: str) -> pd.DataFrame:
-            return df.drop(columns=[key], errors="ignore")
-
-        with patch.object(bmod, "_collapse_rows_by_key", side_effect=drop_key):
-            with pytest.raises(ValueError, match="missing alignment key"):
-                b._normalize_sample_metadata(sample_ids=["SRR001", "SRR002"])
-
-
-class TestNormalizeSampleMetadataExternalIdAbsent:
-    def test_external_id_set_when_absent_from_aligned(self) -> None:
-        merged_df = pd.DataFrame(
-            {
-                "rail_id": pd.array(["SRR001", "SRR002"], dtype="string"),
-                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
-                "extra": ["a", "b"],
-            }
-        )
-
-        meta_df = pd.DataFrame({"rail_id": ["SRR001", "SRR002"]})
-        res = _mock_resource(
-            "metadata_files", loaded_data=meta_df, table_name="qc"
-        )
-        b = R3ResourceBundle(resources=[res])
-
-        with patch.object(
-            bmod, "_outer_merge_metadata_frames", return_value=merged_df
-        ):
-            result = b._normalize_sample_metadata(
-                sample_ids=["SRR001", "SRR002"]
-            )
-
-        assert "external_id" in result.columns
-        assert list(result["external_id"]) == ["SRR001", "SRR002"]
-
-
 class TestAddBigwigUrls:
     def test_no_external_id_column_returns_na(self) -> None:
         b = R3ResourceBundle()
@@ -3667,3 +3515,1031 @@ class TestAddBigwigUrls:
         url = result["BigWigURL"].iloc[0]
         assert url is not None
         assert url.startswith("https://duffel.example.com/recount3/")
+
+
+def _annotation_resource(
+    *,
+    cached_path: Path,
+    url_path: str,
+    url: str,
+    genomic_unit: Any = None,
+    annotation_extension: str = "G026",
+) -> MagicMock:
+    """Return an annotation resource whose cache lookups hit a real file.
+
+    ``_select_gtf_resource_for_unit`` inspects candidates by reading them, so
+    ``ensure_cached`` has to yield a path that actually exists; a bare
+    ``MagicMock`` return value silently turns into a file descriptor.
+    """
+    res = MagicMock(spec=R3Resource)
+    desc = MagicMock()
+    desc.resource_type = "annotations"
+    desc.url_path.return_value = url_path
+    desc.annotation_extension = annotation_extension
+    desc.genomic_unit = genomic_unit
+    res.description = desc
+    res.url = url
+    res.ensure_cached.return_value = cached_path
+    res._cached_path.return_value = cached_path
+    return res
+
+
+def _write_gtf(path: Path, *, feature: str = "gene") -> Path:
+    """Write a one-row uncompressed GTF naming ``feature`` and return its path."""
+    path.write_text(
+        f'chr1\tref\t{feature}\t1\t100\t.\t+\t.\t{feature}_id "F1"\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def _junction_resources(
+    *,
+    project: str,
+    samples: list[str],
+    rr_frame: pd.DataFrame,
+    features: list[str] | None = None,
+) -> tuple[MagicMock, MagicMock]:
+    """Return a loaded MM/RR junction resource pair for one project."""
+    counts = pd.DataFrame(
+        np.ones((len(rr_frame), len(samples)), dtype=float),
+        index=features or [str(i) for i in range(len(rr_frame))],
+        columns=samples,
+    )
+    shared = {
+        "junction_type": "ALL",
+        "organism": "human",
+        "data_source": "sra",
+        "project": project,
+    }
+    mm = _mock_resource(
+        "count_files_junctions",
+        url=f"http://example.com/{project}.MM.gz",
+        loaded_data=counts,
+        junction_extension="MM",
+        **shared,
+    )
+    rr = _mock_resource(
+        "count_files_junctions",
+        url=f"http://example.com/{project}.RR.gz",
+        loaded_data=rr_frame,
+        junction_extension="RR",
+        **shared,
+    )
+    return mm, rr
+
+
+def _rr_frame() -> pd.DataFrame:
+    """Return a two-row RR sidecar using R's column spellings."""
+    return pd.DataFrame(
+        {
+            "chromosome": ["chr1", "chr1"],
+            "start": [1, 200],
+            "end": [100, 300],
+            "strand": ["+", "-"],
+        }
+    )
+
+
+class TestEnsureUniqueColumnsSuffixCollision:
+    def test_generated_suffix_skips_a_name_already_in_use(self) -> None:
+        """A ``__2`` suffix must not collide with a literal ``__2`` column."""
+        df = pd.DataFrame([[1, 2, 3]], columns=["a", "a", "a__2"])
+        out = _ensure_unique_columns(df)
+        assert list(out.columns) == ["a", "a__3", "a__2"]
+
+
+class TestAlignRangesToFeaturesWithDuplicates:
+    @staticmethod
+    def _ranges(feature_ids: list[str]) -> pd.DataFrame:
+        n = len(feature_ids)
+        return pd.DataFrame(
+            {
+                "feature_id": feature_ids,
+                "seqnames": [f"chr{i + 1}" for i in range(n)],
+                "starts": [(i + 1) * 10 for i in range(n)],
+                "ends": [(i + 1) * 10 + 5 for i in range(n)],
+                "strand": ["+"] * n,
+            }
+        )
+
+    def test_repeated_ids_are_matched_by_occurrence_order(self) -> None:
+        ranges = self._ranges(["G1", "G1", "G2"])
+        out = _align_ranges_to_features(ranges, feature_ids=["G2", "G1", "G1"])
+        assert list(out.index) == ["G2", "G1", "G1"]
+        # The two G1 rows keep their original order after reordering.
+        assert list(out["starts"]) == [30, 10, 20]
+
+    def test_differing_duplicate_counts_are_ambiguous(self) -> None:
+        ranges = self._ranges(["G1", "G1"])
+        with pytest.raises(
+            RangesCoverageError, match="Ambiguous duplicate feature occurrences"
+        ):
+            _align_ranges_to_features(ranges, feature_ids=["G1"])
+
+    def test_unannotated_feature_alongside_duplicates_is_rejected(self) -> None:
+        ranges = self._ranges(["G1", "G1"])
+        with pytest.raises(
+            RangesCoverageError, match="Cannot match duplicate feature"
+        ):
+            _align_ranges_to_features(ranges, feature_ids=["G1", "G1", "G2"])
+
+
+class TestSelectGtfResourceForUnitRanking:
+    def test_two_exact_unit_matches_are_ambiguous(self, tmp_path: Path) -> None:
+        path = _write_gtf(tmp_path / "genes.gtf")
+        resources = [
+            _annotation_resource(
+                cached_path=path,
+                url_path=f"ann/{name}.gtf.gz",
+                url=f"http://example.com/{name}.gtf.gz",
+                genomic_unit="gene",
+            )
+            for name in ("first", "second")
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        with pytest.raises(
+            CompatibilityError, match="Multiple matching annotations"
+        ):
+            _select_gtf_resource_for_unit(
+                bundle, genomic_unit="gene", annotation_extension=None
+            )
+
+    def test_case_insensitive_unit_outranks_an_unlabelled_candidate(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """``"Gene"`` misses the exact match but still scores highest."""
+        labelled = _annotation_resource(
+            cached_path=_write_gtf(tmp_path / "a.gtf"),
+            url_path="ann/a.txt",
+            url="http://example.com/a.txt",
+            genomic_unit="Gene",
+        )
+        unlabelled = _annotation_resource(
+            cached_path=_write_gtf(tmp_path / "b.gtf"),
+            url_path="ann/b.txt",
+            url="http://example.com/b.txt",
+            genomic_unit=None,
+        )
+        bundle = R3ResourceBundle(resources=[unlabelled, labelled])
+        with caplog.at_level(logging.INFO):
+            result = _select_gtf_resource_for_unit(
+                bundle, genomic_unit="gene", annotation_extension=None
+            )
+        assert result is labelled
+        assert "Selected annotation resource for gene" in caplog.text
+
+    def test_exon_named_gtf_scores_on_name_and_extension(
+        self, tmp_path: Path
+    ) -> None:
+        res = _annotation_resource(
+            cached_path=_write_gtf(tmp_path / "e.gtf", feature="exon"),
+            url_path="ann/human.exon_sums.G026.gtf.gz",
+            url="http://example.com/human.exon_sums.G026.gtf.gz",
+            genomic_unit=None,
+        )
+        bundle = R3ResourceBundle(resources=[res])
+        result = _select_gtf_resource_for_unit(
+            bundle, genomic_unit="exon", annotation_extension=None
+        )
+        assert result is res
+
+    def test_uncached_candidate_is_skipped_when_autoload_is_off(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        res = _annotation_resource(
+            cached_path=tmp_path / "absent.gz",
+            url_path="ann/x.gz",
+            url="http://example.com/x.gz",
+            genomic_unit=None,
+        )
+        res.ensure_cached.side_effect = FileNotFoundError("not cached")
+        bundle = R3ResourceBundle(resources=[res])
+        with caplog.at_level(logging.DEBUG):
+            result = _select_gtf_resource_for_unit(
+                bundle,
+                genomic_unit="gene",
+                annotation_extension=None,
+                autoload=False,
+            )
+        # Nothing could be inspected, so the ranking alone decides.
+        assert result is res
+        assert "autoload is disabled" in caplog.text
+
+    def test_unreadable_candidate_is_logged_and_skipped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        corrupt = tmp_path / "bad.gtf.gz"
+        corrupt.write_text("this is not gzip", encoding="utf-8")
+        higher_scoring = _annotation_resource(
+            cached_path=corrupt,
+            url_path="ann/gene_sums.gtf.gz",
+            url="http://example.com/gene_sums.gtf.gz",
+            genomic_unit=None,
+        )
+        readable = _annotation_resource(
+            cached_path=_write_gtf(tmp_path / "good.gtf"),
+            url_path="ann/g.txt",
+            url="http://example.com/g.txt",
+            genomic_unit=None,
+        )
+        bundle = R3ResourceBundle(resources=[higher_scoring, readable])
+        with caplog.at_level(logging.WARNING):
+            result = _select_gtf_resource_for_unit(
+                bundle, genomic_unit="gene", annotation_extension=None
+            )
+        assert result is readable
+        assert "Skipping annotation candidate" in caplog.text
+
+
+class TestNumericAssayValidation:
+    def test_sparse_counts_need_a_zero_fill_value(self) -> None:
+        counts = pd.DataFrame(
+            {"s1": pd.arrays.SparseArray([1.0, 2.0], fill_value=1.0)},
+            index=["g1", "g2"],
+        )
+        with pytest.raises(ValueError, match="zero fill values"):
+            bmod._numeric_assay(counts)
+
+    def test_masked_columns_with_missing_counts_are_rejected(self) -> None:
+        """Mixing masked and plain integer columns yields an object matrix."""
+        counts = pd.DataFrame(
+            {
+                "s1": pd.array([1, pd.NA], dtype="Int64"),
+                "s2": np.array([3, 4]),
+            },
+            index=["g1", "g2"],
+        )
+        with pytest.raises(ValueError, match="missing or non-finite"):
+            bmod._numeric_assay(counts)
+
+    def test_negative_counts_are_rejected(self) -> None:
+        counts = pd.DataFrame({"s1": [1.0, -2.0]}, index=["g1", "g2"])
+        with pytest.raises(ValueError, match="negative counts"):
+            bmod._numeric_assay(counts)
+
+
+class TestValidateCountFrame:
+    def test_sparse_column_needs_a_zero_fill_value(self) -> None:
+        frame = pd.DataFrame(
+            {"s1": pd.arrays.SparseArray([1.0, 2.0], fill_value=3.0)}
+        )
+        with pytest.raises(ValueError, match="zero fill values"):
+            bmod._validate_count_frame(frame)
+
+    def test_masked_boolean_column_with_missing_values_is_rejected(
+        self,
+    ) -> None:
+        frame = pd.DataFrame({"s1": pd.array([True, pd.NA], dtype="boolean")})
+        with pytest.raises(
+            ValueError, match="finite, non-missing and nonnegative"
+        ):
+            bmod._validate_count_frame(frame)
+
+
+@pytest.mark.requires_biocpy
+class TestExperimentFrameAlignment:
+    def test_rows_are_reordered_to_match_the_assay(self) -> None:
+        frame = pd.DataFrame({"score": [2.0, 1.0]}, index=["s2", "s1"])
+        out = bmod._experiment_frame(frame, ["s1", "s2"], "column_data")
+        assert list(out.get_column("score")) == [1.0, 2.0]
+        assert list(out.get_row_names()) == ["s1", "s2"]
+
+
+@pytest.mark.requires_biocpy
+class TestConstructRangedSummarizedExperimentRangeAlignment:
+    @staticmethod
+    def _ranges(index: list[str]) -> pd.DataFrame:
+        n = len(index)
+        return pd.DataFrame(
+            {
+                "seqnames": ["chr1"] * n,
+                "starts": [(i + 1) * 10 for i in range(n)],
+                "ends": [(i + 1) * 10 + 5 for i in range(n)],
+                "strand": ["+"] * n,
+            },
+            index=index,
+        )
+
+    def test_ranges_are_reindexed_to_the_assay_order(self) -> None:
+        counts = _gene_df()
+        ranges = self._ranges(["ENSG0002", "ENSG0001"])
+        rse = _construct_ranged_summarized_experiment(
+            counts_df=counts,
+            row_df=pd.DataFrame({"a": [1, 2]}),
+            col_df=pd.DataFrame({"b": ["x", "y"]}),
+            ranges_df=ranges,
+            assay_name="raw",
+        )
+        assert list(rse.get_row_ranges().get_start()) == [20, 10]
+
+    def test_ranges_identifiers_must_match_the_assay(self) -> None:
+        counts = _gene_df()
+        ranges = self._ranges(["other1", "other2"])
+        with pytest.raises(
+            ValueError, match="ranges_df identifiers do not match"
+        ):
+            _construct_ranged_summarized_experiment(
+                counts_df=counts,
+                row_df=pd.DataFrame({"a": [1, 2]}),
+                col_df=pd.DataFrame({"b": ["x", "y"]}),
+                ranges_df=ranges,
+                assay_name="raw",
+            )
+
+
+class TestValidateCoordinates:
+    @staticmethod
+    def _frame(**overrides: Any) -> pd.DataFrame:
+        values: dict[str, Any] = {
+            "seqnames": ["chr1"],
+            "starts": [10],
+            "ends": [20],
+            "strand": ["+"],
+        }
+        values.update(overrides)
+        return pd.DataFrame(values)
+
+    def test_fractional_coordinates_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="finite integers"):
+            bmod._validate_coordinates(self._frame(starts=[10.5]))
+
+    def test_starts_below_one_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="positive inclusive intervals"):
+            bmod._validate_coordinates(self._frame(starts=[0]))
+
+    def test_end_before_start_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="positive inclusive intervals"):
+            bmod._validate_coordinates(self._frame(starts=[20], ends=[10]))
+
+    def test_unknown_strand_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Invalid genomic strand"):
+            bmod._validate_coordinates(self._frame(strand=["?"]))
+
+
+class TestMergeCountFrames:
+    def test_rejects_an_unknown_join_policy(self) -> None:
+        with pytest.raises(ValueError, match="join_policy must be"):
+            bmod._merge_count_frames([_gene_df()], "left")
+
+    def test_rejects_duplicate_feature_ids_across_projects(self) -> None:
+        first = _gene_df(features=["G1", "G1"], samples=["S1"])
+        second = _gene_df(features=["G2"], samples=["S2"])
+        with pytest.raises(
+            CompatibilityError, match="Cannot align duplicate feature IDs"
+        ):
+            bmod._merge_count_frames([first, second], "inner")
+
+
+class TestStackCountsForValidation:
+    def test_rejects_an_unknown_join_policy(self) -> None:
+        bundle = R3ResourceBundle()
+        with pytest.raises(ValueError, match="join_policy must be"):
+            bundle._stack_counts_for(genomic_unit="gene", join_policy="left")
+
+    def test_rejects_mixed_organisms(self) -> None:
+        resources = [
+            _mock_resource(
+                "count_files_gene_or_exon",
+                loaded_data=_gene_df(),
+                genomic_unit="gene",
+                organism=organism,
+                annotation_extension="G026",
+            )
+            for organism in ("human", "mouse")
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        with pytest.raises(
+            CompatibilityError, match="incompatible organisms, annotations"
+        ):
+            bundle._stack_counts_for(genomic_unit="gene", autoload=False)
+
+    def test_unloaded_resource_without_autoload_is_an_error(self) -> None:
+        res = _mock_resource("count_files_gene_or_exon", genomic_unit="gene")
+        bundle = R3ResourceBundle(resources=[res])
+        with pytest.raises(ValueError, match="Count resource is not loaded"):
+            bundle._stack_counts_for(genomic_unit="gene", autoload=False)
+
+    def test_non_dataframe_counts_are_an_error(self) -> None:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data="not a frame",
+            genomic_unit="gene",
+        )
+        bundle = R3ResourceBundle(resources=[res])
+        with pytest.raises(
+            TypeError, match="Loaded counts are not a DataFrame"
+        ):
+            bundle._stack_counts_for(genomic_unit="gene", autoload=False)
+
+    def test_duplicate_sample_identifiers_are_an_error(self) -> None:
+        counts = pd.DataFrame(
+            np.ones((2, 2)), index=["G1", "G2"], columns=["S1", "S1"]
+        )
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=counts,
+            genomic_unit="gene",
+        )
+        bundle = R3ResourceBundle(resources=[res])
+        with pytest.raises(ValueError, match="Duplicate sample identifiers in"):
+            bundle._stack_counts_for(genomic_unit="gene", autoload=False)
+
+    def test_blank_sample_identifiers_are_an_error(self) -> None:
+        counts = pd.DataFrame(
+            np.ones((2, 2)), index=["G1", "G2"], columns=["S1", "   "]
+        )
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=counts,
+            genomic_unit="gene",
+        )
+        bundle = R3ResourceBundle(resources=[res])
+        with pytest.raises(
+            ValueError, match="Missing feature or sample identifiers"
+        ):
+            bundle._stack_counts_for(genomic_unit="gene", autoload=False)
+
+    def test_multiple_junction_projects_are_keyed_by_rr_coordinates(
+        self,
+    ) -> None:
+        """Stacking two MM matrices relabels both to their RR coordinates."""
+        mm1, rr1 = _junction_resources(
+            project="SRP001", samples=["S1", "S2"], rr_frame=_rr_frame()
+        )
+        mm2, rr2 = _junction_resources(
+            project="SRP002", samples=["S3", "S4"], rr_frame=_rr_frame()
+        )
+        bundle = R3ResourceBundle(resources=[mm1, rr1, mm2, rr2])
+        out = bundle._stack_counts_for(genomic_unit="junction", autoload=False)
+        assert list(out.index) == ["chr1:1-100:+", "chr1:200-300:-"]
+        assert list(out.columns) == ["S1", "S2", "S3", "S4"]
+
+
+class TestJunctionRanges:
+    def test_requires_exactly_one_mm_matrix(self) -> None:
+        mm1, rr1 = _junction_resources(
+            project="SRP001", samples=["S1"], rr_frame=_rr_frame()
+        )
+        mm2, rr2 = _junction_resources(
+            project="SRP002", samples=["S2"], rr_frame=_rr_frame()
+        )
+        bundle = R3ResourceBundle(resources=[mm1, rr1, mm2, rr2])
+        with pytest.raises(
+            CompatibilityError, match="needs its own project and RR sidecar"
+        ):
+            bundle._junction_ranges(mm1.get_loaded(), autoload=False)
+
+    def test_uncached_rr_sidecar_is_read_from_disk(
+        self, tmp_path: Path
+    ) -> None:
+        rr_path = tmp_path / "jxn.RR.tsv"
+        rr_path.write_text(
+            "chromosome\tstart\tend\tstrand\n"
+            "chr1\t1\t100\t+\n"
+            "chr1\t200\t300\t-\n",
+            encoding="utf-8",
+        )
+        mm, rr = _junction_resources(
+            project="SRP001", samples=["S1"], rr_frame=_rr_frame()
+        )
+        rr.is_loaded.return_value = False
+        rr.get_loaded.return_value = None
+        rr._cached_path.return_value = rr_path
+        bundle = R3ResourceBundle(resources=[mm, rr])
+
+        ranges = bundle._junction_ranges(mm.get_loaded(), autoload=True)
+
+        rr.ensure_cached.assert_called_once_with(download=True)
+        assert list(ranges.index) == ["chr1:1-100:+", "chr1:200-300:-"]
+        # The parsed table is cached on the resource for later reuse.
+        pd.testing.assert_frame_equal(rr._cached_data, pd.read_table(rr_path))
+
+    def test_duplicate_rr_coordinates_are_rejected(self) -> None:
+        duplicated = pd.DataFrame(
+            {
+                "chromosome": ["chr1", "chr1"],
+                "start": [1, 1],
+                "end": [100, 100],
+                "strand": ["+", "+"],
+            }
+        )
+        mm, rr = _junction_resources(
+            project="SRP001", samples=["S1"], rr_frame=duplicated
+        )
+        bundle = R3ResourceBundle(resources=[mm, rr])
+        with pytest.raises(
+            RangesCoverageError, match="duplicate junction coordinates"
+        ):
+            bundle._junction_ranges(mm.get_loaded(), autoload=False)
+
+
+def _metadata_resource(
+    frame: pd.DataFrame, *, table_name: str = "recount_qc", **desc: Any
+) -> MagicMock:
+    """Return a loaded metadata resource wrapping ``frame``."""
+    return _mock_resource(
+        "metadata_files", loaded_data=frame, table_name=table_name, **desc
+    )
+
+
+class TestNormalizeSampleMetadataValidation:
+    def test_rejects_an_unknown_metadata_join(self) -> None:
+        bundle = R3ResourceBundle()
+        with pytest.raises(ValueError, match="metadata_join must be"):
+            bundle._normalize_sample_metadata(
+                sample_ids=["S1"], metadata_join="left"
+            )
+
+    def test_unloaded_metadata_without_autoload_is_an_error(self) -> None:
+        res = _mock_resource("metadata_files", table_name="recount_qc")
+        bundle = R3ResourceBundle(resources=[res])
+        with pytest.raises(ValueError, match="Metadata resource is not loaded"):
+            bundle._normalize_sample_metadata(sample_ids=["S1"], autoload=False)
+
+    def test_unloaded_metadata_is_loaded_when_autoload_is_on(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["S1"], dtype="string"),
+                "rail_id": pd.array(["1"], dtype="string"),
+                "study": pd.array(["SRP001"], dtype="string"),
+                "score": [1.0],
+            }
+        )
+        res = _metadata_resource(frame)
+        res.is_loaded.return_value = False
+        bundle = R3ResourceBundle(resources=[res])
+
+        result = bundle._normalize_sample_metadata(
+            sample_ids=["S1"], autoload=True
+        )
+
+        res.load.assert_called_once_with()
+        assert list(result.index) == ["S1"]
+
+    def test_empty_metadata_tables_are_dropped_then_reported(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        empty = pd.DataFrame(
+            {"external_id": pd.array([], dtype="string"), "score": []}
+        )
+        bundle = R3ResourceBundle(resources=[_metadata_resource(empty)])
+        with caplog.at_level(logging.WARNING):
+            with pytest.raises(
+                ValueError, match="All supplied metadata tables are empty"
+            ):
+                bundle._normalize_sample_metadata(sample_ids=["S1"])
+        assert "Dropping empty metadata table" in caplog.text
+
+    def test_duplicate_metadata_keys_are_rejected(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["S1", "S1"], dtype="string"),
+                "rail_id": pd.array(["1", "1"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [1.0, 2.0],
+            }
+        )
+        bundle = R3ResourceBundle(resources=[_metadata_resource(frame)])
+        with pytest.raises(ValueError, match="Duplicate sample metadata keys"):
+            bundle._normalize_sample_metadata(sample_ids=["S1"])
+
+    def test_repeated_columns_across_tables_are_rejected(self) -> None:
+        """Two tables sharing an origin namespace collide on their columns."""
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["S1"], dtype="string"),
+                "rail_id": pd.array(["1"], dtype="string"),
+                "study": pd.array(["SRP001"], dtype="string"),
+                "score": [1.0],
+            }
+        )
+        resources = [
+            _metadata_resource(frame.copy(), table_name="recount_qc"),
+            _metadata_resource(frame.copy(), table_name="recount_qc"),
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        with pytest.raises(ValueError, match="Repeated metadata table columns"):
+            bundle._normalize_sample_metadata(sample_ids=["S1"])
+
+    def test_identifier_reused_across_rows_is_ambiguous(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["A", "B"], dtype="string"),
+                "rail_id": pd.array([pd.NA, "A"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [1.0, 2.0],
+            }
+        )
+        bundle = R3ResourceBundle(resources=[_metadata_resource(frame)])
+        with pytest.raises(ValueError, match="Ambiguous sample identifier 'A'"):
+            bundle._normalize_sample_metadata(sample_ids=["A", "B"])
+
+    def test_inner_join_rejects_metadata_rows_without_counts(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["S1", "S2"], dtype="string"),
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [1.0, 2.0],
+            }
+        )
+        bundle = R3ResourceBundle(resources=[_metadata_resource(frame)])
+        with pytest.raises(
+            ValueError, match="samples missing from the counts matrix"
+        ):
+            bundle._normalize_sample_metadata(
+                sample_ids=["S1"], metadata_join="inner"
+            )
+
+    def test_inner_join_rejects_matched_rows_without_external_id(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            {
+                "rail_id": pd.array(["1"], dtype="string"),
+                "study": pd.array(["SRP001"], dtype="string"),
+                "score": [1.0],
+            }
+        )
+        bundle = R3ResourceBundle(resources=[_metadata_resource(frame)])
+        with pytest.raises(ValueError, match="missing external_id values"):
+            bundle._normalize_sample_metadata(
+                sample_ids=["1"], metadata_join="inner"
+            )
+
+
+class TestPrepareExperimentValidation:
+    def test_rejects_an_unknown_metadata_join(self) -> None:
+        bundle = R3ResourceBundle()
+        with pytest.raises(ValueError, match="metadata_join must be"):
+            bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="left",
+                autoload=False,
+            )
+
+    def test_requires_count_resources(self) -> None:
+        bundle = R3ResourceBundle(resources=[_mock_resource("metadata_files")])
+        with pytest.raises(
+            ValueError, match="No count-file resources available"
+        ):
+            bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=False,
+            )
+
+    def test_unloaded_metadata_is_reported_before_loading_counts(self) -> None:
+        project = {
+            "organism": "human",
+            "data_source": "sra",
+            "project": "SRP001",
+        }
+        counts = _mock_resource(
+            "count_files_gene_or_exon",
+            loaded_data=_gene_df(),
+            genomic_unit="gene",
+            annotation_extension="G026",
+            **project,
+        )
+        metadata = _mock_resource(
+            "metadata_files", table_name="recount_qc", **project
+        )
+        bundle = R3ResourceBundle(resources=[counts, metadata])
+        with pytest.raises(ValueError, match="Metadata resource is not loaded"):
+            bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=False,
+            )
+
+    def test_samples_shared_between_projects_are_rejected(self) -> None:
+        resources = [
+            _mock_resource(
+                "count_files_gene_or_exon",
+                url=f"http://example.com/{project}.gz",
+                loaded_data=_gene_df(),
+                genomic_unit="gene",
+                annotation_extension="G026",
+                organism="human",
+                data_source="sra",
+                project=project,
+            )
+            for project in ("SRP001", "SRP002")
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        with pytest.raises(
+            ValueError,
+            match="Duplicate sample identifiers across selected count",
+        ):
+            bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=False,
+            )
+
+
+class TestStackCountMatricesFeatureCompat:
+    def test_a_single_feature_key_satisfies_feature_compat(self) -> None:
+        resources = [
+            _mock_resource(
+                "count_files_gene_or_exon",
+                loaded_data=_gene_df(samples=samples),
+                genomic_unit="gene",
+            )
+            for samples in (["SRR001", "SRR002"], ["SRR003", "SRR004"])
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        out = bundle.stack_count_matrices(
+            compat="feature", axis=1, autoload=False
+        )
+        assert list(out.columns) == [
+            "SRR001",
+            "SRR002",
+            "SRR003",
+            "SRR004",
+        ]
+
+
+@pytest.mark.requires_biocpy
+class TestToRangedSummarizedExperimentResourceUrls:
+    def test_annotation_url_is_recorded_only_once(self, tmp_path: Path) -> None:
+        """An annotation already listed in the metadata is not re-appended."""
+        gz_path = tmp_path / "genes.gtf.gz"
+        with gzip.open(gz_path, "wt", encoding="utf-8") as handle:
+            handle.write(
+                'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001.1"\n'
+                'chr1\tref\tgene\t200\t300\t.\t-\t.\tgene_id "ENSG002.1"\n'
+            )
+        shared_url = "http://example.com/human.gene_sums.G026.gz"
+        counts = _gene_df(features=["ENSG001.1", "ENSG002.1"])
+
+        res_count = _mock_resource(
+            "count_files_gene_or_exon",
+            url=shared_url,
+            loaded_data=counts,
+            genomic_unit="gene",
+            annotation_extension="G026",
+        )
+        res_ann = _annotation_resource(
+            cached_path=gz_path,
+            url_path="human/annotations/gene_sums/human.gene_sums.G026.gtf.gz",
+            url=shared_url,
+            genomic_unit="gene",
+        )
+        bundle = R3ResourceBundle(resources=[res_count, res_ann])
+
+        rse = bundle.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=False
+        )
+        assert rse.get_metadata()["resource_urls"] == [shared_url]
+
+
+class TestNumericAssaySparseStorage:
+    def test_all_sparse_counts_stay_a_sparse_matrix(self) -> None:
+        counts = pd.DataFrame(
+            {
+                "S1": pd.arrays.SparseArray([0.0, 2.0], fill_value=0.0),
+                "S2": pd.arrays.SparseArray([3.0, 0.0], fill_value=0.0),
+            },
+            index=["G1", "G2"],
+        )
+        matrix = bmod._numeric_assay(counts)
+        assert scipy.sparse.issparse(matrix)
+        np.testing.assert_array_equal(
+            matrix.toarray(), [[0.0, 3.0], [2.0, 0.0]]
+        )
+
+
+class TestValidateCountFrameColumnKinds:
+    def test_sparse_column_with_zero_fill_is_accepted(self) -> None:
+        frame = pd.DataFrame(
+            {"S1": pd.arrays.SparseArray([0.0, 3.0], fill_value=0.0)}
+        )
+        assert bmod._validate_count_frame(frame) is None
+
+    def test_non_numeric_column_is_rejected(self) -> None:
+        frame = pd.DataFrame({"S1": ["abc", "def"]})
+        with pytest.raises(ValueError, match="non-numeric values"):
+            bmod._validate_count_frame(frame)
+
+
+class TestExperimentFrameMismatch:
+    def test_length_mismatch_names_both_dimensions(self) -> None:
+        frame = pd.DataFrame({"a": [1]})
+        with pytest.raises(
+            ValueError, match=r"column_data length 1 != assay dimension 2"
+        ):
+            bmod._experiment_frame(frame, ["s1", "s2"], "column_data")
+
+    def test_unrelated_identifiers_are_rejected(self) -> None:
+        frame = pd.DataFrame({"a": [1, 2]}, index=["x", "y"])
+        with pytest.raises(
+            ValueError, match="row_data identifiers do not match"
+        ):
+            bmod._experiment_frame(frame, ["s1", "s2"], "row_data")
+
+
+class TestMergeCountFramesAcrossFeatureSpaces:
+    @staticmethod
+    def _frames() -> list[pd.DataFrame]:
+        return [
+            _gene_df(features=["G1", "G2"], samples=["S1"]),
+            _gene_df(features=["G2", "G3"], samples=["S2"]),
+        ]
+
+    def test_inner_join_keeps_only_shared_features(self) -> None:
+        out = bmod._merge_count_frames(self._frames(), "inner")
+        assert list(out.index) == ["G2"]
+        assert list(out.columns) == ["S1", "S2"]
+
+    def test_outer_join_unions_features_and_fills_new_rows(self) -> None:
+        out = bmod._merge_count_frames(self._frames(), "outer")
+        assert list(out.index) == ["G1", "G2", "G3"]
+        # fill_value applies only to rows a frame never had.
+        assert out.loc["G1", "S2"] == 0
+        assert out.loc["G3", "S1"] == 0
+
+
+class TestMakeUniqueNamesSuffixCollision:
+    def test_generated_suffix_skips_a_real_feature_name(self) -> None:
+        assert _make_unique_names(["a", "a", "a__dup2"]) == [
+            "a",
+            "a__dup3",
+            "a__dup2",
+        ]
+
+
+class TestNormalizeSampleMetadataIdentityConflicts:
+    def test_one_rail_id_mapping_to_two_external_ids_is_rejected(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "rail_id": pd.array(["1", "1"], dtype="string"),
+                "external_id": pd.array(["A", "B"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [1.0, 2.0],
+            }
+        )
+        bundle = R3ResourceBundle(resources=[_metadata_resource(frame)])
+        with pytest.raises(
+            ValueError, match="Conflicting rail_id/external_id mappings"
+        ):
+            bundle._normalize_sample_metadata(sample_ids=["A", "B"])
+
+
+class TestPrepareExperimentAssembly:
+    _PROJECT = {
+        "organism": "human",
+        "data_source": "sra",
+        "project": "SRP001",
+    }
+
+    def test_mixed_annotation_builds_are_rejected(self) -> None:
+        resources = [
+            _mock_resource(
+                "count_files_gene_or_exon",
+                url=f"http://example.com/{ext}.gz",
+                loaded_data=_gene_df(),
+                genomic_unit="gene",
+                annotation_extension=ext,
+                **self._PROJECT,
+            )
+            for ext in ("G026", "G029")
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        with pytest.raises(
+            CompatibilityError, match="Ambiguous annotation, organism"
+        ):
+            bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=False,
+            )
+
+    def test_already_loaded_metadata_is_merged_without_reloading(self) -> None:
+        counts = _mock_resource(
+            "count_files_gene_or_exon",
+            url="http://example.com/gene.gz",
+            loaded_data=_gene_df(),
+            genomic_unit="gene",
+            annotation_extension="G026",
+            **self._PROJECT,
+        )
+        meta_frame = pd.DataFrame(
+            {
+                "external_id": pd.array(["SRR001", "SRR002"], dtype="string"),
+                "rail_id": pd.array(["1", "2"], dtype="string"),
+                "study": pd.array(["SRP001", "SRP001"], dtype="string"),
+                "score": [1.0, 2.0],
+            }
+        )
+        metadata_res = _metadata_resource(meta_frame, **self._PROJECT)
+        bundle = R3ResourceBundle(resources=[counts, metadata_res])
+
+        _, _, col, ranges, metadata = bundle._prepare_experiment(
+            genomic_unit="gene",
+            annotation_extension=None,
+            join_policy="inner",
+            metadata_join="inner",
+            autoload=False,
+        )
+
+        metadata_res.load.assert_not_called()
+        assert list(col.index) == ["SRR001", "SRR002"]
+        assert list(col["recount_qc__score"]) == [1.0, 2.0]
+        assert col["BigWigURL"].str.contains("SRP001").all()
+        assert ranges is None
+        assert metadata["annotation"] == "G026"
+
+    def test_junction_projects_are_aligned_on_rr_coordinates(self) -> None:
+        mm1, rr1 = _junction_resources(
+            project="SRP001", samples=["S1", "S2"], rr_frame=_rr_frame()
+        )
+        mm2, rr2 = _junction_resources(
+            project="SRP002", samples=["S3", "S4"], rr_frame=_rr_frame()
+        )
+        bundle = R3ResourceBundle(resources=[mm1, rr1, mm2, rr2])
+
+        counts, _, _, ranges, metadata = bundle._prepare_experiment(
+            genomic_unit="junction",
+            annotation_extension=None,
+            join_policy="inner",
+            metadata_join="inner",
+            autoload=False,
+        )
+
+        coordinates = ["chr1:1-100:+", "chr1:200-300:-"]
+        assert list(counts.index) == coordinates
+        assert list(counts.columns) == ["S1", "S2", "S3", "S4"]
+        # The per-project range frames are deduplicated back to one row each.
+        assert list(ranges.index) == coordinates
+        assert metadata["jxn_format"] == "ALL"
+
+
+@pytest.mark.requires_biocpy
+class TestToRangedSummarizedExperimentRangeReuse:
+    def test_a_repeated_build_reuses_the_cached_alignment(
+        self, tmp_path: Path
+    ) -> None:
+        gz_path = tmp_path / "genes.gtf.gz"
+        with gzip.open(gz_path, "wt", encoding="utf-8") as handle:
+            handle.write(
+                'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG0001"\n'
+                'chr1\tref\tgene\t200\t300\t.\t-\t.\tgene_id "ENSG0002"\n'
+            )
+        res_count = _mock_resource(
+            "count_files_gene_or_exon",
+            url="http://example.com/gene.gz",
+            loaded_data=_gene_df(),
+            genomic_unit="gene",
+            annotation_extension="G026",
+        )
+        res_ann = _annotation_resource(
+            cached_path=gz_path,
+            url_path="human/annotations/gene_sums/human.gene_sums.G026.gtf.gz",
+            url="http://example.com/human.gene_sums.G026.gtf.gz",
+            genomic_unit="gene",
+        )
+        bundle = R3ResourceBundle(resources=[res_count, res_ann])
+
+        first = bundle.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=False
+        )
+        with patch.object(bmod, "_read_gtf_dataframe") as reader:
+            second = bundle.to_ranged_summarized_experiment(
+                genomic_unit="gene", autoload=False
+            )
+
+        reader.assert_not_called()
+        assert list(second.get_row_names()) == list(first.get_row_names())
+        assert list(second.get_row_ranges().get_start()) == [1, 200]
+
+    def test_multi_project_junctions_keep_the_prepared_ranges(self) -> None:
+        mm1, rr1 = _junction_resources(
+            project="SRP001", samples=["S1", "S2"], rr_frame=_rr_frame()
+        )
+        mm2, rr2 = _junction_resources(
+            project="SRP002", samples=["S3", "S4"], rr_frame=_rr_frame()
+        )
+        bundle = R3ResourceBundle(resources=[mm1, rr1, mm2, rr2])
+
+        rse = bundle.to_ranged_summarized_experiment(
+            genomic_unit="junction", autoload=False
+        )
+
+        assert list(rse.get_row_names()) == [
+            "chr1:1-100:+",
+            "chr1:200-300:-",
+        ]
+        assert list(rse.get_row_ranges().get_start()) == [1, 200]

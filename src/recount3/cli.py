@@ -1197,9 +1197,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
                     return default
                 return tuple(p.strip() for p in s.split(",") if p.strip())
 
-            gu = _csv_or_default(
-                filters.get("genomic_unit"), ("gene", "exon")
-            )
+            gu = _csv_or_default(filters.get("genomic_unit"), ("gene", "exon"))
             # 'annotation' is a human-readable name or alias ("default",
             # "all", "gencode_v26", or a raw code like "G026").
             # 'annotation_extension' is the raw file-extension code
@@ -1210,9 +1208,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             ann_ext = _csv_or_default(
                 filters.get("annotation_extension"), tuple()
             )
-            jext = _csv_or_default(
-                filters.get("junction_extension"), ("MM",)
-            )
+            jext = _csv_or_default(filters.get("junction_extension"), ("MM",))
             jtype = filters.get("junction_type", "ALL")
             inc_meta = _as_bool(filters.get("include_metadata"), True)
             inc_bw = _as_bool(filters.get("include_bigwig"), False)

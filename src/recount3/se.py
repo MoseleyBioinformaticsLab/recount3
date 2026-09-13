@@ -52,7 +52,7 @@ BiocPy objects directly:
 * :func:`compute_read_counts`: convert coverage-sum counts to approximate
   read counts using average mapped read length.
 * :func:`compute_tpm`: compute Transcripts Per Million from an RSE with
-  genomic ranges (uses feature widths from ``row_ranges``).
+  genomic ranges (uses ``bp_length`` when present, otherwise range widths).
 * :func:`compute_scale_factors`: compute per-sample AUC- or
   mapped-reads-based scale factors.
 * :func:`transform_counts`: apply scale factors to a count matrix.
@@ -87,12 +87,14 @@ import logging
 import numbers
 import numpy as np
 import pandas as pd
+from scipy import sparse
 
 from recount3.bundle import R3ResourceBundle
 from recount3.search import annotation_ext
 from recount3 import _utils
 
 if TYPE_CHECKING:  # pragma: no cover
+    from numpy.typing import NDArray
     import summarizedexperiment  # type: ignore[import-not-found]
 
 
@@ -252,6 +254,7 @@ def build_summarized_experiment(
     annotation_extension: str | None = None,
     assay_name: str = "raw_counts",
     join_policy: str = "inner",
+    metadata_join: str = "inner",
     autoload: bool = True,
 ) -> summarizedexperiment.SummarizedExperiment:
     """Create a :class:`~summarizedexperiment.SummarizedExperiment`.
@@ -267,11 +270,26 @@ def build_summarized_experiment(
       annotation_extension: Optional annotation code for gene/exon
         assays (for example, ``"G026"``).
       assay_name: Name for the count assay in the SE.
-      join_policy: Join policy across projects (pandas concatenation join).
-      autoload: If :data:`True`, load resources transparently.
+      join_policy: ``"inner"`` intersects features; ``"outer"`` unions them
+        and inserts zeros for features absent from an input project.
+      metadata_join: ``"inner"`` intersects nonempty
+        metadata tables within each project; ``"outer"`` retains every count sample.
+      autoload: If :data:`True`, load resources transparently. If False,
+        counts and metadata must already be loaded.
 
     Returns:
       A :class:`summarizedexperiment.SummarizedExperiment` instance.
+
+    Raises:
+      ImportError: If the required BiocPy packages are unavailable.
+      ValueError: If counts, identifiers, dimensions, or join policies
+        are invalid, or no counts match the selection.
+      recount3.errors.CompatibilityError: If resources cannot be combined
+        unambiguously.
+      recount3.errors.RangesError: If required junction coordinates cannot
+        be aligned, or requested ranges fail without an enabled fallback.
+      recount3.errors.LoadError: If required metadata cannot be loaded.
+      recount3.errors.DownloadError: If required resource retrieval fails.
     """
     unit = _utils._normalize_genomic_unit(genomic_unit)
     return bundle.to_summarized_experiment(
@@ -279,6 +297,7 @@ def build_summarized_experiment(
         annotation_extension=annotation_extension,
         assay_name=assay_name,
         join_policy=join_policy,
+        metadata_join=metadata_join,
         autoload=autoload,
     )
 
@@ -291,6 +310,7 @@ def build_ranged_summarized_experiment(
     prefer_rr_junction_coordinates: bool = True,
     assay_name: str = "raw_counts",
     join_policy: str = "inner",
+    metadata_join: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
 ) -> (
@@ -309,12 +329,17 @@ def build_ranged_summarized_experiment(
       genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
       annotation_extension: Annotation code for gene/exon, if
         desired.
-      prefer_rr_junction_coordinates: Prefer RR for junction coordinates when
-        present.
+      prefer_rr_junction_coordinates: Whether to use RR junction sidecars.
+        Disabling this option prevents junction range construction and raises
+        a range error unless SE fallback is enabled. Ignored for genes/exons.
       assay_name: Name for the count assay in the output.
-      join_policy: Join policy across projects when stacking.
-      autoload: If :data:`True`, download and load resources as they are
-        needed. If :data:`False`, only already-cached resources are used.
+      join_policy: ``"inner"`` intersects features; ``"outer"`` unions them
+        and inserts zeros for features absent from an input project.
+      metadata_join: ``"inner"`` intersects nonempty
+        metadata tables within each project; ``"outer"`` retains every count sample.
+      autoload: If :data:`True`, download and load resources as needed.
+        If False, counts and metadata must already be loaded, and range
+        files must be cached.
       allow_fallback_to_se: If :data:`True`, return a plain SE when
         ranges are unavailable. That object has no genomic ranges, so
         operations requiring an RSE will not work on it; the flag changes
@@ -326,6 +351,17 @@ def build_ranged_summarized_experiment(
       or a plain :class:`summarizedexperiment.SummarizedExperiment` when
       ``allow_fallback_to_se`` is :data:`True` and ranges cannot be
       resolved.
+
+    Raises:
+      ImportError: If the required BiocPy packages are unavailable.
+      ValueError: If counts, identifiers, dimensions, or join policies
+        are invalid, or no counts match the selection.
+      recount3.errors.CompatibilityError: If resources cannot be combined
+        unambiguously.
+      recount3.errors.RangesError: If required junction coordinates cannot
+        be aligned, or requested ranges fail without an enabled fallback.
+      recount3.errors.LoadError: If required metadata cannot be loaded.
+      recount3.errors.DownloadError: If required resource retrieval fails.
     """
     unit = _utils._normalize_genomic_unit(genomic_unit)
     return bundle.to_ranged_summarized_experiment(
@@ -334,6 +370,7 @@ def build_ranged_summarized_experiment(
         prefer_rr_junction_coordinates=prefer_rr_junction_coordinates,
         assay_name=assay_name,
         join_policy=join_policy,
+        metadata_join=metadata_join,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
     )
@@ -353,6 +390,7 @@ def create_ranged_summarized_experiment(
     include_bigwig: bool = False,
     assay_name: str = "raw_counts",
     join_policy: str = "inner",
+    metadata_join: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
@@ -360,16 +398,11 @@ def create_ranged_summarized_experiment(
     summarizedexperiment.RangedSummarizedExperiment
     | summarizedexperiment.SummarizedExperiment
 ):
-    """High-level helper that mirrors recount3's ``create_rse()`` in R.
+    """Discover project resources and construct a ranged expression experiment.
 
-    This function hides the intermediate bundle construction step by:
-
-      1. Discovering all resources for a project via
-         :meth:`recount3.bundle.R3ResourceBundle.discover`.
-      2. Stacking expression matrices across projects and samples.
-      3. Resolving genomic ranges (GTF for gene/exon; RR for junctions).
-      4. Building a BiocPy :class:`RangedSummarizedExperiment` (or SE
-         fallback) using the bundle methods.
+    Count matrices and sample metadata are aligned by identity. Gene/exon
+    ranges come from the selected GTF annotation; junction ranges use the
+    matching RR sidecar. Sparse counts remain sparse in the output.
 
     Args:
       project: Study or project identifier (for example, ``"SRP009615"``).
@@ -389,14 +422,19 @@ def create_ranged_summarized_experiment(
         ``("MM", "RR")`` for ``"junction"`` (so genomic ranges can be
         attached to each row), and ``("MM",)`` for ``"gene"`` / ``"exon"``
         (the RR sidecar does not apply to those units).
-      include_metadata: Whether to include the five project metadata
-        tables in the underlying bundle (recommended).
+      include_metadata: Whether to include project metadata tables in
+        the bundle (five for SRA, four for GTEx/TCGA; recommended).
       include_bigwig: Whether to include per-sample BigWig coverage
         resources in the bundle. These can be large.
+      assay_name: Count assay name. The default ``"raw_counts"`` becomes
+        ``"counts"`` for junction experiments.
       join_policy: Join policy across projects when stacking count matrices
         (passed to :func:`build_ranged_summarized_experiment`).
-      autoload: If :data:`True`, download and load resources as they are
-        needed. If :data:`False`, only already-cached resources are used.
+      metadata_join: ``"inner"`` intersects nonempty
+        metadata tables within each project; ``"outer"`` retains every count sample.
+      autoload: If :data:`True`, download and load resources as needed.
+        If False, counts and metadata must already be loaded, and range
+        files must be cached.
       allow_fallback_to_se: If :data:`True`, construct a plain SE when
         genomic ranges cannot be derived for the requested combination.
         That object has no genomic ranges, so operations requiring an RSE
@@ -416,9 +454,15 @@ def create_ranged_summarized_experiment(
     Raises:
       ImportError: If BiocPy packages are not installed.
       ValueError: If inputs are invalid or no counts are found.
+      recount3.errors.CompatibilityError: If selected resources cannot be
+        combined unambiguously.
+      recount3.errors.RangesError: If ranges cannot be resolved and fallback
+        is disabled, or required junction alignment fails.
+      recount3.errors.LoadError: If required metadata cannot be loaded.
+      recount3.errors.DownloadError: If retrieval fails during count or
+        metadata preparation.
       TypeError: If the underlying
-        :class:`RangedSummarizedExperiment` constructor rejects all
-        compatibility variants.
+        :class:`RangedSummarizedExperiment` constructor rejects input types.
 
     Examples:
         Build an RSE for a human SRA gene-count project (GENCODE 26)::
@@ -480,6 +524,7 @@ def create_ranged_summarized_experiment(
         prefer_rr_junction_coordinates=True,
         assay_name=assay_name,
         join_policy=join_policy,
+        metadata_join=metadata_join,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
     )
@@ -499,6 +544,7 @@ def create_rse(
     include_bigwig: bool = False,
     assay_name: str = "raw_counts",
     join_policy: str = "inner",
+    metadata_join: str = "inner",
     autoload: bool = True,
     allow_fallback_to_se: bool = False,
     strict: bool = True,
@@ -506,26 +552,97 @@ def create_rse(
     summarizedexperiment.RangedSummarizedExperiment
     | summarizedexperiment.SummarizedExperiment
 ):
-    """Alias for :func:`create_ranged_summarized_experiment`.
+    """Discover project resources and construct a ranged expression experiment.
 
-    The parameters and behavior are identical; see that function for
-    full documentation.
+    Convenience alias for :func:`create_ranged_summarized_experiment`.
+
+    Count matrices and sample metadata are aligned by identity. Gene/exon
+    ranges come from the selected GTF annotation; junction ranges use the
+    matching RR sidecar. Sparse counts remain sparse in the output.
+
+    Args:
+      project: Study or project identifier (for example, ``"SRP009615"``).
+      genomic_unit: One of ``{"gene", "exon", "junction"}``.
+      organism: Organism identifier (``"human"`` or ``"mouse"``).
+      data_source: Data source (``"sra"``, ``"gtex"``, or ``"tcga"``).
+      annotation_label: Optional human-readable annotation label for gene/exon
+        assays, such as ``"gencode_v26"`` or ``"gencode_v29"``. Ignored
+        for junction-level assays.
+      annotation_extension: Optional explicit annotation extension
+        (for example, ``"G026"``). When provided, this takes precedence
+        over ``annotation_label``. Ignored for junction-level assays.
+      junction_type: Junction type; typically ``"ALL"``.
+      junction_extensions: Iterable of junction artifact extensions
+        to include (for example, ``("MM",)`` or ``("MM", "RR")``). If
+        :data:`None`, the default depends on ``genomic_unit``:
+        ``("MM", "RR")`` for ``"junction"`` (so genomic ranges can be
+        attached to each row), and ``("MM",)`` for ``"gene"`` / ``"exon"``
+        (the RR sidecar does not apply to those units).
+      include_metadata: Whether to include project metadata tables in
+        the bundle (five for SRA, four for GTEx/TCGA; recommended).
+      include_bigwig: Whether to include per-sample BigWig coverage
+        resources in the bundle. These can be large.
+      assay_name: Count assay name. The default ``"raw_counts"`` becomes
+        ``"counts"`` for junction experiments.
+      join_policy: Join policy across projects when stacking count matrices
+        (passed to :func:`build_ranged_summarized_experiment`).
+      metadata_join: ``"inner"`` intersects nonempty
+        metadata tables within each project; ``"outer"`` retains every count sample.
+      autoload: If :data:`True`, download and load resources as needed.
+        If False, counts and metadata must already be loaded, and range
+        files must be cached.
+      allow_fallback_to_se: If :data:`True`, construct a plain SE when
+        genomic ranges cannot be derived for the requested combination.
+        That object has no genomic ranges, so operations requiring an RSE
+        will not work on it; the flag changes the return type on failure
+        and neither retries a failed retrieval nor repairs a mismatched
+        annotation.
+      strict: If :data:`True`, propagate validation errors from the
+        search layer (for example, missing projects or incompatible
+        combinations).
+
+    Returns:
+      A :class:`summarizedexperiment.RangedSummarizedExperiment` object,
+      or a plain :class:`summarizedexperiment.SummarizedExperiment` when
+      ``allow_fallback_to_se`` is :data:`True` and ranges cannot be
+      resolved.
+
+    Raises:
+      ImportError: If BiocPy packages are not installed.
+      ValueError: If inputs are invalid or no counts are found.
+      recount3.errors.CompatibilityError: If selected resources cannot be
+        combined unambiguously.
+      recount3.errors.RangesError: If ranges cannot be resolved and fallback
+        is disabled, or required junction alignment fails.
+      recount3.errors.LoadError: If required metadata cannot be loaded.
+      recount3.errors.DownloadError: If retrieval fails during count or
+        metadata preparation.
+      TypeError: If the underlying
+        :class:`RangedSummarizedExperiment` constructor rejects input types.
 
     Examples:
-        Build an RSE for a human SRA gene-count project::
+        Build an RSE for a human SRA gene-count project (GENCODE 26)::
 
-            rse = create_rse(
+            rse = create_ranged_summarized_experiment(
                 project="SRP009615",
                 organism="human",
                 annotation_label="gencode_v26",
             )
 
-        Use the raw extension string instead of a label::
+        Use the raw annotation extension instead of a label::
 
-            rse = create_rse(
+            rse = create_ranged_summarized_experiment(
                 project="SRP009615",
                 organism="human",
                 annotation_extension="G026",
+            )
+
+        Build a junction-level RSE::
+
+            rse = create_ranged_summarized_experiment(
+                project="SRP009615",
+                organism="human",
+                genomic_unit="junction",
             )
     """
     return create_ranged_summarized_experiment(
@@ -541,6 +658,7 @@ def create_rse(
         include_bigwig=include_bigwig,
         assay_name=assay_name,
         join_policy=join_policy,
+        metadata_join=metadata_join,
         autoload=autoload,
         allow_fallback_to_se=allow_fallback_to_se,
         strict=strict,
@@ -674,8 +792,38 @@ def expand_sra_attributes(
     return experiment_or_coldata.set_column_data(expanded_bf)  # type: ignore
 
 
+def _assay_frame(
+    matrix: NDArray[Any] | sparse.spmatrix | sparse.sparray,
+    row_names: Sequence[str] | None,
+    column_names: Sequence[str] | None,
+) -> pd.DataFrame:
+    """Wrap a dense or sparse assay in a labeled DataFrame.
+
+    Args:
+        matrix: Two-dimensional assay values. SciPy sparse inputs are converted
+            to pandas sparse columns without densifying the matrix.
+        row_names: Feature labels in assay order, or ``None`` for a RangeIndex.
+        column_names: Sample labels in assay order, or ``None`` for a RangeIndex.
+
+    Returns:
+        A DataFrame preserving assay values and sparse storage where applicable.
+        Dense output may share storage with the input array.
+
+    Raises:
+        ValueError: If labels do not match the matrix dimensions or the dense
+            input is not two-dimensional.
+    """
+    kwargs = {
+        "index": list(row_names) if row_names is not None else None,
+        "columns": (list(column_names) if column_names is not None else None),
+    }
+    if sparse.issparse(matrix):
+        return pd.DataFrame.sparse.from_spmatrix(matrix, **kwargs)
+    return pd.DataFrame(matrix, **kwargs)
+
+
 def compute_read_counts(
-    rse: Any,
+    rse: summarizedexperiment.RangedSummarizedExperiment,
     round_to_integers: bool = True,
     avg_mapped_read_length_column: str = (
         "recount_qc.star.average_mapped_length"
@@ -712,7 +860,8 @@ def compute_read_counts(
     Returns:
       A :class:`~pandas.DataFrame` of approximate read counts with the same
       shape as the "raw_counts" assay (features x samples). Row and column
-      names are preserved when available.
+      names are preserved when available. Sparse inputs produce a sparse
+      DataFrame, including missing-value propagation.
 
     Raises:
       TypeError: If `rse` is not a
@@ -746,7 +895,12 @@ def compute_read_counts(
             f"{avg_mapped_read_length_column!r}."
         ) from exc
 
-    raw_counts = np.asarray(rse.get_assay(assay_name), dtype=float)
+    assay = rse.get_assay(assay_name)
+    raw_counts = (
+        assay.astype(float)
+        if sparse.issparse(assay)
+        else np.asarray(assay, dtype=float)
+    )
     if raw_counts.ndim != 2:
         raise ValueError(
             f"{assay_name!r} assay must be a 2D matrix "
@@ -779,19 +933,10 @@ def compute_read_counts(
             f"{avg_mapped_read_length_column!r} ({avg_len.shape[0]})."
         )
 
-    read_counts = raw_counts / avg_len
-
-    if round_to_integers:
-        read_counts = np.rint(read_counts)
-
-    row_names = rse.get_row_names()
-    col_names = rse.get_column_names()
-
-    return pd.DataFrame(
-        read_counts,
-        index=list(row_names) if row_names is not None else None,
-        columns=list(col_names) if col_names is not None else None,
-    )
+    read_counts = _assay_frame(
+        raw_counts, rse.get_row_names(), rse.get_column_names()
+    ).div(avg_len, axis=1)
+    return read_counts.apply(np.rint) if round_to_integers else read_counts
 
 
 def compute_tpm(
@@ -807,17 +952,20 @@ def compute_tpm(
 
     Args:
       rse: A :class:`~summarizedexperiment.RangedSummarizedExperiment`
-        object containing raw coverage sums. Must have feature widths
-        defined in rowRanges.
+        object containing raw coverage sums. Uses annotated ``bp_length``
+        when available, otherwise the genomic widths in ``row_ranges``.
 
     Returns:
-      A :class:`~pandas.DataFrame` of TPM values.
+      A :class:`~pandas.DataFrame` of TPM values in feature-by-sample order,
+      preserving names and sparse columns when the count assay is sparse.
+      Missing lengths propagate to the corresponding values.
 
     Raises:
       TypeError: If rse is not a
         :class:`~summarizedexperiment.RangedSummarizedExperiment`
         (needs rowRanges).
-      ValueError: If feature widths or read lengths are missing.
+      ValueError: If feature widths cannot be obtained, the count assay or
+        read-length metadata column is absent, or dimensions do not align.
 
     Examples:
         Compute TPM from an RSE built with :func:`create_rse`::
@@ -839,7 +987,12 @@ def compute_tpm(
     reads = compute_read_counts(rse, round_to_integers=False)
 
     try:
-        widths = np.array(rse.width)
+        row_data = rse.get_row_data() if hasattr(rse, "get_row_data") else None
+        widths = (
+            np.asarray(row_data["bp_length"], dtype=float)
+            if row_data is not None and "bp_length" in row_data.column_names
+            else np.array(rse.width)
+        )
     except AttributeError as exc:
         raise ValueError(
             "Could not determine feature widths from rowRanges."
@@ -1094,7 +1247,7 @@ def compute_scale_factors(
 
 
 def transform_counts(
-    rse: Any,
+    rse: summarizedexperiment.RangedSummarizedExperiment,
     by: str = "auc",
     target_read_count: float = 4e7,
     target_read_length_bp: float = 100,
@@ -1159,16 +1312,15 @@ def transform_counts(
     Returns:
       A :class:`~pandas.DataFrame` of scaled counts with the same dimensions
       as `assay("raw_counts")`. Row and column names are preserved when
-      available.
+      available. Sparse assays produce sparse DataFrames; missing scale
+      factors propagate to every value in the corresponding sample column.
 
     Raises:
-      ValueError: If `rse` is not a
-        :class:`~summarizedexperiment.RangedSummarizedExperiment`, if the
-        required assay or metadata columns are missing, if `by` is invalid,
-        or if the
-        assay and metadata dimensions do not align.
-      TypeError: If `round_to_integers` is not a bool, or if numeric
-        parameters are not valid scalars.
+      ValueError: If the required assay or metadata columns are missing,
+        ``by`` is invalid, or assay and metadata dimensions do not align.
+      TypeError: If ``rse`` is not a RangedSummarizedExperiment,
+        ``round_to_integers`` is not a bool, or numeric parameters are not
+        valid scalars.
     """
     ranged_summarized_experiment_cls = (
         _utils.get_ranged_summarizedexperiment_class()
@@ -1186,7 +1338,11 @@ def transform_counts(
         raise TypeError("round_to_integers must be a bool.")
 
     counts = rse.get_assay(assay_name)
-    counts_array = np.asarray(counts, dtype=float)
+    counts_array = (
+        counts.astype(float)
+        if sparse.issparse(counts)
+        else np.asarray(counts, dtype=float)
+    )
 
     scale_factor = compute_scale_factors(
         rse,
@@ -1207,16 +1363,7 @@ def transform_counts(
             f"({len(scale_factor)})."
         )
 
-    scaled = counts_array * scale_factor.to_numpy(dtype=float)
-
-    if round_to_integers:
-        scaled = np.rint(scaled)
-
-    row_names = rse.get_row_names()
-    col_names = rse.get_column_names()
-
-    return pd.DataFrame(
-        scaled,
-        index=list(row_names) if row_names is not None else None,
-        columns=list(col_names) if col_names is not None else None,
-    )
+    scaled = _assay_frame(
+        counts_array, rse.get_row_names(), rse.get_column_names()
+    ).mul(scale_factor.to_numpy(dtype=float), axis=1)
+    return scaled.apply(np.rint) if round_to_integers else scaled

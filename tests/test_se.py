@@ -38,6 +38,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import sparse
 
 import recount3._utils as _utils
 from recount3.se import (
@@ -169,7 +170,7 @@ class _MockSEWithBadColData(_MockSE):
         return _NoPandasBiocFrame()
 
 
-def _patch_biocpy():
+def _patch_biocpy() -> mock._patch:
     return mock.patch.multiple(
         _utils,
         get_biocframe_class=mock.DEFAULT,
@@ -474,6 +475,7 @@ class TestBuildSummarizedExperiment:
             annotation_extension="G026",
             assay_name="raw_counts",
             join_policy="inner",
+            metadata_join="inner",
             autoload=True,
         )
 
@@ -482,6 +484,7 @@ class TestBuildSummarizedExperiment:
             annotation_extension="G026",
             assay_name="raw_counts",
             join_policy="inner",
+            metadata_join="inner",
             autoload=True,
         )
         assert result == "SE_sentinel"
@@ -510,6 +513,7 @@ class TestBuildRangedSummarizedExperiment:
             prefer_rr_junction_coordinates=False,
             assay_name="raw_counts",
             join_policy="outer",
+            metadata_join="inner",
             autoload=False,
             allow_fallback_to_se=True,
         )
@@ -520,6 +524,7 @@ class TestBuildRangedSummarizedExperiment:
             prefer_rr_junction_coordinates=False,
             assay_name="raw_counts",
             join_policy="outer",
+            metadata_join="inner",
             autoload=False,
             allow_fallback_to_se=True,
         )
@@ -781,7 +786,7 @@ class TestExpandSraAttributes:
         )
         assert "p.k" in result.columns
 
-    def _biocpy_patches(self):
+    def _biocpy_patches(self) -> mock._patch:
         return mock.patch.multiple(
             _utils,
             get_biocframe_class=mock.MagicMock(return_value=_MockBiocFrame),
@@ -860,7 +865,7 @@ class TestExpandSraAttributes:
 
 
 class TestComputeReadCounts:
-    def _patch_rse_class(self):
+    def _patch_rse_class(self) -> mock._patch:
         return mock.patch.object(
             _utils,
             "get_ranged_summarizedexperiment_class",
@@ -995,7 +1000,7 @@ class TestComputeReadCounts:
 class TestComputeTpm:
     """Tests for compute_tpm."""
 
-    def _patch_rse_class(self):
+    def _patch_rse_class(self) -> mock._patch:
         return mock.patch.object(
             _utils,
             "get_ranged_summarizedexperiment_class",
@@ -1086,7 +1091,9 @@ class TestIsPairedEnd:
         assert pd.isna(result.iloc[0])
         assert "paired" in caplog.text.lower()
 
-    def test_mixed_with_invalid_ratio(self, caplog) -> None:
+    def test_mixed_with_invalid_ratio(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         meta = self._meta([100.0, 300.0, 200.0], [100.0, 100.0, 100.0])
         with caplog.at_level(logging.WARNING):
             result = is_paired_end(meta)
@@ -1249,7 +1256,7 @@ class TestComputeScaleFactors:
 class TestTransformCounts:
     """Tests for transform_counts."""
 
-    def _patch_rse_class(self):
+    def _patch_rse_class(self) -> mock._patch:
         return mock.patch.object(
             _utils,
             "get_ranged_summarizedexperiment_class",
@@ -1347,3 +1354,28 @@ class TestTransformCounts:
         with self._patch_rse_class():
             with pytest.raises(ValueError, match="'auc' or 'mapped_reads'"):
                 transform_counts(rse, by="bad_method")
+
+
+class TestComputeReadCountsSparseAssay:
+    def test_a_sparse_assay_is_kept_sparse_and_matches_the_dense_result(
+        self,
+    ) -> None:
+        """Sparse assays must not be densified on the way to read counts."""
+        sparse_rse = _MockRSE(
+            assays={"raw_counts": sparse.csc_matrix(_RAW.copy())},
+            col_data_df=_META.copy(),
+        )
+        patch_rse_class = mock.patch.object(
+            _utils,
+            "get_ranged_summarizedexperiment_class",
+            return_value=_MockRSE,
+        )
+
+        with patch_rse_class:
+            result = compute_read_counts(sparse_rse, round_to_integers=False)
+            expected = compute_read_counts(_make_rse(), round_to_integers=False)
+
+        assert all(isinstance(dtype, pd.SparseDtype) for dtype in result.dtypes)
+        np.testing.assert_allclose(
+            result.to_numpy(dtype=float), expected.to_numpy(dtype=float)
+        )

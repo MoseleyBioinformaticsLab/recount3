@@ -127,13 +127,14 @@ def _sample_shard(sample: str | None, data_source: str | None) -> str:
         data_source: Data source identifier (e.g., ``"sra"``, ``"gtex"``).
 
     Returns:
-        A 2-character uppercase shard string, or the empty string if
-        ``sample`` is ``None`` or too short.
+        An uppercase shard string of at most two characters. An empty or
+        missing sample returns an empty string; short identifiers follow
+        normal slice semantics and may produce fewer than two characters.
     """
     if not sample:
         return ""
     is_gtex = isinstance(data_source, str) and "gtex" in data_source.lower()
-    if is_gtex and len(sample) >= 4:
+    if is_gtex:
         return sample[-4:-2].upper()
     return sample[-2:].upper()
 

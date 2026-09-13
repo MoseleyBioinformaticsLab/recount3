@@ -637,7 +637,45 @@ When ``create_rse`` or
 :meth:`~recount3.R3ResourceBundle.to_ranged_summarized_experiment`
 assembles an RSE, it merges all available per-project metadata tables
 into ``column_data``, namespacing non-key columns by their table of
-origin (e.g. ``recount_qc__star__all_mapped_reads``).
+origin (e.g. ``recount_qc__star.all_mapped_reads``).
+
+Construction uses ``metadata_join="inner"`` by default, matching R's
+intersection of the nonempty metadata tables within each project. Samples
+absent from that intersection are excluded from both the assay and
+``column_data``. Use ``metadata_join="outer"`` on ``create_rse`` or either
+bundle builder to retain every count sample with missing metadata values.
+This option is independent of ``join_policy``, which joins feature rows
+across projects. With no metadata resources, all count samples are retained.
+
+Requested files that fail to load, conflicting sample identifiers, and mixed
+annotations raise errors. Select ``annotation_extension`` explicitly when a
+bundle contains several annotations. For junctions from multiple projects,
+each MM matrix needs its matching ID and RR sidecars: junction rows are
+matched by chromosome, inclusive coordinates, and strand. An outer feature
+join introduces zeros only for features absent from a project; missing values
+inside an input count file are errors.
+
+Gene and exon assays preserve their numeric types. Junction assays remain
+SciPy CSC sparse matrices, and count-transform helpers return sparse-backed
+DataFrames for sparse inputs. Standard BiocPy assay access, slicing, copying,
+and range operations work directly on the constructed objects. Converting a
+large junction assay with ``toarray()`` explicitly allocates its dense form.
+
+Repeated exon IDs retain their individual transcript annotations in
+``row_data`` and ``row_ranges``. Python gives repeated rows unique names while
+preserving the original IDs in ``row_data["feature_id"]``. Compatible projects
+with identical repeated feature ordering can be combined; ambiguous repeated
+feature alignments raise an error. The GTF score is preserved as ``bp_length``
+(covered exonic length), which can differ from genomic span. TPM uses this
+annotated length when present.
+
+Experiment metadata records the project, organism, annotation, source URLs,
+construction options, creation time, package version, and the mapping of
+metadata columns to their source tables. Access individual fields through
+``rse.metadata["project"]``. A bundle retains at most one aligned annotation
+cache for repeated RSE construction; changing its annotation file invalidates
+the cache. With ``autoload=False``, counts and sample metadata must already be
+loaded, while genomic range files must be cached locally.
 
 Access it as a pandas DataFrame:
 

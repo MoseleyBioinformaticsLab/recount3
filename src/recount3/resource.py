@@ -88,6 +88,7 @@ Note:
 from __future__ import annotations
 
 import dataclasses
+import csv
 import errno
 import gzip
 import inspect
@@ -143,6 +144,56 @@ def _detect_mmread_kwargs() -> dict[str, Any]:
 
 
 _MMREAD_KWARGS = _detect_mmread_kwargs()
+
+
+def _read_metadata_table(path: Path) -> pd.DataFrame:
+    """Read a metadata TSV while preserving literal text and inferring types.
+
+    Quotation marks are literal characters, and only ``NA`` is an unconditional
+    missing-value marker. Boolean tokens are converted to nullable booleans.
+    Numeric columns treat blanks and ``NaN`` as missing; character columns
+    preserve those strings along with literal ``NULL`` and ``None`` values.
+
+    Args:
+        path: Local tab-separated metadata file. Compression is inferred from
+            the filename extension.
+
+    Returns:
+        A DataFrame with inferred numeric, boolean, or character columns.
+
+    Raises:
+        OSError: If the file cannot be opened or decompressed.
+        pandas.errors.EmptyDataError: If no columns can be read.
+        pandas.errors.ParserError: If the table structure is malformed.
+    """
+    frame = pd.read_table(
+        path,
+        compression="infer",
+        quoting=csv.QUOTE_NONE,
+        dtype=str,
+        keep_default_na=False,
+        na_values=["NA"],
+    )
+    for name in frame.columns:
+        column = frame[name]
+        present = column.dropna()
+        nonempty = present[present != ""]
+        if (
+            not nonempty.empty
+            and nonempty.isin(["TRUE", "FALSE", "T", "F"]).all()
+        ):
+            frame[name] = column.map(
+                {"TRUE": True, "T": True, "FALSE": False, "F": False}
+            ).astype("boolean")
+            continue
+        # Treat blanks as missing in numeric columns, but preserve them in
+        # character columns. NaN likewise depends on the inferred column type.
+        candidate = column.mask(column.isin(["", "NaN"]))
+        try:
+            frame[name] = pd.to_numeric(candidate, errors="raise")
+        except (ValueError, TypeError):
+            pass
+    return frame
 
 
 def _ensure_cached_url(
@@ -804,7 +855,7 @@ class R3Resource:
             or name.endswith(".tsv.gz")
             or name.endswith(".md.gz")
         ):
-            obj = pd.read_table(cached, compression="infer")
+            obj = _read_metadata_table(cached)
             self._cached_data = obj
             return obj
 

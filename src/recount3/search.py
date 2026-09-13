@@ -186,7 +186,7 @@ def _build_param_grid(
     grid: list[dict[str, str]] = []
     for combo in itertools.product(*vals):
         d: dict[str, str] = {"resource_type": resource_type}
-        d.update({k: v for k, v in zip(keys, combo, strict=True)})
+        d.update(dict(zip(keys, combo, strict=True)))
         grid.append(d)
     return grid
 
@@ -1233,7 +1233,8 @@ def search_project_all(
       junction_type: Junction type; typically "ALL".
       junction_extension: Iterable of junction artifacts to include:
         "MM" (counts), "RR" (coordinates), "ID" (sample IDs).
-      include_metadata: Whether to include the five metadata tables.
+      include_metadata: Whether to include sample metadata tables: five for SRA
+        and four for GTEx/TCGA, which do not supply prediction tables.
       include_bigwig: Whether to include per-sample BigWig coverage files.
       strict: If True, raise on invalid parameters; else skip broken items.
       deduplicate: If True, drop duplicates across resource families.
@@ -1301,9 +1302,8 @@ def search_project_all(
             "recount_project",
             "recount_qc",
             "recount_seq_qc",
-            "recount_pred",
             data_source,
-        )
+        ) + (("recount_pred",) if data_source == "sra" else ())
         found += search_metadata_files(
             organism=organism,
             data_source=data_source,
