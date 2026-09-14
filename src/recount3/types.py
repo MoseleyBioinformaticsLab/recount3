@@ -60,6 +60,17 @@ Attributes:
         product across all parameters and returns one
         :class:`~recount3.resource.R3Resource` per combination.
 
+    StrPath: ``str | os.PathLike[str]``. A filesystem destination accepted
+        by the path-taking parameters of the public API, such as
+        :meth:`~recount3.resource.R3Resource.download` and
+        :meth:`~recount3.bundle.R3ResourceBundle.download`. Both a plain
+        string and any :mod:`os.PathLike` object are accepted, so a
+        :class:`pathlib.Path` handed back by
+        :meth:`~recount3.resource.R3Resource.ensure_cached`,
+        :func:`~recount3.config.recount3_cache`, or
+        :func:`~recount3.config.recount3_cache_files` can be passed straight
+        back in without conversion.
+
     FieldSpec: ``StringOrIterable | Callable[[Any], bool] | None``. The
         filter predicate accepted by
         :meth:`~recount3.bundle.R3ResourceBundle.filter` and
@@ -74,6 +85,7 @@ Attributes:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, TypeAlias
 
@@ -82,3 +94,4 @@ CompatibilityMode: TypeAlias = Literal["family", "feature"]
 
 StringOrIterable: TypeAlias = str | Iterable[str]
 FieldSpec: TypeAlias = StringOrIterable | Callable[[Any], bool] | None
+StrPath: TypeAlias = str | os.PathLike[str]

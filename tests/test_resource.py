@@ -988,6 +988,84 @@ def test_download_to_dir_with_suffix_uses_is_dir(
 
 
 # ===========================================================================
+# R3Resource.download — os.PathLike destinations
+# ===========================================================================
+
+
+def test_download_to_dir_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
+    """A bare Path directory works like the equivalent str."""
+    res = _make("data_sources", cfg, organism="human")
+    dest_dir = tmp_path / "out"
+    dest_dir.mkdir()
+    fake_cached = tmp_path / "cf"
+    fake_cached.touch()
+    with mock.patch.object(
+        R3Resource, "_ensure_cached", return_value=fake_cached
+    ):
+        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
+            result = res.download(dest_dir, cache_mode="enable")
+    mock_hl.assert_called_once()
+    assert result == str(dest_dir / "homes_index")
+    assert isinstance(res.filepath, str)
+
+
+def test_download_to_zip_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
+    """A bare Path .zip destination works like the equivalent str."""
+    res = _make("data_sources", cfg, organism="human")
+    zip_path = tmp_path / "out.zip"
+    fake_cached = tmp_path / "cached_file"
+    fake_cached.touch()
+    with mock.patch.object(
+        R3Resource, "_ensure_cached", return_value=fake_cached
+    ):
+        with mock.patch(
+            "recount3.resource.write_cached_file_to_zip"
+        ) as mock_wc:
+            result = res.download(zip_path, cache_mode="enable")
+    mock_wc.assert_called_once_with(
+        fake_cached, zip_path, res.arcname, overwrite=False
+    )
+    assert result is None
+
+
+def test_download_accepts_pathlike_from_the_packages_own_output(
+    cfg: Config, tmp_path: Path
+) -> None:
+    """A Path produced by the package feeds back in without conversion."""
+    res = _make("data_sources", cfg, organism="human")
+    cached = tmp_path / "cf"
+    cached.touch()
+    dest_dir = tmp_path / "out"
+    dest_dir.mkdir()
+    with mock.patch.object(R3Resource, "_ensure_cached", return_value=cached):
+        # ensure_cached() returns a Path; its parent is a Path too.
+        assert isinstance(res.ensure_cached(), Path)
+        with mock.patch("recount3.resource._hardlink_or_copy"):
+            result = res.download(dest_dir, cache_mode="enable")
+    assert result == str(dest_dir / "homes_index")
+
+
+def test_filepath_pathlike_is_normalized_to_str(cfg: Config) -> None:
+    """A Path passed to the constructor is stored as a str."""
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
+    res = R3Resource(description=desc, config=cfg, filepath=Path("/a/b.gz"))
+    assert isinstance(res.filepath, str)
+    assert res.filepath == str(Path("/a/b.gz"))
+    assert "PosixPath(" not in repr(res)
+    assert "WindowsPath(" not in repr(res)
+
+
+def test_filepath_pathlike_and_str_compare_equal(cfg: Config) -> None:
+    """Two resources naming the same file are equal regardless of spelling."""
+    desc = R3ResourceDescription(resource_type="data_sources", organism="human")
+    as_path = R3Resource(description=desc, config=cfg, filepath=Path("/a/b.gz"))
+    as_str = R3Resource(
+        description=desc, config=cfg, filepath=str(Path("/a/b.gz"))
+    )
+    assert as_path == as_str
+
+
+# ===========================================================================
 # R3Resource.load — in-memory cache
 # ===========================================================================
 

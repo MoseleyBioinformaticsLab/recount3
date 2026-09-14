@@ -150,6 +150,21 @@ Changed
 Fixed
 ~~~~~
 
+- ``R3Resource.download(path=...)`` and ``R3ResourceBundle.download(dest=...)``
+  are annotated to accept any :class:`os.PathLike`, not only ``str``. Both
+  already handled a ``pathlib.Path`` at runtime -- each normalizes its argument
+  with ``Path()`` before doing anything else -- but the narrow annotation meant
+  that feeding a destination straight back from ``ensure_cached()``,
+  ``recount3_cache()``, or ``recount3_cache_files()``, all of which return
+  ``Path``, was an error under mypy and pyright for anyone type-checking
+  against the shipped ``py.typed`` marker. The new ``recount3.StrPath`` alias
+  names the accepted type. Return types are unchanged: ``download()`` still
+  returns ``str | None``.
+- ``R3Resource(filepath=...)`` normalizes an ``os.PathLike`` to ``str``.
+  ``download()`` always stored a ``str``, so the attribute previously held
+  either type depending on how it was populated: ``repr`` rendered
+  ``PosixPath('...')`` for one and ``'...'`` for the other, and two resources
+  naming the same file compared unequal.
 - GTF strand values of ``.`` are normalized to ``*``, allowing unstranded
   annotations such as SIRV gene sums to build ranged experiments. Existing
   code remains source-compatible.

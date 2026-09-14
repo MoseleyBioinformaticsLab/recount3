@@ -1684,7 +1684,7 @@ class R3ResourceBundle:
         Examples:
             Discover all default resources for a single project::
 
-                bundle = R3ResourceBundle.discover(
+                bundle = r3.R3ResourceBundle.discover(
                     organism="human",
                     data_source="sra",
                     project="SRP009615",
@@ -1692,7 +1692,7 @@ class R3ResourceBundle:
 
             Discover gene counts only across two projects::
 
-                bundle = R3ResourceBundle.discover(
+                bundle = r3.R3ResourceBundle.discover(
                     organism="human",
                     data_source="sra",
                     project=["SRP009615", "SRP001558"],
@@ -1701,7 +1701,7 @@ class R3ResourceBundle:
 
             Include BigWig coverage files alongside counts::
 
-                bundle = R3ResourceBundle.discover(
+                bundle = r3.R3ResourceBundle.discover(
                     organism="human",
                     data_source="sra",
                     project="SRP009615",
@@ -3263,7 +3263,7 @@ class R3ResourceBundle:
     def download(
         self,
         *,
-        dest: str = ".",
+        dest: r3_types.StrPath = ".",
         overwrite: bool = False,
         cache: r3_types.CacheMode = "enable",
         max_workers: int = 8,
@@ -3287,9 +3287,10 @@ class R3ResourceBundle:
         See :mod:`recount3.resource` for refresh and failure semantics.
 
         Args:
-          dest: Destination directory or ``.zip`` path. When a directory
-            is provided, each resource is materialized as a separate file
-            under that directory. When a path ending in ``.zip`` is
+          dest: Destination directory or ``.zip`` path, as a string or any
+            :class:`os.PathLike` object such as :class:`pathlib.Path`. When a
+            directory is provided, each resource is materialized as a separate
+            file under that directory. When a path ending in ``.zip`` is
             provided, resources are written into that archive.
           overwrite: If :data:`True`, allow overwriting existing files in
             directory mode.

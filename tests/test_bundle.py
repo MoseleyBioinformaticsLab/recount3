@@ -2938,6 +2938,25 @@ class TestR3ResourceBundleDownload:
             path=".", cache_mode="update", overwrite=False
         )
 
+    def test_pathlike_dest_forwarded(self) -> None:
+        res = _mock_resource()
+        b = R3ResourceBundle(resources=[res])
+        dest = Path("/some/dir")
+        b.download(dest=dest)
+        res.download.assert_called_once_with(
+            path=dest, cache_mode="enable", overwrite=False
+        )
+
+    def test_pathlike_dest_forwarded_in_parallel(self) -> None:
+        resources = [_mock_resource() for _ in range(3)]
+        b = R3ResourceBundle(resources=resources)
+        dest = Path("/some/dir")
+        b.download(dest=dest, max_workers=4)
+        for res in resources:
+            res.download.assert_called_once_with(
+                path=dest, cache_mode="enable", overwrite=False
+            )
+
     def test_empty_bundle_does_nothing(self) -> None:
         b = R3ResourceBundle()
         b.download()

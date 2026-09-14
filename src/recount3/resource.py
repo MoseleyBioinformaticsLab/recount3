@@ -121,7 +121,7 @@ from recount3._utils import (
 )
 from recount3.config import Config, default_config
 from recount3.errors import LoadError
-from recount3.types import CacheMode
+from recount3.types import CacheMode, StrPath
 
 
 def _detect_mmread_kwargs() -> dict[str, Any]:
@@ -389,7 +389,10 @@ class R3Resource:
             joining the configured base URL with the description's relative URL.
         filepath: An optional string representing the absolute local path where
             the resource was successfully materialized (either copied
-            or linked).
+            or linked). Always a ``str`` once the instance exists: an
+            :class:`os.PathLike` passed to the constructor is normalized,
+            matching what :meth:`download` stores, so two resources naming
+            the same file compare equal and ``repr`` renders one spelling.
         config: An optional `Config` instance dictating strict network and cache
             behaviors. If omitted, the global default configuration is
             dynamically applied.
@@ -416,6 +419,8 @@ class R3Resource:
 
     def __post_init__(self) -> None:
         """Initialize derived fields after dataclass instantiation."""
+        if self.filepath is not None:
+            self.filepath = str(self.filepath)
         cfg = self.config or default_config()
         if self.url is None:
             self.url = urllib.parse.urljoin(
@@ -578,7 +583,7 @@ class R3Resource:
 
     def download(
         self,
-        path: str | None = None,
+        path: StrPath | None = None,
         *,
         cache_mode: CacheMode = "enable",
         overwrite: bool = False,
@@ -591,9 +596,11 @@ class R3Resource:
         depending on the arguments provided.
 
         Args:
-            path: Target destination. If None, performs a cache-only download.
-                If a directory path, links or copies the file there. If a
-                '.zip' path, injects the file into the archive using `arcname`.
+            path: Target destination, as a string or any
+                :class:`os.PathLike` object such as :class:`pathlib.Path`. If
+                None, performs a cache-only download. If a directory path,
+                links or copies the file there. If a '.zip' path, injects the
+                file into the archive using `arcname`.
             cache_mode: Caching behavior. 'enable' uses existing cache,
                 'disable' streams directly to `path` without caching, 'update'
                 forces a cache refresh before materialization.
