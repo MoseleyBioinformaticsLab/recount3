@@ -741,7 +741,7 @@ def _read_gtf_dataframe(res: resource.R3Resource) -> pd.DataFrame:
     """Read a GTF(.gz) annotation resource into a DataFrame.
 
     The result contains the standard 9 GTF columns, including the
-    ``attributes`` field.
+    ``attributes`` field. Unstranded ``.`` values become ``*``.
 
     Args:
       res: An annotation resource describing a GTF or GTF.GZ file.
@@ -784,6 +784,8 @@ def _read_gtf_dataframe(res: resource.R3Resource) -> pd.DataFrame:
             names=cols,
             dtype=str,
         )
+
+    df["strand"] = df["strand"].replace(".", "*")
 
     for col in ("start", "end"):
         df[col] = pd.to_numeric(df[col], errors="coerce")

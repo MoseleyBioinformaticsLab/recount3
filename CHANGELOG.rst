@@ -150,6 +150,9 @@ Changed
 Fixed
 ~~~~~
 
+- GTF strand values of ``.`` are normalized to ``*``, allowing unstranded
+  annotations such as SIRV gene sums to build ranged experiments. Existing
+  code remains source-compatible.
 - Sample metadata whose tables share no samples no longer produces an
   experiment with zero samples. The inner-join check compared the number of
   matched samples with the number of merged rows, which are both zero when

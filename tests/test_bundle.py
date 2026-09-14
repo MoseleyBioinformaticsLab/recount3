@@ -870,6 +870,29 @@ class TestReadGtfDataframe:
         assert len(df) == 1
         assert df["feature"].iloc[0] == "gene"
 
+    @pytest.mark.parametrize("suffix", [".gtf", ".gtf.gz"])
+    def test_normalizes_unstranded_features(
+        self, tmp_path: Path, suffix: str
+    ) -> None:
+        path = tmp_path / f"annotation{suffix}"
+        content = "".join(
+            f'chr1\tref\tgene\t1\t100\t.\t{strand}\t.\tgene_id "G{i}";\n'
+            for i, strand in enumerate([".", "+", "-", "*"])
+        )
+        opener = gzip.open if suffix.endswith(".gz") else open
+        with opener(path, "wt", encoding="utf-8") as handle:
+            handle.write(content)
+        res = MagicMock(spec=R3Resource)
+        res._cached_path.return_value = path
+
+        df = _read_gtf_dataframe(res)
+
+        assert df["strand"].tolist() == ["*", "+", "-", "*"]
+        assert df["score"].tolist() == ["."] * 4
+        assert df["frame"].tolist() == ["."] * 4
+        ranges = _ranges_from_gtf(df, feature_kind="gene")
+        bmod._validate_coordinates(ranges)
+
 
 class TestRangesFromGtf:
     def _make_gtf_df(self, rows: list[tuple[str, str, str]]) -> pd.DataFrame:
@@ -2561,6 +2584,22 @@ class TestToRangedSummarizedExperiment:
             genomic_unit="gene", autoload=False
         )
         assert rse is not None
+
+    @pytest.mark.requires_biocpy
+    def test_gene_with_unstranded_gtf_annotation(
+        self, _synthetic_gtf_gz: Path
+    ) -> None:
+        with gzip.open(_synthetic_gtf_gz, "rt", encoding="utf-8") as handle:
+            content = handle.read()
+        content = content.replace("\t+\t", "\t.\t").replace("\t-\t", "\t.\t")
+        with gzip.open(_synthetic_gtf_gz, "wt", encoding="utf-8") as handle:
+            handle.write(content)
+        b = self._bundle_with_gene_gtf(_synthetic_gtf_gz)
+        rse = b.to_ranged_summarized_experiment(
+            genomic_unit="gene", autoload=False
+        )
+        assert rse.shape == (3, 2)
+        assert list(rse.row_ranges.strand) == [0, 0, 0]
 
     @pytest.mark.requires_biocpy
     def test_fallback_to_se_when_no_ranges(self) -> None:
