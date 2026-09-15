@@ -57,3 +57,5 @@ recount3-smoke/
 *.zip
 
 !tests/data/**
+
+*.egg-info/
