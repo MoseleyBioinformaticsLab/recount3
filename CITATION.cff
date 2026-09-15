@@ -15,7 +15,7 @@ authors:
     orcid: "https://orcid.org/0000-0003-3995-5368"
 title: "recount3"
 version: 1.2.0
-date-released: 2026-06-12
+date-released: 2026-09-15
 url: "https://github.com/MoseleyBioinformaticsLab/recount3"
 preferred-citation:
   type: article
