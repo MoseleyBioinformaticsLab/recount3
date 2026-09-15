@@ -40,15 +40,14 @@ Added
 ~~~~~
 
 - ``recount3.se.to_anndata(experiment, sanitize_for_hdf5=False)`` converts a
-  ``SummarizedExperiment`` to an ``anndata.AnnData`` -- samples in rows,
-  features in columns, each assay a layer, provenance in ``uns``. BiocPy's own
-  ``experiment.to_anndata()`` cannot be used on a recount3 experiment: it
+  ``SummarizedExperiment`` to an ``anndata.AnnData``, with samples in rows,
+  features in columns, each assay a layer, and provenance in ``uns``. BiocPy's
+  own ``experiment.to_anndata()`` cannot be used on a recount3 experiment: it
   forwards metadata straight to ``AnnData(uns=...)``, and BiocPy stores that
   metadata as a ``NamedList``, which AnnData rejects. Every experiment the
   package builds carries provenance, so that method failed for all of them.
   ``sanitize_for_hdf5=True`` additionally makes the object writable by
   ``write_h5ad``.
-
 - ``parquet`` and ``anndata`` extras, both included in ``all``, and pre-flight
   dependency checks for the outputs that need them. ``parquet`` installs
   ``pyarrow``; ``anndata`` installs ``anndata`` and ``delayedarray`` and
@@ -178,16 +177,16 @@ Fixed
   ``uns`` keys, which are the sample-metadata column names and carry the same
   forward slashes that HDF5 reads as path separators; each renamed provenance
   entry keeps its original name in its value.
-- ``R3Resource.download(path=...)`` and ``R3ResourceBundle.download(dest=...)``
-  are annotated to accept any :class:`os.PathLike`, not only ``str``. Both
-  already handled a ``pathlib.Path`` at runtime -- each normalizes its argument
-  with ``Path()`` before doing anything else -- but the narrow annotation meant
-  that feeding a destination straight back from ``ensure_cached()``,
-  ``recount3_cache()``, or ``recount3_cache_files()``, all of which return
-  ``Path``, was an error under mypy and pyright for anyone type-checking
-  against the shipped ``py.typed`` marker. The new ``recount3.StrPath`` alias
-  names the accepted type. Return types are unchanged: ``download()`` still
-  returns ``str | None``.
+- ``R3Resource.download(path=...)`` and
+  ``R3ResourceBundle.download(dest=...)`` are annotated to accept any
+  ``os.PathLike``, not only ``str``. Both already handled a ``pathlib.Path``
+  at runtime, because each normalizes its argument with ``Path()`` before
+  doing anything else. The narrow annotation nonetheless meant that feeding a
+  destination straight back from ``ensure_cached()``, ``recount3_cache()``, or
+  ``recount3_cache_files()``, all of which return ``Path``, was an error under
+  mypy and pyright for anyone type-checking against the shipped ``py.typed``
+  marker. The new ``recount3.StrPath`` alias names the accepted type. Return
+  types are unchanged: ``download()`` still returns ``str | None``.
 - ``R3Resource.filepath`` is annotated ``StrPath | None``, matching the
   ``os.PathLike`` the constructor already accepted and normalizes.
 - ``R3Resource(filepath=...)`` normalizes an ``os.PathLike`` to ``str``.
@@ -296,15 +295,18 @@ Documentation
   tutorial states that builders and discovery helpers are reached directly
   (``r3.create_rse``) while the normalization helpers live on the ``se``
   submodule (``r3.se.compute_tpm``) and are not top-level exports.
-- Added ``docs/results.rst`` and an executed ``docs/examples/results.ipynb``
-  covering a full SRP009615 workflow: metadata reconciliation, TPM, a sample
-  correlation matrix, PCA, sparse junction summaries, single-sample BigWig
-  access, and a CLI-generated JSONL manifest, with recorded dependency
-  versions and input checksums.
+- Added real, executed output to the tutorial's examples, covering assay
+  types and shapes, normalized values, a sample correlation matrix, sparse
+  junction storage figures, and an AnnData round trip, so the documented calls
+  can be checked against what they actually return.
 - Added a tutorial section on finding projects and samples with
   ``available_projects`` and ``available_samples`` before an accession is
   known, and a section on moving the returned NumPy, pandas, and SciPy
   objects into a downstream analysis.
+- Corrected the README's bundle example, which filtered gene counts without
+  naming an annotation. A bundle carrying more than one gene annotation now
+  raises ``CompatibilityError``, so the example passes
+  ``annotation_extension="G026"``.
 - Corrected tutorial claims that did not match the implementation: only
   ``compute_scale_factors``, ``is_paired_end``, and ``expand_sra_attributes``
   accept a plain ``SummarizedExperiment``, while ``compute_read_counts``,
