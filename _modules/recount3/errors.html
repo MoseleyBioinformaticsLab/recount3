@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.errors &mdash; recount3 1.1.0 documentation</title>
+  <title>recount3.errors &mdash; recount3 1.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=fc837d61"></script>
+      <script src="../../_static/documentation_options.js?v=6efca38a"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -72,8 +72,8 @@
            <div itemprop="articleBody">
              
   <h1>Source code for recount3.errors</h1><div class="highlight"><pre>
-<span></span><span class="c1"># Copyright (c) 2026, Alexander A. Alsalihi, Robert M. Flight,</span>
-<span class="c1"># Hunter N.B. Moseley. All rights reserved.</span>
+<span></span><span class="c1"># Copyright (c) 2026, Alexander Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</span>
+<span class="c1"># All rights reserved.</span>
 <span class="c1">#</span>
 <span class="c1"># Redistribution and use in source and binary forms, with or without</span>
 <span class="c1"># modification, are permitted provided that the following conditions are met:</span>
@@ -103,7 +103,7 @@
 <span class="c1"># OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
 <span class="c1"># OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
 <span class="c1">#</span>
-<span class="sd">&quot;&quot;&quot;Domain-specific exceptions for recount3.</span>
+<span class="sd">"""Domain-specific exceptions for recount3.</span>
 
 <span class="sd">All exceptions inherit from :class:`Recount3Error`, so callers can catch</span>
 <span class="sd">the base class to handle any recount3-specific failure, or catch a subclass</span>
@@ -119,19 +119,27 @@
 <span class="sd">* :class:`CompatibilityError`: resources that are incompatible with each</span>
 <span class="sd">  other were combined in an operation such as</span>
 <span class="sd">  :meth:`~recount3.bundle.R3ResourceBundle.stack_count_matrices`.</span>
+<span class="sd">* :class:`RangesError`: genomic ranges could not be derived for a</span>
+<span class="sd">  :class:`~summarizedexperiment.RangedSummarizedExperiment`, with</span>
+<span class="sd">  :class:`MissingRangesError` and :class:`RangesCoverageError` naming the</span>
+<span class="sd">  two cases a caller can act on differently.</span>
+
+<span class="sd">The ranges errors also subclass :exc:`ValueError`, which is what</span>
+<span class="sd">:meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`</span>
+<span class="sd">has always raised, so ``except ValueError`` keeps catching them.</span>
 
 <span class="sd">Example:</span>
 <span class="sd">    Catch all recount3 errors with the base class::</span>
 
-<span class="sd">        from recount3.errors import Recount3Error, DownloadError</span>
+<span class="sd">        import recount3 as r3</span>
 
 <span class="sd">        try:</span>
-<span class="sd">            res.download(path=&quot;/data&quot;)</span>
-<span class="sd">        except DownloadError as exc:</span>
-<span class="sd">            print(f&quot;Network failure: {exc}&quot;)</span>
-<span class="sd">        except Recount3Error as exc:</span>
-<span class="sd">            print(f&quot;Unexpected recount3 error: {exc}&quot;)</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            res.download(path="/data")</span>
+<span class="sd">        except r3.DownloadError as exc:</span>
+<span class="sd">            print(f"Network failure: {exc}")</span>
+<span class="sd">        except r3.Recount3Error as exc:</span>
+<span class="sd">            print(f"Unexpected recount3 error: {exc}")</span>
+<span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -139,35 +147,70 @@
 <div class="viewcode-block" id="Recount3Error">
 <a class="viewcode-back" href="../../api.html#recount3.errors.Recount3Error">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Recount3Error</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base class for recount3-related errors.&quot;&quot;&quot;</span></div>
+<span class="w">    </span><span class="sd">"""Base class for recount3-related errors."""</span></div>
 
 
 
 <div class="viewcode-block" id="ConfigurationError">
 <a class="viewcode-back" href="../../api.html#recount3.errors.ConfigurationError">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ConfigurationError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when configuration is invalid or inconsistent.&quot;&quot;&quot;</span></div>
+<span class="w">    </span><span class="sd">"""Raised when configuration is invalid or inconsistent."""</span></div>
 
 
 
 <div class="viewcode-block" id="DownloadError">
 <a class="viewcode-back" href="../../api.html#recount3.errors.DownloadError">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DownloadError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when a resource fails to download.&quot;&quot;&quot;</span></div>
+<span class="w">    </span><span class="sd">"""Raised when a resource fails to download."""</span></div>
 
 
 
 <div class="viewcode-block" id="LoadError">
 <a class="viewcode-back" href="../../api.html#recount3.errors.LoadError">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">LoadError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when a resource fails to load or parse.&quot;&quot;&quot;</span></div>
+<span class="w">    </span><span class="sd">"""Raised when a resource fails to load or parse."""</span></div>
 
 
 
 <div class="viewcode-block" id="CompatibilityError">
 <a class="viewcode-back" href="../../api.html#recount3.errors.CompatibilityError">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">CompatibilityError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Raised when resources are incompatible for combined operations.&quot;&quot;&quot;</span></div>
+<span class="w">    </span><span class="sd">"""Raised when resources are incompatible for combined operations."""</span></div>
+
+
+
+<div class="viewcode-block" id="RangesError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.RangesError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RangesError</span><span class="p">(</span><span class="n">Recount3Error</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised when genomic ranges cannot be derived for a count matrix.</span>
+
+<span class="sd">    Also a :exc:`ValueError`, because deriving ranges has always reported</span>
+<span class="sd">    failure that way; catching either base still works.</span>
+<span class="sd">    """</span></div>
+
+
+
+<div class="viewcode-block" id="MissingRangesError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.MissingRangesError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MissingRangesError</span><span class="p">(</span><span class="n">RangesError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised when no resource in the bundle can supply genomic ranges.</span>
+
+<span class="sd">    Nothing failed: the GTF annotation (gene and exon units) or RR</span>
+<span class="sd">    coordinate file (junctions) that ranges would come from is simply not</span>
+<span class="sd">    part of the bundle. Include it at discovery time.</span>
+<span class="sd">    """</span></div>
+
+
+
+<div class="viewcode-block" id="RangesCoverageError">
+<a class="viewcode-back" href="../../api.html#recount3.errors.RangesCoverageError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RangesCoverageError</span><span class="p">(</span><span class="n">RangesError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised when a ranges source omits some of the counted features.</span>
+
+<span class="sd">    The file was retrieved and parsed, but does not describe every feature</span>
+<span class="sd">    in the counts matrix -- typically an annotation mismatch, fixed by</span>
+<span class="sd">    selecting the ``annotation_extension`` that matches the counts.</span>
+<span class="sd">    """</span></div>
 
 </pre></div>
 
@@ -178,7 +221,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+    <p>&#169; Copyright 2026, Alexander Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

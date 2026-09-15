@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3 &mdash; recount3 1.1.0 documentation</title>
+  <title>recount3 &mdash; recount3 1.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=fc837d61"></script>
+      <script src="_static/documentation_options.js?v=6efca38a"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -109,6 +109,25 @@ discover -&gt; manifest -&gt; materialize workflow for scripts and pipelines. It
 emits JSONL/TSV manifests and materializes resources to a directory or a
 <code class="docutils literal notranslate"><span class="pre">.zip</span></code> archive with parallel downloads.</p></li>
 </ul>
+<section id="contents">
+<h2>Contents<a class="headerlink" href="#contents" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="#links">Links</a></p></li>
+<li><p><a class="reference internal" href="#installation">Installation</a></p></li>
+<li><p><a class="reference internal" href="#the-three-layer-api">The three-layer API</a></p></li>
+<li><p><a class="reference internal" href="#quickstart">Quickstart</a></p>
+<ul>
+<li><p><a class="reference internal" href="#python-api">Python API</a></p></li>
+<li><p><a class="reference internal" href="#command-line-tool">Command-line tool</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#data-mirrors">Data mirrors</a></p></li>
+<li><p><a class="reference internal" href="#dependencies">Dependencies</a></p></li>
+<li><p><a class="reference internal" href="#questions-feature-requests-and-bug-reports">Questions, Feature Requests, and Bug Reports</a></p></li>
+<li><p><a class="reference internal" href="#license">License</a></p></li>
+<li><p><a class="reference internal" href="#citation">Citation</a></p></li>
+</ul>
+</section>
 <section id="links">
 <h2>Links<a class="headerlink" href="#links" title="Link to this heading"></a></h2>
 <blockquote>
@@ -123,11 +142,14 @@ emits JSONL/TSV manifests and materializes resources to a directory or a
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
 <p>The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy. Two optional extras enable additional features:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">                   </span><span class="c1"># core</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy]&quot;</span><span class="w">         </span><span class="c1"># + SummarizedExperiment builders</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[bigwig]&quot;</span><span class="w">         </span><span class="c1"># + BigWig coverage access</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;recount3[biocpy,bigwig]&quot;</span><span class="w">  </span><span class="c1"># everything</span>
+and SciPy. Five optional extras enable additional features:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">                </span><span class="c1"># core</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[biocpy]"</span><span class="w">      </span><span class="c1"># + SummarizedExperiment builders</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[bigwig]"</span><span class="w">      </span><span class="c1"># + BigWig coverage access</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[parquet]"</span><span class="w">     </span><span class="c1"># + .parquet output</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[anndata]"</span><span class="w">     </span><span class="c1"># + .h5ad output</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[pybiocfilecache]"</span><span class="w">  </span><span class="c1"># shared R/Python cache</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[all]"</span><span class="w">         </span><span class="c1"># every optional feature</span>
 </pre></div>
 </div>
 <ul class="simple">
@@ -135,14 +157,30 @@ python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </s
 required for <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> and every helper that returns or operates on a
 BiocPy object.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">bigwig</span></code> (<code class="docutils literal notranslate"><span class="pre">pyBigWig</span></code>) is required only for BigWig coverage access.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">parquet</span></code> (<code class="docutils literal notranslate"><span class="pre">pyarrow</span></code>) is required only to write <code class="docutils literal notranslate"><span class="pre">.parquet</span></code> output.
+pandas accepts either <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> or <code class="docutils literal notranslate"><span class="pre">fastparquet</span></code>; an existing
+<code class="docutils literal notranslate"><span class="pre">fastparquet</span></code> installation is used as-is.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">anndata</span></code> (<code class="docutils literal notranslate"><span class="pre">anndata</span></code>, <code class="docutils literal notranslate"><span class="pre">delayedarray</span></code>) is required only to write
+<code class="docutils literal notranslate"><span class="pre">.h5ad</span></code> output, and implies <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pybiocfilecache</span></code> enables opt-in R BiocFileCache interoperability.
+The default URL-hash cache is ~3x faster and needs no extra. Select sharing
+with <code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_BACKEND=pybiocfilecache</span></code>; it defaults to R’s recount3
+cache directory (normally <code class="docutils literal notranslate"><span class="pre">~/.cache/R/recount3</span></code> on Linux/WSL).
+Explicit cache directories still take precedence. See “Cache and
+configuration” in the tutorial for concurrency, refresh semantics,
+maintenance, and measured overhead.</p></li>
 </ul>
+<p><code class="docutils literal notranslate"><span class="pre">all</span></code> installs every optional feature listed above. The <code class="docutils literal notranslate"><span class="pre">dev</span></code> and <code class="docutils literal notranslate"><span class="pre">docs</span></code>
+extras hold the test and documentation toolchains and are installed separately.</p>
 <p>On Windows, substitute <code class="docutils literal notranslate"><span class="pre">py</span> <span class="pre">-3</span> <span class="pre">-m</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">...</span></code>. Upgrade an existing
 installation with <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">-m</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--upgrade</span> <span class="pre">recount3</span></code>.</p>
 <p><strong>Note:</strong> The optional extras have platform constraints. The <code class="docutils literal notranslate"><span class="pre">bigwig</span></code> extra
 can be difficult or impossible to install on Windows and macOS. The <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>
-extra can be difficult or impossible to install on Windows. The core package and
-the command-line workflow do not depend on either extra and work on all
-supported platforms.</p>
+extra can be difficult or impossible to install on Windows, and <code class="docutils literal notranslate"><span class="pre">anndata</span></code>
+inherits that constraint because it requires <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>. The <code class="docutils literal notranslate"><span class="pre">parquet</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pybiocfilecache`</span></code> extra installs cleanly on every supported platform. The
+core package and the command-line workflow do not depend on any extra and work
+on all supported platforms.</p>
 </section>
 <section id="the-three-layer-api">
 <h2>The three-layer API<a class="headerlink" href="#the-three-layer-api" title="Link to this heading"></a></h2>
@@ -166,12 +204,12 @@ cache entry, and parser.</p></li>
 <h3>Python API<a class="headerlink" href="#python-api" title="Link to this heading"></a></h3>
 <p>Assemble a project into a <code class="docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> (requires the
 <code class="docutils literal notranslate"><span class="pre">recount3[biocpy]</span></code> extra):</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_rse</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span> <span class="o">=</span> <span class="n">create_rse</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">annotation_label</span><span class="o">=</span><span class="s2">&quot;gencode_v26&quot;</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">create_rse</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">"SRP009615"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">"human"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">annotation_label</span><span class="o">=</span><span class="s2">"gencode_v26"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">rse</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">(63856, 12)</span>
@@ -179,20 +217,21 @@ cache entry, and parser.</p></li>
 </div>
 <p>For multi-project or custom workflows, use the bundle layer to filter
 resources and stack matrices directly:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceBundle</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
 <span class="gp">&gt;&gt;&gt;</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">bundle</span> <span class="o">=</span> <span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">&quot;human&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">data_source</span><span class="o">=</span><span class="s2">&quot;sra&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">&quot;SRP009615&quot;</span><span class="p">,</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">bundle</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">organism</span><span class="o">=</span><span class="s2">"human"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">data_source</span><span class="o">=</span><span class="s2">"sra"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">project</span><span class="o">=</span><span class="s2">"SRP009615"</span><span class="p">,</span>
 <span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bundle</span><span class="o">.</span><span class="n">resources</span><span class="p">)</span><span class="si">}</span><span class="s2"> resources.&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Found </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">bundle</span><span class="o">.</span><span class="n">resources</span><span class="p">)</span><span class="si">}</span><span class="s2"> resources."</span><span class="p">)</span>
 <span class="go">Found 10 resources.</span>
 <span class="gp">&gt;&gt;&gt;</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">gene_counts</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">resource_type</span><span class="o">=</span><span class="s2">&quot;count_files_gene_or_exon&quot;</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">&quot;gene&quot;</span><span class="p">,</span>
-<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">compat</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">resource_type</span><span class="o">=</span><span class="s2">"count_files_gene_or_exon"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">genomic_unit</span><span class="o">=</span><span class="s2">"gene"</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">annotation_extension</span><span class="o">=</span><span class="s2">"G026"</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">stack_count_matrices</span><span class="p">(</span><span class="n">compat</span><span class="o">=</span><span class="s2">"feature"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">gene_counts</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">(63856, 12)</span>
 </pre></div>
@@ -266,11 +305,24 @@ scipy&gt;=1.13
 <p>Optional: BiocPy integration (<code class="docutils literal notranslate"><span class="pre">recount3[biocpy]</span></code>):</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>biocframe&gt;=0.7
 genomicranges&gt;=0.8
-summarizedexperiment&gt;=0.6
+summarizedexperiment&gt;=0.7.1
 </pre></div>
 </div>
 <p>Optional: BigWig support (<code class="docutils literal notranslate"><span class="pre">recount3[bigwig]</span></code>):</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pybigwig&gt;=0.3.18
+</pre></div>
+</div>
+<p>Optional: Parquet output (<code class="docutils literal notranslate"><span class="pre">recount3[parquet]</span></code>):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pyarrow&gt;=23.0.1
+</pre></div>
+</div>
+<p>Optional: AnnData output (<code class="docutils literal notranslate"><span class="pre">recount3[anndata]</span></code>, implies <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>anndata&gt;=0.11
+delayedarray&gt;=0.5
+</pre></div>
+</div>
+<p>Optional: shared R/Python cache (<code class="docutils literal notranslate"><span class="pre">recount3[pybiocfilecache]</span></code>):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>pybiocfilecache&gt;=0.7.0,&lt;0.8
 </pre></div>
 </div>
 </section>
@@ -281,18 +333,36 @@ summarizedexperiment&gt;=0.6
 <section id="license">
 <h2>License<a class="headerlink" href="#license" title="Link to this heading"></a></h2>
 <p>This package is distributed under <a class="reference external" href="https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/LICENSE">The Clear BSD License with Extra Clause</a>.</p>
+</section>
+<section id="citation">
+<h2>Citation<a class="headerlink" href="#citation" title="Link to this heading"></a></h2>
+<p>When using the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> Python package in published work, please cite:</p>
+<ul class="simple">
+<li><p>Alexander Alsalihi, Robert M Flight, and Hunter N.B. Moseley. “The recount3
+Python package for programmatic access to uniformly processed RNA-seq data.”
+<em>bioRxiv</em> (2026). doi: <a class="reference external" href="https://doi.org/10.64898/2026.06.17.732943">10.64898/2026.06.17.732943</a></p></li>
+</ul>
+<p>If your work uses the recount3 data resource, please also cite the original
+recount3 publication:</p>
+<ul class="simple">
+<li><p>Wilks, C., Zheng, S.C., Chen, F.Y. et al. “recount3: summaries and queries
+for large-scale RNA-seq expression and splicing.” <em>Genome Biology</em> 22, 323
+(2021). doi: <a class="reference external" href="https://doi.org/10.1186/s13059-021-02533-6">10.1186/s13059-021-02533-6</a></p></li>
+</ul>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="tutorial.html">Tutorial</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#installation">Installation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#finding-projects-and-samples-before-choosing-a-study">Finding projects and samples before choosing a study</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#the-three-layers-of-the-api">The three layers of the API</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#layer-1-building-experiments-with-create-rse">Layer 1: Building experiments with <code class="docutils literal notranslate"><span class="pre">create_rse</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#layer-2-resource-bundles">Layer 2: Resource bundles</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#layer-3-individual-resources">Layer 3: Individual resources</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#working-with-sample-metadata">Working with sample metadata</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#normalization-and-scaling">Normalization and scaling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorial.html#from-package-objects-to-downstream-analysis">From package objects to downstream analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#bigwig-coverage">BigWig coverage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#cache-and-configuration">Cache and configuration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="tutorial.html#errors-and-troubleshooting">Errors and troubleshooting</a></li>
@@ -311,7 +381,6 @@ summarizedexperiment&gt;=0.6
 <li class="toctree-l2"><a class="reference internal" href="cli.html#performance-tips">Performance tips</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli.html#example-recipes">Example recipes</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli.html#troubleshooting">Troubleshooting</a></li>
-<li class="toctree-l2"><a class="reference internal" href="cli.html#import-safety">Import safety</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cli.html#full-usage">Full usage</a></li>
 </ul>
 </li>
@@ -351,7 +420,7 @@ summarizedexperiment&gt;=0.6
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
+    <p>&#169; Copyright 2026, Alexander Alsalihi, Robert M. Flight, Hunter N.B. Moseley.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
