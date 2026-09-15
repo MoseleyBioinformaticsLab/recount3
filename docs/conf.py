@@ -14,8 +14,8 @@ from recount3 import __version__
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'recount3'
-copyright = '2026, Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley'
-author = 'Alexander A. Alsalihi, Robert M. Flight, Hunter N.B. Moseley'
+copyright = '2026, Alexander Alsalihi, Robert M. Flight, Hunter N.B. Moseley'
+author = 'Alexander Alsalihi, Robert M. Flight, Hunter N.B. Moseley'
 
 version = __version__
 release = __version__

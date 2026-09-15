@@ -16,7 +16,7 @@ requires-python = ">=3.10"
 license = "BSD-3-Clause-Clear"
 license-files = ["LICENSE"]
 authors = [
-  { name = "Alexander A. Alsalihi" },
+  { name = "Alexander Alsalihi" },
   { name = "Robert M. Flight" },
   { name = "Hunter N.B. Moseley" }
 ]
