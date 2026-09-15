@@ -39,6 +39,16 @@ Breaking changes
 Added
 ~~~~~
 
+- ``recount3.se.to_anndata(experiment, sanitize_for_hdf5=False)`` converts a
+  ``SummarizedExperiment`` to an ``anndata.AnnData`` -- samples in rows,
+  features in columns, each assay a layer, provenance in ``uns``. BiocPy's own
+  ``experiment.to_anndata()`` cannot be used on a recount3 experiment: it
+  forwards metadata straight to ``AnnData(uns=...)``, and BiocPy stores that
+  metadata as a ``NamedList``, which AnnData rejects. Every experiment the
+  package builds carries provenance, so that method failed for all of them.
+  ``sanitize_for_hdf5=True`` additionally makes the object writable by
+  ``write_h5ad``.
+
 - ``parquet`` and ``anndata`` extras, both included in ``all``, and pre-flight
   dependency checks for the outputs that need them. ``parquet`` installs
   ``pyarrow``; ``anndata`` installs ``anndata`` and ``delayedarray`` and
@@ -150,6 +160,24 @@ Changed
 Fixed
 ~~~~~
 
+- ``search`` subcommands reject ``key=value`` selectors the chosen mode does
+  not read, instead of ignoring them. ``recount3 search project ...
+  genomic_units=gene annotations=G026`` previously emitted the full
+  ten-resource default set, because those three plural names belong to the
+  Python ``R3ResourceBundle.discover`` API and not to the CLI, so copying
+  Python keyword names to the shell produced a manifest that was wrong without
+  any warning. The error names each unrecognized selector, the CLI spelling
+  when the name is a known Python-API alias, and the selectors the mode does
+  read.
+- ``bundle se``/``bundle rse`` can write ``.h5ad`` again. The export called
+  BiocPy's ``to_anndata()``, which hands experiment metadata to
+  ``AnnData(uns=...)`` as a ``NamedList`` and fails with ``Only mutable
+  mapping types (e.g. dict) are allowed for `.uns`.`` for every experiment the
+  package builds. The export now goes through
+  ``recount3.se.to_anndata``. ``--sanitize-columns`` also covers nested
+  ``uns`` keys, which are the sample-metadata column names and carry the same
+  forward slashes that HDF5 reads as path separators; each renamed provenance
+  entry keeps its original name in its value.
 - ``R3Resource.download(path=...)`` and ``R3ResourceBundle.download(dest=...)``
   are annotated to accept any :class:`os.PathLike`, not only ``str``. Both
   already handled a ``pathlib.Path`` at runtime -- each normalizes its argument
@@ -160,6 +188,8 @@ Fixed
   against the shipped ``py.typed`` marker. The new ``recount3.StrPath`` alias
   names the accepted type. Return types are unchanged: ``download()`` still
   returns ``str | None``.
+- ``R3Resource.filepath`` is annotated ``StrPath | None``, matching the
+  ``os.PathLike`` the constructor already accepted and normalizes.
 - ``R3Resource(filepath=...)`` normalizes an ``os.PathLike`` to ``str``.
   ``download()`` always stored a ``str``, so the attribute previously held
   either type depending on how it was populated: ``repr`` rendered
@@ -261,6 +291,38 @@ Documentation
 - Documented ``metadata_join``, assay storage and dtypes, the ranges errors
   and the plain-``SummarizedExperiment`` fallback, and experiment provenance
   in the tutorial.
+- Every authored example now uses ``import recount3 as r3`` and calls through
+  that prefix, in the README, the tutorial, and the API docstrings. The
+  tutorial states that builders and discovery helpers are reached directly
+  (``r3.create_rse``) while the normalization helpers live on the ``se``
+  submodule (``r3.se.compute_tpm``) and are not top-level exports.
+- Added ``docs/results.rst`` and an executed ``docs/examples/results.ipynb``
+  covering a full SRP009615 workflow: metadata reconciliation, TPM, a sample
+  correlation matrix, PCA, sparse junction summaries, single-sample BigWig
+  access, and a CLI-generated JSONL manifest, with recorded dependency
+  versions and input checksums.
+- Added a tutorial section on finding projects and samples with
+  ``available_projects`` and ``available_samples`` before an accession is
+  known, and a section on moving the returned NumPy, pandas, and SciPy
+  objects into a downstream analysis.
+- Corrected tutorial claims that did not match the implementation: only
+  ``compute_scale_factors``, ``is_paired_end``, and ``expand_sra_attributes``
+  accept a plain ``SummarizedExperiment``, while ``compute_read_counts``,
+  ``transform_counts``, and ``compute_tpm`` require an RSE; discovery
+  describes candidate URLs rather than validating existence or reporting
+  sizes; ``compat="feature"`` does not pin an annotation build; and
+  ``compute_tpm`` prefers ``bp_length`` over genomic span.
+- Documented AnnData export: why the conversion is a package function rather
+  than a BiocPy method call, what ``--sanitize-columns`` covers, and how to
+  reach it from Python with ``r3.se.to_anndata``.
+- Added a tutorial note that ``BigWigFile.load()`` returns the wrapper while
+  entering it as a context manager yields the live ``pyBigWig`` handle.
+- Corrected the description of ``create_sample_project_lists``: it returns a
+  ``(samples, projects)`` pair of identifier lists for an organism; it is the
+  CLI's ``recount3 ids`` that writes them out.
+- Moved the project and sample discovery section ahead of the three API
+  layers, where a reader without an accession needs it, and documented the
+  remaining ``search_*`` helpers and ``R3Resource.from_mapping``.
 
 Internal
 ~~~~~~~~
