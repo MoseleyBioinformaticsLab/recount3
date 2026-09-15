@@ -55,6 +55,7 @@ from recount3.se import (
     is_paired_end,
     compute_scale_factors,
     transform_counts,
+    to_anndata,
 )
 
 _MIRROR = (
@@ -1448,3 +1449,123 @@ class TestComputeReadCountsSparseAssay:
         np.testing.assert_allclose(
             result.to_numpy(dtype=float), expected.to_numpy(dtype=float)
         )
+
+
+# ===========================================================================
+# to_anndata
+# ===========================================================================
+
+
+class TestToAnndata:
+    """The package's own converter, standing in for BiocPy's broken one."""
+
+    @pytest.mark.requires_anndata
+    def test_round_trips_orientation_assays_and_provenance(self) -> None:
+        """BiocPy's to_anndata() raises on this metadata; ours must not."""
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+        summarizedexperiment = pytest.importorskip("summarizedexperiment")
+
+        feature_ids = ["ENSG00000000003.14", "ENSG00000000005.5"]
+        samples = ["SRR387777", "SRR387778", "SRR387779"]
+        counts = np.array([[10, 0, 7], [0, 3, 0]], dtype=np.int64)
+        experiment = summarizedexperiment.SummarizedExperiment(
+            assays={"raw_counts": counts},
+            row_data=biocframe.BiocFrame(
+                {"feature_id": feature_ids}, row_names=feature_ids
+            ),
+            column_data=biocframe.BiocFrame(
+                {"sample": samples}, row_names=samples
+            ),
+            metadata={
+                "project": "SRP009615",
+                "resource_urls": ("http://example.org/a.gz",),
+                "metadata_columns": {"qc__auc": ("recount_qc", "auc")},
+            },
+        )
+
+        with pytest.raises(ValueError, match="mutable mapping"):
+            experiment.to_anndata()
+
+        adata = to_anndata(experiment)
+
+        assert isinstance(adata, anndata.AnnData)
+        # AnnData is observation-major: samples become rows.
+        assert adata.shape == (len(samples), len(feature_ids))
+        assert list(adata.obs_names) == samples
+        assert list(adata.var_names) == feature_ids
+        np.testing.assert_array_equal(
+            np.asarray(adata.layers["raw_counts"]), counts.T
+        )
+        assert adata.uns["project"] == "SRP009615"
+        assert adata.uns["resource_urls"] == ["http://example.org/a.gz"]
+        assert adata.uns["metadata_columns"] == {
+            "qc__auc": ["recount_qc", "auc"]
+        }
+
+    @pytest.mark.requires_anndata
+    def test_sanitize_for_hdf5_renames_columns_and_uns_keys(
+        self, tmp_path: Path
+    ) -> None:
+        """A '/' in a QC field name is a path separator to HDF5."""
+        anndata = pytest.importorskip("anndata")
+        biocframe = pytest.importorskip("biocframe")
+        summarizedexperiment = pytest.importorskip("summarizedexperiment")
+
+        slashed = "recount_qc.star.number_of_splices:_gt/ag"
+        experiment = summarizedexperiment.SummarizedExperiment(
+            assays={"raw_counts": np.array([[1, 2]], dtype=np.int64)},
+            row_data=biocframe.BiocFrame(
+                {"feature_id": ["g1"]}, row_names=["g1"]
+            ),
+            column_data=biocframe.BiocFrame(
+                {slashed: [1, 2]}, row_names=["s1", "s2"]
+            ),
+            metadata={"metadata_columns": {slashed: ("recount_qc", slashed)}},
+        )
+
+        adata = to_anndata(experiment, sanitize_for_hdf5=True)
+
+        safe = slashed.replace("/", "_")
+        assert safe in adata.obs.columns
+        assert slashed not in adata.obs.columns
+        assert list(adata.uns["metadata_columns"]) == [safe]
+        # The unsanitized name survives in the provenance value.
+        assert adata.uns["metadata_columns"][safe][1] == slashed
+
+        out = tmp_path / "sanitized.h5ad"
+        adata.write_h5ad(out)
+        assert anndata.read_h5ad(out).uns["metadata_columns"][safe][1] == (
+            slashed
+        )
+
+    @pytest.mark.requires_anndata
+    def test_without_sanitizing_the_names_are_left_verbatim(self) -> None:
+        biocframe = pytest.importorskip("biocframe")
+        summarizedexperiment = pytest.importorskip("summarizedexperiment")
+
+        slashed = "recount_qc.star.number_of_splices:_gt/ag"
+        experiment = summarizedexperiment.SummarizedExperiment(
+            assays={"raw_counts": np.array([[1, 2]], dtype=np.int64)},
+            row_data=biocframe.BiocFrame(
+                {"feature_id": ["g1"]}, row_names=["g1"]
+            ),
+            column_data=biocframe.BiocFrame(
+                {slashed: [1, 2]}, row_names=["s1", "s2"]
+            ),
+            metadata={"metadata_columns": {slashed: ("recount_qc", slashed)}},
+        )
+
+        adata = to_anndata(experiment)
+
+        assert slashed in adata.obs.columns
+        assert list(adata.uns["metadata_columns"]) == [slashed]
+
+    def test_requires_the_anndata_extra(self) -> None:
+        with mock.patch.object(
+            _utils,
+            "ensure_anndata_support",
+            side_effect=ImportError("install recount3[anndata]"),
+        ):
+            with pytest.raises(ImportError, match="recount3\\[anndata\\]"):
+                to_anndata(mock.MagicMock())

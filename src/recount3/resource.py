@@ -48,16 +48,16 @@ GTFs, BigWig coverage files, junction counts) is represented as an
 
 Typical usage example::
 
-    from recount3 import R3Resource, R3GeneOrExonCounts
+    import recount3 as r3
 
-    desc = R3GeneOrExonCounts(
+    desc = r3.R3GeneOrExonCounts(
         organism="human",
         data_source="sra",
         genomic_unit="gene",
         project="SRP009615",
         annotation_extension="G026",
     )
-    res = R3Resource(desc)
+    res = r3.R3Resource(desc)
 
     # Cache the file (no local copy):
     res.download(path=None, cache_mode="enable")
@@ -387,12 +387,13 @@ class R3Resource:
         url: The full, absolute network URL pointing to the remote resource. If
             not explicitly provided during initialization, it is derived by
             joining the configured base URL with the description's relative URL.
-        filepath: An optional string representing the absolute local path where
-            the resource was successfully materialized (either copied
-            or linked). Always a ``str`` once the instance exists: an
-            :class:`os.PathLike` passed to the constructor is normalized,
-            matching what :meth:`download` stores, so two resources naming
-            the same file compare equal and ``repr`` renders one spelling.
+        filepath: An optional absolute local path where the resource was
+            successfully materialized (either copied or linked). Accepts a
+            ``str`` or any :class:`os.PathLike` (:data:`~recount3.StrPath`),
+            but always reads back as a ``str``: the constructor normalizes an
+            :class:`os.PathLike`, matching what :meth:`download` stores, so
+            two resources naming the same file compare equal and ``repr``
+            renders one spelling.
         config: An optional `Config` instance dictating strict network and cache
             behaviors. If omitted, the global default configuration is
             dynamically applied.
@@ -410,7 +411,7 @@ class R3Resource:
 
     description: R3ResourceDescription
     url: str | None = None
-    filepath: str | None = None
+    filepath: StrPath | None = None
     config: Config | None = None
 
     _cached_data: object | None = dataclasses.field(

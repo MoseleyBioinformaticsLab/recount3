@@ -53,6 +53,7 @@ import os
 import pickle
 from pathlib import Path
 import sys
+import types
 from typing import Any, Iterable, Iterator, Mapping
 
 from recount3.bundle import R3ResourceBundle
@@ -890,6 +891,93 @@ def _parse_filters(tokens: Iterable[str]) -> dict[str, str]:
     return result
 
 
+_PROJECT_SELECTORS = frozenset({"organism", "data_source", "project"})
+_JUNCTION_SELECTORS = frozenset({"junction_type", "junction_extension"})
+
+_SEARCH_MODE_FILTERS: Mapping[str, frozenset[str]] = types.MappingProxyType(
+    {
+        "annotations": frozenset(
+            {"organism", "genomic_unit", "annotation_extension"}
+        ),
+        "gene-exon": _PROJECT_SELECTORS
+        | {"genomic_unit", "annotation_extension"},
+        "junctions": _PROJECT_SELECTORS | _JUNCTION_SELECTORS,
+        "metadata": _PROJECT_SELECTORS | {"table_name"},
+        "bigwig": _PROJECT_SELECTORS | {"sample"},
+        "project": _PROJECT_SELECTORS
+        | _JUNCTION_SELECTORS
+        | {
+            "genomic_unit",
+            "annotation",
+            "annotation_extension",
+            "include_metadata",
+            "include_bigwig",
+        },
+        "sources": frozenset({"organism"}),
+        "source-meta": frozenset({"organism", "data_source"}),
+    }
+)
+
+_PYTHON_FILTER_ALIASES: Mapping[str, str] = types.MappingProxyType(
+    {
+        "annotations": "annotation",
+        "data_sources": "data_source",
+        "genomic_units": "genomic_unit",
+        "junction_exts": "junction_extension",
+        "junction_extensions": "junction_extension",
+        "junction_types": "junction_type",
+        "organisms": "organism",
+        "projects": "project",
+        "samples": "sample",
+        "table_names": "table_name",
+    }
+)
+
+
+def _reject_unknown_filters(mode: str, filters: Mapping[str, str]) -> None:
+    """Raise if a filter key is one the given search mode never reads.
+
+    ``key=value`` selectors are free-form, so a misspelling or a Python
+    keyword name used at the shell would otherwise be dropped without a word
+    and the command would emit its defaults instead. For ``search project``
+    that means a full ten-resource manifest in place of the narrowed one the
+    user asked for, which is wrong rather than merely unhelpful.
+
+    Args:
+      mode: The ``search`` subcommand mode, for example ``"project"``.
+      filters: Parsed ``key=value`` selectors.
+
+    Raises:
+      ValueError: If any key is not read by ``mode``. The message names each
+        offending key, the CLI spelling when the key is a known Python-API
+        alias, and the keys the mode does accept.
+    """
+    allowed = _SEARCH_MODE_FILTERS.get(mode)
+    if allowed is None:
+        return
+
+    unknown = sorted(set(filters) - allowed)
+    if not unknown:
+        return
+
+    details = []
+    for key in unknown:
+        alias = _PYTHON_FILTER_ALIASES.get(key)
+        if alias is not None and alias in allowed:
+            details.append(
+                f"{key!r} (the Python API spelling; use {alias!r} here)"
+            )
+        else:
+            details.append(repr(key))
+
+    raise ValueError(
+        f"Unknown filter(s) for mode={mode!r}: {', '.join(details)}. "
+        f"This mode reads: {', '.join(sorted(allowed))}. "
+        "Filters it does not read are ignored, which would emit a manifest "
+        "that does not match the request."
+    )
+
+
 def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
     """Create an :class:`R3Resource` from a manifest mapping.
 
@@ -1132,6 +1220,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
     """
     filters = _parse_filters(args.filters)
     mode = args.mode
+    _reject_unknown_filters(mode, filters)
 
     def _require(*keys: str) -> None:
         missing = [k for k in keys if k not in filters]
@@ -1312,7 +1401,7 @@ def _download_one(
             out_path = str(dest_file) if dest_file else None
         else:
             out_path = res.download(
-                path=str(dest),
+                path=dest,
                 cache_mode=cache_mode,
                 overwrite=overwrite,
                 chunk_size=cfg.chunk_size,
@@ -1539,7 +1628,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         if to_h5ad:
-            adata = se.to_anndata()
+            adata = _utils.experiment_to_anndata(se)
             cast = _utils.normalize_anndata_for_hdf5(adata)
             if cast:
                 logging.info(
@@ -1548,24 +1637,28 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
                     ", ".join(cast),
                 )
             unsafe = _utils.hdf5_unsafe_column_names(adata)
+            unsafe += _utils.hdf5_unsafe_uns_keys(adata)
             if unsafe:
                 if not args.sanitize_columns:
                     logging.error(
-                        "Cannot write .h5ad: %d column name(s) contain a "
+                        "Cannot write .h5ad: %d name(s) contain a "
                         "forward slash, which HDF5 reads as a path separator "
                         "(for example, %s). recount3 STAR QC fields are named "
                         "after splice motifs, so most projects with SRA "
-                        "metadata hit this. Re-run with --sanitize-columns to "
-                        "replace each '/' with '_' (this renames the columns "
-                        "your analysis indexes by), or write a .pkl instead, "
-                        "which keeps the names verbatim.",
+                        "metadata hit this, in the sample columns and in the "
+                        "uns provenance map keyed by them. Re-run with "
+                        "--sanitize-columns to replace each '/' with '_' "
+                        "(this renames the columns your analysis indexes by), "
+                        "or write a .pkl instead, which keeps the names "
+                        "verbatim.",
                         len(unsafe),
                         ", ".join(unsafe[:3]),
                     )
                     return 2
                 renames = _utils.sanitize_anndata_column_names(adata)
+                renames += _utils.sanitize_anndata_uns_keys(adata)
                 logging.warning(
-                    "Renamed %d column(s) for HDF5: %s",
+                    "Renamed %d name(s) for HDF5: %s",
                     len(renames),
                     ", ".join(
                         f"{before} -> {after}" for before, after in renames
@@ -1631,7 +1724,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     try:
         if to_h5ad:
-            adata = rse.to_anndata()
+            adata = _utils.experiment_to_anndata(rse)
             cast = _utils.normalize_anndata_for_hdf5(adata)
             if cast:
                 logging.info(
@@ -1640,24 +1733,28 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
                     ", ".join(cast),
                 )
             unsafe = _utils.hdf5_unsafe_column_names(adata)
+            unsafe += _utils.hdf5_unsafe_uns_keys(adata)
             if unsafe:
                 if not args.sanitize_columns:
                     logging.error(
-                        "Cannot write .h5ad: %d column name(s) contain a "
+                        "Cannot write .h5ad: %d name(s) contain a "
                         "forward slash, which HDF5 reads as a path separator "
                         "(for example, %s). recount3 STAR QC fields are named "
                         "after splice motifs, so most projects with SRA "
-                        "metadata hit this. Re-run with --sanitize-columns to "
-                        "replace each '/' with '_' (this renames the columns "
-                        "your analysis indexes by), or write a .pkl instead, "
-                        "which keeps the names verbatim.",
+                        "metadata hit this, in the sample columns and in the "
+                        "uns provenance map keyed by them. Re-run with "
+                        "--sanitize-columns to replace each '/' with '_' "
+                        "(this renames the columns your analysis indexes by), "
+                        "or write a .pkl instead, which keeps the names "
+                        "verbatim.",
                         len(unsafe),
                         ", ".join(unsafe[:3]),
                     )
                     return 2
                 renames = _utils.sanitize_anndata_column_names(adata)
+                renames += _utils.sanitize_anndata_uns_keys(adata)
                 logging.warning(
-                    "Renamed %d column(s) for HDF5: %s",
+                    "Renamed %d name(s) for HDF5: %s",
                     len(renames),
                     ", ".join(
                         f"{before} -> {after}" for before, after in renames

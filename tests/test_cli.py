@@ -69,6 +69,8 @@ from recount3.cli import (
     _init_logging,
     _iter_manifest,
     _parse_filters,
+    _reject_unknown_filters,
+    _SEARCH_MODE_FILTERS,
     _resource_from_dict,
     _write_jsonl,
     _write_tsv,
@@ -476,6 +478,86 @@ class TestParseFilters:
         assert "key" in result
 
 
+class TestRejectUnknownFilters:
+    """A selector a mode never reads must not be dropped in silence."""
+
+    def test_accepts_the_keys_a_mode_reads(self) -> None:
+        _reject_unknown_filters(
+            "project",
+            {
+                "organism": "human",
+                "data_source": "sra",
+                "project": "SRP009615",
+                "genomic_unit": "gene",
+                "annotation_extension": "G026",
+            },
+        )
+
+    def test_accepts_no_filters(self) -> None:
+        _reject_unknown_filters("sources", {})
+
+    def test_rejects_an_unknown_key(self) -> None:
+        with pytest.raises(ValueError, match="Unknown filter") as exc_info:
+            _reject_unknown_filters("sources", {"organism": "human", "x": "1"})
+        assert "'x'" in str(exc_info.value)
+
+    def test_names_the_cli_spelling_for_a_python_keyword(self) -> None:
+        """discover() takes genomic_units; the CLI selector is singular."""
+        with pytest.raises(ValueError) as exc_info:
+            _reject_unknown_filters(
+                "project",
+                {
+                    "organism": "human",
+                    "data_source": "sra",
+                    "project": "SRP009615",
+                    "genomic_units": "gene",
+                    "annotations": "G026",
+                },
+            )
+        message = str(exc_info.value)
+        assert "'genomic_units' (the Python API spelling; use" in message
+        assert "'genomic_unit'" in message
+        assert "'annotations'" in message and "'annotation'" in message
+
+    def test_lists_the_keys_the_mode_accepts(self) -> None:
+        with pytest.raises(ValueError) as exc_info:
+            _reject_unknown_filters("bigwig", {"annotation": "gencode_v26"})
+        message = str(exc_info.value)
+        assert "This mode reads: data_source, organism, project, sample" in (
+            message
+        )
+
+    def test_key_valid_for_another_mode_is_still_rejected(self) -> None:
+        """'sample' belongs to bigwig mode, not gene-exon."""
+        with pytest.raises(ValueError, match="'sample'"):
+            _reject_unknown_filters("gene-exon", {"sample": "SRR387777"})
+
+    def test_every_search_mode_declares_its_selectors(self) -> None:
+        """The table and the parser's MODE choices must not drift apart.
+
+        A mode missing from the table would silently go unvalidated again;
+        a stale entry would describe a subcommand that no longer exists.
+        """
+        parser = _build_parser()
+        subparsers = [
+            action
+            for action in parser._actions  # pylint: disable=protected-access
+            if isinstance(action, argparse._SubParsersAction)
+        ][0]
+        search = subparsers.choices["search"]
+        mode_action = [
+            action
+            for action in search._actions  # pylint: disable=protected-access
+            if action.dest == "mode"
+        ][0]
+
+        assert set(mode_action.choices) == set(_SEARCH_MODE_FILTERS)
+
+    def test_unregistered_mode_is_not_second_guessed(self) -> None:
+        """An unknown mode is _cmd_search's error to raise, not this one's."""
+        _reject_unknown_filters("not-a-mode", {"anything": "goes"})
+
+
 class TestResourceFromDict:
     def test_creates_resource(self, tmp_path: Path) -> None:
         cfg = _make_cfg(tmp_path)
@@ -783,6 +865,32 @@ def _make_search_args(**kw: Any) -> argparse.Namespace:
     )
     defaults.update(kw)
     return argparse.Namespace(**defaults)
+
+
+class TestCmdSearchRejectsUnreadFilters:
+    """_cmd_search must refuse selectors before it emits a manifest."""
+
+    def test_python_keyword_names_do_not_reach_search_project_all(
+        self, tmp_path: Path
+    ) -> None:
+        """Previously these were dropped and the full default set emitted."""
+        cfg = _make_cfg(tmp_path)
+        args = _make_search_args(
+            mode="project",
+            filters=[
+                "organism=human",
+                "data_source=sra",
+                "project=SRP009615",
+                "genomic_units=gene",
+                "annotations=G026",
+            ],
+        )
+        with mock.patch(
+            "recount3.cli.r3_search.search_project_all"
+        ) as mock_search:
+            with pytest.raises(ValueError, match="Unknown filter"):
+                _cmd_search(args, cfg)
+        mock_search.assert_not_called()
 
 
 class TestCmdSearchAnnotations:
@@ -2054,7 +2162,6 @@ class TestCmdBundleSe:
         args = self._make_args(str(out))
         mock_se = mock.MagicMock()
         mock_adata = mock.MagicMock()
-        mock_se.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_summarized_experiment.return_value = mock_se
         res = _make_annotation_resource(cfg)
@@ -2064,6 +2171,10 @@ class TestCmdBundleSe:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
         ):
             code = _cmd_bundle_se(args, cfg)
         assert code == 0
@@ -2077,7 +2188,6 @@ class TestCmdBundleSe:
         args = self._make_args(str(out))
         mock_se = mock.MagicMock()
         mock_adata = mock.MagicMock()
-        mock_se.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_summarized_experiment.return_value = mock_se
         res = _make_annotation_resource(cfg)
@@ -2087,6 +2197,10 @@ class TestCmdBundleSe:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
             mock.patch(
                 "recount3._utils.normalize_anndata_for_hdf5",
                 return_value=[],
@@ -2115,7 +2229,6 @@ class TestCmdBundleSe:
         args = self._make_args(str(out), sanitize_columns=True)
         mock_se = mock.MagicMock()
         mock_adata = mock.MagicMock()
-        mock_se.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_summarized_experiment.return_value = mock_se
         res = _make_annotation_resource(cfg)
@@ -2126,6 +2239,10 @@ class TestCmdBundleSe:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
             mock.patch(
                 "recount3._utils.normalize_anndata_for_hdf5",
                 return_value=["all_missing"],
@@ -2207,7 +2324,6 @@ class TestCmdBundleSe:
         mock_se = mock.MagicMock()
         mock_adata = mock.MagicMock()
         mock_adata.write_h5ad.side_effect = OSError("disk full")
-        mock_se.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_summarized_experiment.return_value = mock_se
         res = _make_annotation_resource(cfg)
@@ -2217,6 +2333,10 @@ class TestCmdBundleSe:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
         ):
             code = _cmd_bundle_se(args, cfg)
         assert code == 2
@@ -2463,7 +2583,6 @@ class TestCmdBundleRse:
         args = self._make_args(str(out))
         mock_rse = mock.MagicMock()
         mock_adata = mock.MagicMock()
-        mock_rse.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
         res = _make_annotation_resource(cfg)
@@ -2473,6 +2592,10 @@ class TestCmdBundleRse:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
         ):
             code = _cmd_bundle_rse(args, cfg)
         assert code == 0
@@ -2486,7 +2609,6 @@ class TestCmdBundleRse:
         args = self._make_args(str(out))
         mock_rse = mock.MagicMock()
         mock_adata = mock.MagicMock()
-        mock_rse.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
         res = _make_annotation_resource(cfg)
@@ -2496,6 +2618,10 @@ class TestCmdBundleRse:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
             mock.patch(
                 "recount3._utils.normalize_anndata_for_hdf5",
                 return_value=[],
@@ -2524,7 +2650,6 @@ class TestCmdBundleRse:
         args = self._make_args(str(out), sanitize_columns=True)
         mock_rse = mock.MagicMock()
         mock_adata = mock.MagicMock()
-        mock_rse.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
         res = _make_annotation_resource(cfg)
@@ -2535,6 +2660,10 @@ class TestCmdBundleRse:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
             mock.patch(
                 "recount3._utils.normalize_anndata_for_hdf5",
                 return_value=["all_missing"],
@@ -2638,7 +2767,6 @@ class TestCmdBundleRse:
         mock_rse = mock.MagicMock()
         mock_adata = mock.MagicMock()
         mock_adata.write_h5ad.side_effect = OSError("disk full")
-        mock_rse.to_anndata.return_value = mock_adata
         mock_bundle = mock.MagicMock()
         mock_bundle.to_ranged_summarized_experiment.return_value = mock_rse
         res = _make_annotation_resource(cfg)
@@ -2648,6 +2776,10 @@ class TestCmdBundleRse:
                 "recount3.cli.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
+            mock.patch(
+                "recount3._utils.experiment_to_anndata",
+                return_value=mock_adata,
+            ),
         ):
             code = _cmd_bundle_rse(args, cfg)
         assert code == 2

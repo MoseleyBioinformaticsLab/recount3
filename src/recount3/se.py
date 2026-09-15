@@ -56,19 +56,20 @@ BiocPy objects directly:
 * :func:`compute_scale_factors`: compute per-sample AUC- or
   mapped-reads-based scale factors.
 * :func:`transform_counts`: apply scale factors to a count matrix.
+* :func:`to_anndata`: convert an experiment to an ``anndata.AnnData``
+  with samples in rows, for Python machine-learning tooling.
 
 Typical usage example::
 
-  from recount3 import create_rse
-  from recount3.se import compute_scale_factors, transform_counts
+  import recount3 as r3
 
-  rse = create_rse(
+  rse = r3.create_rse(
       project="SRP009615",
       organism="human",
       annotation_label="gencode_v26",
   )
-  sf = compute_scale_factors(rse)  # per-sample factors (for inspection)
-  scaled = transform_counts(rse, by="auc")  # apply scaling to the matrix
+  sf = r3.se.compute_scale_factors(rse)  # per-sample factors (for inspection)
+  scaled = r3.se.transform_counts(rse, by="auc")  # apply scaling to the matrix
 
 Note:
     Most functions in this module require BiocPy packages
@@ -735,11 +736,11 @@ def expand_sra_attributes(
     Examples:
         Expand attributes on a metadata DataFrame::
 
-            expanded_df = expand_sra_attributes(col_data_df)
+            expanded_df = r3.se.expand_sra_attributes(col_data_df)
 
         Expand attributes directly on an RSE (returns a new RSE)::
 
-            rse2 = expand_sra_attributes(rse)
+            rse2 = r3.se.expand_sra_attributes(rse)
 
         Inspect the new attribute columns::
 
@@ -976,9 +977,9 @@ def compute_tpm(
     Examples:
         Compute TPM from an RSE built with :func:`create_rse`::
 
-            rse = create_rse(project="SRP009615", organism="human",
+            rse = r3.create_rse(project="SRP009615", organism="human",
                              annotation_label="gencode_v26")
-            tpm_df = compute_tpm(rse)
+            tpm_df = r3.se.compute_tpm(rse)
     """
     ranged_summarized_experiment_cls = (
         _utils.get_ranged_summarizedexperiment_class()
@@ -1184,12 +1185,12 @@ def compute_scale_factors(
     Examples:
         AUC-based scaling (default)::
 
-            sf = compute_scale_factors(rse)  # inspect per-sample factors
-            scaled = transform_counts(rse, by="auc")  # apply scaling
+            sf = r3.se.compute_scale_factors(rse)  # inspect per-sample factors
+            scaled = r3.se.transform_counts(rse, by="auc")  # apply scaling
 
         Mapped-reads-based scaling::
 
-            sf = compute_scale_factors(rse, by="mapped_reads")
+            sf = r3.se.compute_scale_factors(rse, by="mapped_reads")
     """
     if by not in ("auc", "mapped_reads"):
         raise ValueError(
@@ -1385,3 +1386,71 @@ def transform_counts(
         counts_array, rse.get_row_names(), rse.get_column_names()
     ).mul(scale_factor.to_numpy(dtype=float), axis=1)
     return scaled.apply(np.rint) if round_to_integers else scaled
+
+
+def to_anndata(experiment: Any, *, sanitize_for_hdf5: bool = False) -> Any:
+    """Convert a SummarizedExperiment to AnnData, keeping its provenance.
+
+    AnnData is the container most Python single-cell and machine-learning
+    tooling reads, and it is transposed relative to BiocPy: samples are rows
+    (``obs``) and features are columns (``var``), with each recount3 assay
+    kept as a layer.
+
+    BiocPy's own ``experiment.to_anndata()`` cannot be used on a recount3
+    experiment. It forwards experiment metadata straight to
+    ``AnnData(uns=...)``, and BiocPy stores that metadata as a
+    :class:`~biocutils.NamedList.NamedList`, which AnnData rejects with
+    ``Only mutable mapping types (e.g. dict) are allowed for `.uns`.``. This
+    function converts the provenance to plain dicts and lists first, so the
+    resulting object carries the same ``project``, ``annotation``,
+    ``resource_urls`` and ``metadata_columns`` record.
+
+    Writing the result to HDF5 has a separate requirement, which
+    ``sanitize_for_hdf5`` handles: recount3 STAR QC fields are named after
+    splice motifs and contain ``/``, which HDF5 reads as a path separator,
+    both in the sample column names and in the ``uns`` provenance map keyed
+    by them. Renaming them is a real change to what an analysis indexes by,
+    so it is opt-in rather than automatic.
+
+    Args:
+        experiment: A :class:`~summarizedexperiment.SummarizedExperiment` or
+          :class:`~summarizedexperiment.RangedSummarizedExperiment`, for
+          example from :func:`create_rse`. The object is not modified.
+        sanitize_for_hdf5: If :data:`True`, make the result writable by
+          :meth:`anndata.AnnData.write_h5ad`: cast all-missing object columns
+          to NaN, and replace ``/`` with ``_`` in ``obs``/``var`` column names
+          and in nested ``uns`` keys. Each renamed provenance entry keeps its
+          original name in its value, so nothing is lost. This is what
+          ``recount3 bundle rse --sanitize-columns`` applies.
+
+    Returns:
+        An ``anndata.AnnData`` with samples in rows, features in columns,
+        each assay as a layer, and the experiment's provenance in ``uns``.
+
+    Raises:
+        ImportError: If the ``anndata`` extra is not installed.
+        ValueError: If ``sanitize_for_hdf5`` is requested and a sanitized
+          name would collide with an existing one, which would silently
+          merge two distinct fields.
+
+    Examples:
+        Convert an RSE and inspect the orientation::
+
+            rse = r3.create_rse(project="SRP009615", organism="human",
+                                annotation_label="gencode_v26")
+            adata = r3.se.to_anndata(rse)
+            adata.shape            # (12, 63856): samples x genes
+            adata.uns["project"]   # 'SRP009615'
+
+        Convert and write an HDF5 file::
+
+            adata = r3.se.to_anndata(rse, sanitize_for_hdf5=True)
+            adata.write_h5ad("rse.h5ad")
+    """
+    _utils.ensure_anndata_support()
+    adata = _utils.experiment_to_anndata(experiment)
+    if sanitize_for_hdf5:
+        _utils.normalize_anndata_for_hdf5(adata)
+        _utils.sanitize_anndata_column_names(adata)
+        _utils.sanitize_anndata_uns_keys(adata)
+    return adata

@@ -84,6 +84,7 @@ import functools
 import importlib
 import types
 import weakref
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import BinaryIO, Any, cast, TYPE_CHECKING
 
@@ -1455,6 +1456,164 @@ def sanitize_anndata_column_names(adata: Any) -> list[tuple[str, str]]:
 
         if mapping:
             frame.rename(columns=mapping, inplace=True)
+    return renames
+
+
+def _plain_metadata_value(value: Any) -> Any:
+    """Return ``value`` rebuilt from containers :mod:`h5py` can write.
+
+    ``h5py`` has no writer for a :class:`tuple`, and ``anndata`` rejects any
+    ``uns`` mapping that is not a mutable mapping, so every nested container
+    is rebuilt as a plain :class:`dict` or :class:`list`. Scalars pass
+    through untouched.
+
+    Args:
+        value: A metadata value of any type.
+
+    Returns:
+        An equivalent value built only from dicts, lists, and scalars.
+    """
+    if hasattr(value, "as_dict"):
+        value = value.as_dict()
+    if isinstance(value, Mapping):
+        return {str(k): _plain_metadata_value(v) for k, v in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain_metadata_value(item) for item in value]
+    return value
+
+
+def experiment_metadata_as_dict(experiment: Any) -> dict[str, Any]:
+    """Return an experiment's provenance metadata as a plain, writable dict.
+
+    BiocPy stores experiment metadata as a
+    :class:`~biocutils.NamedList.NamedList`, and recount3's provenance nests
+    tuples inside it (``metadata_columns`` maps each namespaced sample-metadata
+    column to its ``(table, column)`` origin). Neither survives a round trip
+    through ``anndata``, so both are converted here.
+
+    Args:
+        experiment: A ``(Ranged)SummarizedExperiment``-like object exposing
+          ``get_metadata()``.
+
+    Returns:
+        The metadata as a :class:`dict` of dicts, lists, and scalars. Empty
+        when the experiment carries no metadata, which BiocPy represents as
+        an unnamed ``NamedList`` -- it has no keys to map into ``uns``, and
+        its ``as_dict()`` raises rather than returning an empty dict.
+    """
+    metadata = experiment.get_metadata()
+    if metadata is None:
+        return {}
+    if hasattr(metadata, "as_dict"):
+        if getattr(metadata, "get_names", lambda: None)() is None:
+            return {}
+        metadata = metadata.as_dict()
+    return {
+        str(key): _plain_metadata_value(value)
+        for key, value in dict(metadata).items()
+    }
+
+
+def experiment_to_anndata(experiment: Any) -> Any:
+    """Convert an experiment to AnnData, carrying provenance into ``uns``.
+
+    ``SummarizedExperiment.to_anndata()`` forwards its metadata straight to
+    ``AnnData(uns=...)``, which rejects anything that is not a mutable
+    mapping. Because BiocPy holds that metadata as a ``NamedList``, the direct
+    call fails for every experiment recount3 builds. Converting the metadata
+    first and assigning ``uns`` afterwards keeps the provenance without
+    depending on how BiocPy chooses to store it.
+
+    The experiment itself is not modified: ``set_metadata`` returns a copy
+    that shares the assays, so nothing is duplicated in memory.
+
+    Args:
+        experiment: A ``(Ranged)SummarizedExperiment`` to convert.
+
+    Returns:
+        An ``anndata.AnnData`` with samples in rows, genes in columns, and
+        the experiment's provenance in ``uns``.
+    """
+    metadata = experiment_metadata_as_dict(experiment)
+    adata = experiment.set_metadata(None).to_anndata()
+    adata.uns = metadata
+    return adata
+
+
+def _iter_uns_mappings(
+    uns: Any, prefix: str = "uns"
+) -> Iterator[tuple[str, Any]]:
+    """Yield every nested mapping inside ``uns`` with its dotted path."""
+    if isinstance(uns, Mapping):
+        yield prefix, uns
+        for key, value in uns.items():
+            yield from _iter_uns_mappings(value, f"{prefix}.{key}")
+    elif isinstance(uns, list):
+        for index, value in enumerate(uns):
+            yield from _iter_uns_mappings(value, f"{prefix}[{index}]")
+
+
+def hdf5_unsafe_uns_keys(adata: Any) -> list[str]:
+    """Return ``uns`` keys that HDF5 cannot use as group keys.
+
+    ``uns`` becomes a group hierarchy in the HDF5 file, so the same forward
+    slash that breaks an ``obs`` column name breaks a key here. recount3 hits
+    this through ``uns["metadata_columns"]``, which is keyed by the very
+    sample-metadata column names that :func:`hdf5_unsafe_column_names`
+    reports.
+
+    Args:
+        adata: AnnData object to inspect.
+
+    Returns:
+        Dotted ``"uns.<path>.<key>"`` labels containing a forward slash, in
+        traversal order.
+    """
+    unsafe: list[str] = []
+    for path, mapping in _iter_uns_mappings(getattr(adata, "uns", None)):
+        unsafe.extend(f"{path}.{key}" for key in mapping if "/" in str(key))
+    return unsafe
+
+
+def sanitize_anndata_uns_keys(adata: Any) -> list[tuple[str, str]]:
+    """Replace forward slashes in nested ``uns`` keys with ``"_"``.
+
+    This is the ``uns`` counterpart of
+    :func:`sanitize_anndata_column_names` and belongs to the same explicit
+    request: ``uns["metadata_columns"]`` is keyed by the ``obs`` column names,
+    so renaming one without the other would leave the provenance map pointing
+    at columns that no longer exist. The unsanitized name is not lost --
+    each value records its ``(table, column)`` origin verbatim.
+
+    Args:
+        adata: AnnData object. Its ``uns`` mappings are rewritten in place.
+
+    Returns:
+        ``(old, new)`` key pairs that were applied, in traversal order.
+
+    Raises:
+        ValueError: If a sanitized key would collide with another key in the
+          same mapping, which would silently merge two distinct entries.
+    """
+    renames: list[tuple[str, str]] = []
+    for path, mapping in _iter_uns_mappings(getattr(adata, "uns", None)):
+        slashed = [key for key in mapping if "/" in str(key)]
+        if not slashed:
+            continue
+        taken = {str(key) for key in mapping if "/" not in str(key)}
+        for key in slashed:
+            name = str(key)
+            new_name = name.replace("/", "_")
+            if new_name in taken:
+                raise ValueError(
+                    f"Cannot sanitize {path} key {name!r} for HDF5: the "
+                    f"sanitized key {new_name!r} is already used in the same "
+                    "mapping, and renaming would merge two distinct entries. "
+                    "Write a .pkl instead, which keeps the keys verbatim."
+                )
+            taken.add(new_name)
+            mapping[new_name] = mapping.pop(key)
+            renames.append((name, new_name))
     return renames
 
 

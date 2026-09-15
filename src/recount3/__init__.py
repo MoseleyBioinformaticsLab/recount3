@@ -42,9 +42,9 @@ are re-exported here for discovery and convenience.
 
 Typical usage example: high-level (recommended for most cases)::
 
-  from recount3 import create_rse
+  import recount3 as r3
 
-  rse = create_rse(
+  rse = r3.create_rse(
       project="SRP009615",
       organism="human",
       annotation_label="gencode_v26",
@@ -52,9 +52,9 @@ Typical usage example: high-level (recommended for most cases)::
 
 Typical usage example: lower-level (multi-project or custom workflows)::
 
-  from recount3 import R3ResourceBundle
+  import recount3 as r3
 
-  bundle = R3ResourceBundle.discover(
+  bundle = r3.R3ResourceBundle.discover(
       organism="human",
       data_source="sra",
       project=["SRP009615", "SRP001558"],
@@ -136,6 +136,7 @@ from recount3.types import (
     CacheMode,
     CompatibilityMode,
     FieldSpec,
+    StrPath,
     StringOrIterable,
 )
 from recount3.version import __version__
@@ -161,6 +162,7 @@ __all__ = [
     "CacheMode",
     "CompatibilityMode",
     "FieldSpec",
+    "StrPath",
     "StringOrIterable",
     # Descriptions
     "R3ResourceDescription",

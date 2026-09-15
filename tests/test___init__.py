@@ -32,6 +32,8 @@
 from __future__ import annotations
 
 import recount3
+import recount3.se
+import recount3.types
 
 
 def test_package_imports_without_error() -> None:
@@ -98,6 +100,41 @@ def test_search_functions_are_callable() -> None:
         "annotation_options",
     ):
         assert callable(getattr(recount3, name)), f"{name} should be callable"
+
+
+def test_type_aliases_are_exported() -> None:
+    """The type aliases must be re-exported, not just importable from .types."""
+    for name in (
+        "CacheMode",
+        "CompatibilityMode",
+        "FieldSpec",
+        "StrPath",
+        "StringOrIterable",
+    ):
+        assert getattr(recount3, name) is getattr(
+            recount3.types, name
+        ), f"{name} must be the same object as recount3.types.{name}"
+
+
+def test_se_submodule_is_reachable_from_the_package() -> None:
+    """The tutorial documents r3.se.<helper>; that must keep working.
+
+    The helpers are not top-level exports, so the only thing making
+    ``r3.se`` resolve is the package importing from the submodule.
+    """
+    for name in (
+        "compute_read_counts",
+        "compute_scale_factors",
+        "compute_tpm",
+        "expand_sra_attributes",
+        "is_paired_end",
+        "to_anndata",
+        "transform_counts",
+    ):
+        assert callable(getattr(recount3.se, name)), f"r3.se.{name} missing"
+        assert not hasattr(
+            recount3, name
+        ), f"{name} is documented as r3.se.{name}, not a top-level export"
 
 
 def test_error_classes_are_exported() -> None:

@@ -2268,3 +2268,168 @@ def test_remove_biocfilecache_files_drops_rows_and_native_payloads(
     assert not native.exists()
     assert kept.exists()
     assert _utils._biocfilecache_paths(root) == [kept]
+
+
+# ===========================================================================
+# AnnData metadata conversion
+# ===========================================================================
+
+
+class _FakeNamedList:
+    """Stand-in for biocutils.NamedList: keyed, but not a mutable mapping."""
+
+    def __init__(self, mapping: dict[str, object] | None) -> None:
+        self._mapping = mapping
+
+    def get_names(self) -> list[str] | None:
+        return None if self._mapping is None else list(self._mapping)
+
+    def as_dict(self) -> dict[str, object]:
+        if self._mapping is None:
+            raise TypeError("'NoneType' object is not iterable")
+        return dict(self._mapping)
+
+
+class _FakeExperiment:
+    """Minimal experiment exposing the two methods the converter needs."""
+
+    def __init__(self, metadata: object) -> None:
+        self._metadata = metadata
+        self.anndata = types.SimpleNamespace(uns={"replaced": True})
+
+    def get_metadata(self) -> object:
+        return self._metadata
+
+    def set_metadata(self, metadata: object) -> _FakeExperiment:
+        # BiocPy returns a copy by default; the original must be untouched.
+        return _FakeExperiment(metadata)
+
+    def to_anndata(self) -> types.SimpleNamespace:
+        return self.anndata
+
+
+def test_experiment_metadata_as_dict_unwraps_namedlist() -> None:
+    """A NamedList becomes the plain dict AnnData requires for uns."""
+    experiment = _FakeExperiment(_FakeNamedList({"project": "SRP009615"}))
+
+    assert _utils.experiment_metadata_as_dict(experiment) == {
+        "project": "SRP009615"
+    }
+
+
+def test_experiment_metadata_as_dict_rebuilds_tuples_as_lists() -> None:
+    """h5py has no writer for a tuple, so nested tuples become lists."""
+    experiment = _FakeExperiment(
+        _FakeNamedList(
+            {
+                "metadata_columns": {"qc__a": ("qc", "a")},
+                "resource_urls": ("u1", "u2"),
+            }
+        )
+    )
+
+    converted = _utils.experiment_metadata_as_dict(experiment)
+
+    assert converted["metadata_columns"] == {"qc__a": ["qc", "a"]}
+    assert converted["resource_urls"] == ["u1", "u2"]
+
+
+def test_experiment_metadata_as_dict_handles_unnamed_namedlist() -> None:
+    """BiocPy represents 'no metadata' as a NamedList whose as_dict raises."""
+    experiment = _FakeExperiment(_FakeNamedList(None))
+
+    assert _utils.experiment_metadata_as_dict(experiment) == {}
+
+
+def test_experiment_metadata_as_dict_unwraps_a_nested_namedlist() -> None:
+    """BiocPy accepts a NamedList as a metadata value, not just at the top."""
+    experiment = _FakeExperiment(
+        _FakeNamedList({"origin": _FakeNamedList({"table": "recount_qc"})})
+    )
+
+    assert _utils.experiment_metadata_as_dict(experiment) == {
+        "origin": {"table": "recount_qc"}
+    }
+
+
+def test_experiment_metadata_as_dict_accepts_a_plain_dict() -> None:
+    """get_metadata() need not return a NamedList for the result to be usable."""
+    experiment = _FakeExperiment({"project": "SRP009615", "urls": ("a", "b")})
+
+    assert _utils.experiment_metadata_as_dict(experiment) == {
+        "project": "SRP009615",
+        "urls": ["a", "b"],
+    }
+
+
+def test_experiment_metadata_as_dict_handles_missing_metadata() -> None:
+    assert _utils.experiment_metadata_as_dict(_FakeExperiment(None)) == {}
+
+
+def test_experiment_to_anndata_assigns_converted_uns() -> None:
+    """uns is assigned after construction, never passed through BiocPy."""
+    experiment = _FakeExperiment(_FakeNamedList({"project": "SRP009615"}))
+
+    adata = _utils.experiment_to_anndata(experiment)
+
+    assert adata.uns == {"project": "SRP009615"}
+    # The source experiment keeps its own metadata representation.
+    assert isinstance(experiment.get_metadata(), _FakeNamedList)
+
+
+def test_hdf5_unsafe_uns_keys_reports_nested_slashed_keys() -> None:
+    """uns becomes an HDF5 group tree, so '/' breaks nested keys too."""
+    adata = types.SimpleNamespace(
+        uns={
+            "project": "SRP009615",
+            "metadata_columns": {
+                "qc__star.splices:_gt/ag": ["qc", "star.splices:_gt/ag"],
+                "qc__clean": ["qc", "clean"],
+            },
+        }
+    )
+
+    assert _utils.hdf5_unsafe_uns_keys(adata) == [
+        "uns.metadata_columns.qc__star.splices:_gt/ag"
+    ]
+
+
+def test_hdf5_unsafe_uns_keys_ignores_safe_metadata() -> None:
+    adata = types.SimpleNamespace(uns={"project": "SRP009615"})
+
+    assert _utils.hdf5_unsafe_uns_keys(adata) == []
+
+
+def test_sanitize_anndata_uns_keys_renames_in_place() -> None:
+    """The value keeps the unsanitized name, so provenance is not lost."""
+    adata = types.SimpleNamespace(
+        uns={
+            "metadata_columns": {
+                "qc__star.splices:_gt/ag": ["qc", "star.splices:_gt/ag"],
+            }
+        }
+    )
+
+    renames = _utils.sanitize_anndata_uns_keys(adata)
+
+    assert renames == [("qc__star.splices:_gt/ag", "qc__star.splices:_gt_ag")]
+    columns = adata.uns["metadata_columns"]
+    assert list(columns) == ["qc__star.splices:_gt_ag"]
+    assert columns["qc__star.splices:_gt_ag"] == [
+        "qc",
+        "star.splices:_gt/ag",
+    ]
+
+
+def test_sanitize_anndata_uns_keys_refuses_to_merge_entries() -> None:
+    """Renaming onto an existing key would silently lose one of the two."""
+    adata = types.SimpleNamespace(
+        uns={"metadata_columns": {"a/b": ["t", "a/b"], "a_b": ["t", "a_b"]}}
+    )
+
+    with pytest.raises(ValueError, match="would merge two distinct entries"):
+        _utils.sanitize_anndata_uns_keys(adata)
+
+
+def test_sanitize_anndata_uns_keys_tolerates_missing_uns() -> None:
+    assert _utils.sanitize_anndata_uns_keys(types.SimpleNamespace()) == []
