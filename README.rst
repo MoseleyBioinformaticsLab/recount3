@@ -147,9 +147,9 @@ Assemble a project into a ``RangedSummarizedExperiment`` (requires the
 
 .. code:: python
 
-   >>> from recount3 import create_rse
+   >>> import recount3 as r3
    >>>
-   >>> rse = create_rse(
+   >>> rse = r3.create_rse(
    ...     project="SRP009615",
    ...     organism="human",
    ...     annotation_label="gencode_v26",
@@ -162,9 +162,9 @@ resources and stack matrices directly:
 
 .. code:: python
 
-   >>> from recount3 import R3ResourceBundle
+   >>> import recount3 as r3
    >>>
-   >>> bundle = R3ResourceBundle.discover(
+   >>> bundle = r3.R3ResourceBundle.discover(
    ...     organism="human",
    ...     data_source="sra",
    ...     project="SRP009615",
@@ -175,6 +175,7 @@ resources and stack matrices directly:
    >>> gene_counts = bundle.filter(
    ...     resource_type="count_files_gene_or_exon",
    ...     genomic_unit="gene",
+   ...     annotation_extension="G026",
    ... ).stack_count_matrices(compat="feature")
    >>> gene_counts.shape
    (63856, 12)
