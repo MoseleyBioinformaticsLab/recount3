@@ -178,15 +178,24 @@ Commands
 
   .. code-block:: text
 
-     --sanitize-columns    Replace '/' with '_' in obs/var column names,
-                           which .h5ad output requires (see below).
+     --sanitize-columns    Replace '/' with '_' in obs/var column names and
+                           in uns keys, which .h5ad output requires
+                           (see below).
 
   HDF5 reads a forward slash as a path separator, and recount3 STAR QC
   fields are named after splice motifs (for example,
   ``recount_qc__star.number_of_splices:_gt/ag``), so ``.h5ad`` output fails
-  for most projects carrying SRA metadata unless those columns are renamed.
-  ``--sanitize-columns`` performs the rename and logs every one of them.
-  Writing a ``.pkl`` keeps the names verbatim.
+  for most projects carrying SRA metadata unless those names are renamed.
+  This affects the sample columns and the ``uns`` provenance map keyed by
+  them. ``--sanitize-columns`` renames both and logs every one; each renamed
+  provenance entry keeps its original name in its value. Writing a ``.pkl``
+  keeps the names verbatim.
+
+  Experiment provenance (project, annotation, resource URLs, and the
+  metadata-column map) is carried into ``uns``. The equivalent Python call is
+  :func:`recount3.se.to_anndata`; BiocPy's own ``to_anndata()`` method
+  cannot be used, because it hands that provenance to AnnData in a form it
+  rejects.
 
 ``smoke-test``
   Download a few tiny files to verify connectivity and configuration.
@@ -344,9 +353,10 @@ Troubleshooting
   ``.csv`` instead.
 * "Cannot write .h5ad: Optional dependency ... is required": Install
   ``pip install "recount3[anndata]"``, or write a ``.pkl`` file instead.
-* "Cannot write .h5ad: ... column name(s) contain a forward slash": HDF5
-  reads ``/`` as a path separator. Add ``--sanitize-columns`` to rename
-  those columns, or write a ``.pkl`` file instead.
+* "Cannot write .h5ad: ... name(s) contain a forward slash": HDF5 reads
+  ``/`` as a path separator, in ``obs``/``var`` column names and in ``uns``
+  keys alike. Add ``--sanitize-columns`` to rename them, or write a ``.pkl``
+  file instead.
 * "Cannot write Parquet: ... columns use a pandas sparse dtype": You are
   stacking junctions. Add ``--densify`` (which materializes every zero) or
   write a text format.

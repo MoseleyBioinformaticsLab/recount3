@@ -13,6 +13,7 @@ env/
 .conda/
 
 .pytest_cache/
+.mypy_cache/
 .coverage
 .coverage.*
 htmlcov/

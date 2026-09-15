@@ -1498,7 +1498,7 @@ def experiment_metadata_as_dict(experiment: Any) -> dict[str, Any]:
     Returns:
         The metadata as a :class:`dict` of dicts, lists, and scalars. Empty
         when the experiment carries no metadata, which BiocPy represents as
-        an unnamed ``NamedList`` -- it has no keys to map into ``uns``, and
+        an unnamed ``NamedList``. It has no keys to map into ``uns``, and
         its ``as_dict()`` raises rather than returning an empty dict.
     """
     metadata = experiment.get_metadata()
@@ -1582,7 +1582,7 @@ def sanitize_anndata_uns_keys(adata: Any) -> list[tuple[str, str]]:
     :func:`sanitize_anndata_column_names` and belongs to the same explicit
     request: ``uns["metadata_columns"]`` is keyed by the ``obs`` column names,
     so renaming one without the other would leave the provenance map pointing
-    at columns that no longer exist. The unsanitized name is not lost --
+    at columns that no longer exist. The unsanitized name is not lost;
     each value records its ``(table, column)`` origin verbatim.
 
     Args:

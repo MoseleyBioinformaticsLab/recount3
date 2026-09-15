@@ -1,12 +1,12 @@
 Tutorial
 ========
 
-This tutorial walks through the ``recount3`` Python API end-to-end: resource
-discovery, downloading, assembly of
-:class:`~summarizedexperiment.SummarizedExperiment` /
-:class:`~summarizedexperiment.RangedSummarizedExperiment` objects, sample
-metadata merging, count normalization and scaling, BigWig coverage access, and
-management of the on-disk cache.
+This tutorial walks through the ``recount3`` Python API end-to-end: finding
+projects and samples, downloading the files behind them, assembling
+:class:`~summarizedexperiment.SummarizedExperiment` and
+:class:`~summarizedexperiment.RangedSummarizedExperiment` objects, merging
+sample metadata, normalizing and scaling counts, reading BigWig coverage, and
+managing the on-disk cache.
 
 For the ``recount3`` command-line tool, see :doc:`cli`. For full per-symbol
 documentation, see :doc:`api`.
@@ -66,8 +66,10 @@ Quick start
 
 .. note::
 
-   Every example in this tutorial retrieves data from a live recount3 mirror
-   and therefore requires network access. Downloaded files are cached under
+   Run each section's blocks in order, since later blocks reuse names bound by
+   earlier ones. Examples that download data require network access unless
+   their files are already cached. Annotation lookup, filtering, and analysis
+   of loaded objects run offline. Downloaded files are cached under
    ``~/.cache/recount3/files`` (see :ref:`cache-and-configuration`), so
    re-running an example reuses the local copy rather than downloading again.
 
@@ -78,21 +80,80 @@ call:
 
 .. code:: python
 
-   from recount3 import create_rse
+   import recount3 as r3
 
-   rse = create_rse(
+   rse = r3.create_rse(
        project="SRP009615",
        organism="human",
        annotation_label="gencode_v26",
    )
 
-   print(rse.shape)             # (n_features, n_samples)
-   print(rse.get_column_names()[:5])
+   print("Features x samples:", rse.shape)
+   print("Gene assay:", type(rse.get_assay("raw_counts")).__name__)
+   print("First samples:", list(rse.get_column_names()[:3]))
+
+Output::
+
+   Features x samples: (63856, 12)
+   Gene assay: ndarray
+   First samples: ['SRR389077', 'SRR387777', 'SRR387778']
+
+63,856 gene features by 12 samples. The counts are a plain
+:class:`numpy.ndarray`; the BiocPy container supplies the feature and sample
+labels around it. Exact counts and identifiers depend on the study and on what
+the mirror currently serves.
+
+Examples here import the package under the short alias ``r3``, so each call
+shows where it comes from. ``from recount3 import create_rse`` works the same
+way if you prefer it.
 
 This single call is sufficient for the most common workflow; it is expanded in
 :ref:`layer-1` below. The remainder of this tutorial describes the steps that
 ``create_rse`` performs internally and the lower-level components to use when
 finer control is required.
+
+
+Finding projects and samples before choosing a study
+----------------------------------------------------
+
+The quick start above assumes you already know which study you want. If you
+do not, start from the source-level metadata: these calls read and parse the
+mirror's own project and sample tables, so what they return is a record of
+what exists rather than a guess at a filename. Limit ``data_sources`` to the
+source you need. The human SRA table alone covers several thousand
+projects:
+
+.. code:: python
+
+   import recount3 as r3
+
+   projects = r3.available_projects(organism="human", data_sources="sra")
+   print(projects[["project", "n_samples"]].head())
+
+   samples = r3.available_samples(organism="human", data_sources="sra")
+   study_samples = samples.loc[samples["project"].eq("SRP009615")]
+   print(study_samples[["project", "external_id"]].head())
+
+Both return a :class:`pandas.DataFrame`. The human SRA project table has 8,677
+rows; ``n_samples`` there matches the column count you will get from
+``create_rse``::
+
+        project  n_samples file_source      project_home
+   831  SRP009615         12         sra  data_sources/sra
+
+These tables support selecting projects before downloading counts.
+``r3.samples_for_project`` returns one project's sample identifiers as a list;
+``r3.project_homes`` returns a table of project locations; and
+``r3.create_sample_project_lists(organism="human")`` returns a
+``(samples, projects)`` pair of sorted identifier lists for a whole organism,
+which is what the CLI's ``recount3 ids`` writes out.
+``r3.annotation_label("human", "G026")`` converts an extension back to its
+human-readable label.
+
+Keep the distinction in mind while reading the rest of this tutorial: the
+discovery calls on this page read metadata, whereas the resource and bundle
+layers below mostly *construct* candidate URLs from the parameters you give
+them. A constructed URL is not evidence that the file exists.
 
 
 The three layers of the API
@@ -152,9 +213,9 @@ Gene-level RSE (default)
 
 .. code:: python
 
-   from recount3 import create_rse
+   import recount3 as r3
 
-   rse = create_rse(
+   rse = r3.create_rse(
        project="SRP009615",
        organism="human",
        annotation_label="gencode_v26",   # or "gencode_v29", "fantom6_cat", "refseq", "ercc", "sirv"
@@ -164,7 +225,7 @@ You may pass the raw extension code instead of a label:
 
 .. code:: python
 
-   rse = create_rse(
+   rse = r3.create_rse(
        project="SRP009615",
        organism="human",
        annotation_extension="G026",
@@ -175,28 +236,30 @@ available labels with :func:`~recount3.annotation_options`:
 
 .. code:: python
 
-   from recount3 import annotation_options
+   import recount3 as r3
 
-   annotation_options("human")
-   # {'gencode_v26': 'G026', 'gencode_v29': 'G029', 'fantom6_cat': 'F006',
-   #  'refseq': 'R109', 'ercc': 'ERCC', 'sirv': 'SIRV'}
+   r3.annotation_options("human")
+   r3.annotation_options("mouse")
 
-   annotation_options("mouse")
-   # {'gencode_v23': 'M023'}
+Output::
+
+   {'gencode_v26': 'G026', 'gencode_v29': 'G029', 'fantom6_cat': 'F006',
+    'refseq': 'R109', 'ercc': 'ERCC', 'sirv': 'SIRV'}
+   {'gencode_v23': 'M023'}
 
 Exon-level and junction-level
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: python
 
-   exon_rse = create_rse(
+   exon_rse = r3.create_rse(
        project="SRP009615",
        organism="human",
        genomic_unit="exon",
        annotation_label="gencode_v26",
    )
 
-   junction_rse = create_rse(
+   junction_rse = r3.create_rse(
        project="SRP009615",
        organism="human",
        genomic_unit="junction",
@@ -227,7 +290,7 @@ ranges, ``create_rse`` raises :exc:`~recount3.RangesError` (a
 
 ``the annotation does not cover every counted feature``
    The annotation parses cleanly but describes a different feature set
-   than the counts -- a GENCODE 26 GTF against GENCODE 29 counts, say.
+   than the counts, for example a GENCODE 26 GTF against GENCODE 29 counts.
    Pass the matching ``annotation_extension`` or ``annotation_label``;
    :func:`~recount3.annotation_options` lists what is available.
 
@@ -242,7 +305,7 @@ explaining why:
 
 .. code:: python
 
-   experiment = create_rse(
+   experiment = r3.create_rse(
        project="SRP009615",
        organism="human",
        allow_fallback_to_se=True,
@@ -250,15 +313,14 @@ explaining why:
 
 Be deliberate about that flag:
 
-- The returned object **has no genomic ranges**. Counts, sample metadata,
-  and the operations driven by column data still work --
-  :func:`recount3.se.transform_counts`,
+- A fallback object **has no genomic ranges**. Counts, sample metadata,
+  and the operations driven by column data still work, namely
   :func:`recount3.se.compute_scale_factors`,
-  :func:`recount3.se.expand_sra_attributes`. Anything needing coordinates
-  does not: range queries, overlaps, subsetting by region, and
-  :func:`recount3.se.compute_tpm`, which needs feature widths and raises on
-  a plain SE. Code written for an RSE will still fail, just later and
-  further from the cause.
+  :func:`recount3.se.expand_sra_attributes`, and
+  :func:`recount3.se.is_paired_end`. The helpers that need an RSE,
+  ``compute_read_counts``, ``transform_counts``, and ``compute_tpm``, raise
+  ``TypeError`` on a plain SE, as do range queries. The flag returns an RSE
+  as usual whenever ranges are available.
 - It is **not a retry**. The download is not attempted again, and the flag
   does nothing about whatever made retrieval fail.
 - It does **not repair an annotation mismatch**. Accepting an SE is how a
@@ -302,18 +364,20 @@ shape does not fit. Typical cases:
   both, so the counts have to be stacked on a shared feature axis before
   any analysis starts.
 - *Look before you download.* Junction and BigWig files are large. A bundle
-  lists what exists for a project -- URLs, sizes, annotation codes -- as
-  plain objects, so you can decide what is worth fetching, or write out a
+  describes candidate files for a project, their URLs and annotation codes,
+  as plain objects, so you can decide what is worth fetching, or write out a
   manifest for someone else to fetch.
-- *Only part of what discovery returns.* You need the four gene-count files
-  and the QC table, not the exon counts, the junctions, and the other four
-  metadata tables that ``create_rse`` would download alongside them.
+- *Only part of what discovery returns.* You need gene counts and the QC
+  table, without the other resources in a default bundle. ``create_rse``
+  already limits counts to the requested genomic unit and annotation.
 - *Your own assembly.* You want the stacked counts as a
   :class:`pandas.DataFrame` to merge with clinical data of your own, and
   will build the BiocPy object yourself (or skip it entirely).
 
 A bundle is just a list of resources plus filters, so nothing is downloaded
-until you ask for it. That is the practical difference from Layer 1:
+by default during discovery without BigWigs. BigWig discovery reads a sample
+index. Candidate URLs do not verify that files exist and do not report their
+sizes. That is the practical difference from Layer 1:
 ``create_rse`` decides what to fetch for you, a bundle lets you decide.
 
 Discovering resources for one or more projects
@@ -321,15 +385,18 @@ Discovering resources for one or more projects
 
 .. code:: python
 
-   from recount3 import R3ResourceBundle
+   import recount3 as r3
 
-   bundle = R3ResourceBundle.discover(
+   bundle = r3.R3ResourceBundle.discover(
        organism="human",
        data_source="sra",
        project="SRP009615",
    )
    print(f"Found {len(bundle.resources)} resources.")
-   # Found 10 resources.
+
+Output::
+
+   Found 10 resources.
 
 By default, ``discover`` returns gene + exon counts, the default annotation
 GTF for each of those units (gene and exon), the five metadata tables, and the
@@ -339,7 +406,7 @@ file. Override with:
 
 .. code:: python
 
-   bundle = R3ResourceBundle.discover(
+   custom_bundle = r3.R3ResourceBundle.discover(
        organism="human",
        data_source="sra",
        project="SRP009615",
@@ -354,19 +421,22 @@ Multi-project bundles
 ~~~~~~~~~~~~~~~~~~~~~
 
 Pass an iterable for any of ``organism``, ``data_source``, or
-``project``. ``discover`` computes the Cartesian product and produces a
-single combined bundle:
+``project``. ``discover`` uses all combinations of the supplied values and
+produces a single combined bundle:
 
 .. code:: python
 
-   multi = R3ResourceBundle.discover(
+   multi = r3.R3ResourceBundle.discover(
        organism="human",
        data_source="sra",
        project=["SRP009615", "SRP001558"],
        genomic_units=("gene",),
    )
    print(f"Combined: {len(multi.resources)} resources, 2 projects.")
-   # Combined: 15 resources, 2 projects.
+
+Output::
+
+   Combined: 15 resources, 2 projects.
 
 The count is 15, not 14: each project contributes 7 project-specific resources
 (1 gene count + 1 junction file + 5 metadata tables), and the gene annotation
@@ -406,7 +476,7 @@ accepts any :data:`~recount3.types.FieldSpec`:
    gene_or_exon = bundle.filter(genomic_unit=["gene", "exon"])
 
    gencode_only = bundle.filter(
-       annotation_extension=lambda ext: ext and ext.startswith("G"),
+       annotation_extension=lambda ext: bool(ext) and ext.startswith("G"),
    )
 
    no_metadata = bundle.filter(resource_type="metadata_files", invert=True)
@@ -436,10 +506,20 @@ bundle first to choose which family you want:
    gene_counts_df = (
        bundle
        .filter(resource_type="count_files_gene_or_exon", genomic_unit="gene")
+       .filter(annotation_extension="G026")
        .stack_count_matrices(compat="feature")
    )
-   print(gene_counts_df.shape)                        # (n_features, n_samples)
-   # (63856, 12)
+   print(type(gene_counts_df).__name__, gene_counts_df.shape)
+
+Output::
+
+   DataFrame (63856, 12)
+
+A plain :class:`pandas.DataFrame`, feature IDs on the index and sample IDs on
+the columns, identical to what ``create_rse`` puts in its ``raw_counts``
+assay. Junctions stack the same way, and stay sparse-backed:
+
+.. code:: python
 
    junction_counts_df = (
        bundle
@@ -457,6 +537,14 @@ Compatibility checking is controlled by ``compat``:
 
 Mixing incompatible resources raises
 :exc:`~recount3.errors.CompatibilityError`.
+
+``compat="feature"`` does not verify an annotation build or align metadata.
+Select one annotation explicitly before stacking. Use
+``axis=1, join_policy="inner"`` to combine samples on shared feature IDs, and
+check that the resulting sample names are unique. For experiment construction,
+use the builders below; they also validate annotations and sample metadata.
+For multi-project junctions, include MM, ID, and RR files and use the builders
+to align junctions by genomic coordinates rather than project-local row numbers.
 
 Building SummarizedExperiment / RangedSummarizedExperiment from a bundle
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -518,9 +606,9 @@ appropriate subclass based on ``resource_type``:
 
 .. code:: python
 
-   from recount3 import R3Resource, R3ResourceDescription
+   import recount3 as r3
 
-   desc = R3ResourceDescription(
+   desc = r3.R3ResourceDescription(
        resource_type="count_files_gene_or_exon",
        organism="human",
        data_source="sra",
@@ -529,12 +617,13 @@ appropriate subclass based on ``resource_type``:
        annotation_extension="G026",   # required for gene/exon counts
    )
 
-   res = R3Resource(desc)
+   res = r3.R3Resource(desc)
    print(res.url)                     # fully-qualified URL on the recount3 mirror
    # http://duffel.rail.bio/recount3/human/data_sources/sra/gene_sums/15/SRP009615/sra.gene_sums.SRP009615.G026.gz
 
    res.download(path=None, cache_mode="enable")  # cache only, no local copy
    df = res.load()                               # pandas.DataFrame
+   local_path = res.ensure_cached()              # path for another file reader
    print(df.shape)
 
 The full description catalog:
@@ -560,8 +649,24 @@ Downloading
 .. code:: python
 
    res.download(path=None)                       # cache only
-   res.download(path="/data/recount3")           # copy into a directory
-   res.download(path="/data/recount3.zip")       # append to a ZIP archive
+   res.download(path="./downloads")              # copy into a directory
+   res.download(path="./recount3.zip")           # append to a ZIP archive
+
+``path`` accepts a string or a :class:`pathlib.Path`
+(:data:`~recount3.types.StrPath`), so a directory built with ``/`` works as
+well, as does a ``Path`` handed back by
+:meth:`~recount3.R3Resource.ensure_cached` or
+:func:`~recount3.recount3_cache`:
+
+.. code:: python
+
+   from pathlib import Path
+
+   out = Path("results-output")
+   res.download(path=out / "downloads")
+
+The same applies to ``dest`` on
+:meth:`~recount3.R3ResourceBundle.download`.
 
 ``cache_mode`` controls cache interaction:
 
@@ -600,13 +705,8 @@ returns one resource per Cartesian-product combination:
 
 .. code:: python
 
-   from recount3 import (
-       search_count_files_gene_or_exon,
-       search_metadata_files,
-       search_bigwig_files,
-   )
-
-   counts = search_count_files_gene_or_exon(
+   import recount3 as r3
+   counts = r3.search_count_files_gene_or_exon(
        organism="human",
        data_source="sra",
        genomic_unit="gene",
@@ -614,15 +714,17 @@ returns one resource per Cartesian-product combination:
        annotation_extension="G026",
    )
 
-   meta = search_metadata_files(
+   meta = r3.search_metadata_files(
        organism="human",
        data_source="sra",
        project="SRP009615",
-       table_name=("recount_project", "recount_qc", "recount_seq_qc",
-                   "recount_pred", "sra"),
+       table_name=(
+           "recount_project", "recount_qc", "recount_seq_qc",
+           "recount_pred", "sra",
+       ),
    )
 
-   bigwigs = search_bigwig_files(
+   bigwigs = r3.search_bigwig_files(
        organism="human",
        data_source="sra",
        project="SRP009615",
@@ -630,7 +732,37 @@ returns one resource per Cartesian-product combination:
    )
 
 The single-call equivalent is :func:`~recount3.search_project_all`
-(used internally by ``R3ResourceBundle.discover``).
+(used internally by ``R3ResourceBundle.discover``). The remaining helpers
+follow the same shape:
+
+==========================================  ==========================================
+Function                                    Returns
+==========================================  ==========================================
+``r3.search_count_files_gene_or_exon``      Gene or exon count files
+``r3.search_count_files_junctions``         Junction ``MM``/``ID``/``RR`` files
+``r3.search_metadata_files``                Per-project metadata tables
+``r3.search_bigwig_files``                  Per-sample BigWig coverage files
+``r3.search_annotations``                   Annotation GTFs for an organism
+``r3.search_data_sources``                  The ``homes_index`` for an organism
+``r3.search_data_source_metadata``          Source-level (not project) metadata
+``r3.search_project_all``                   Everything above for one project
+==========================================  ==========================================
+
+To go the other way, from a manifest line back to a resource, use
+:meth:`~recount3.R3Resource.from_mapping`, which rehydrates one JSONL record
+written by ``recount3 search``:
+
+.. code:: python
+
+   import json
+
+   with open("manifest.jsonl", encoding="utf-8") as handle:
+       resources = [r3.R3Resource.from_mapping(json.loads(line))
+                    for line in handle if line.strip()]
+
+The ``url`` and ``arcname`` keys in the record are recomputed from the
+description and the active configuration, so a manifest written against one
+mirror can be replayed against another.
 
 
 Working with sample metadata
@@ -692,7 +824,7 @@ Expanding SRA sample attributes
 
 In an assembled RSE, SRA samples carry an ``sra__sample_attributes`` column
 (the ``sra`` metadata table namespaced with ``__`` as described above) that
-encodes key–value pairs in the form ``"age;;67.78|disease;;Control|..."``.
+encodes key-value pairs in the form ``"age;;67.78|disease;;Control|..."``.
 :func:`recount3.se.expand_sra_attributes` parses these into separate columns.
 It accepts either a DataFrame or an SE/RSE object, and recognizes both the
 namespaced ``sra__sample_attributes`` name and the R-style
@@ -701,29 +833,56 @@ named ``sra_attribute.<key>`` (for example, ``sra_attribute.disease``):
 
 .. code:: python
 
-   from recount3.se import expand_sra_attributes
+   import recount3 as r3
 
-   rse2 = expand_sra_attributes(rse)
+   rse2 = r3.se.expand_sra_attributes(rse)
    col_df = rse2.get_column_data().to_pandas()
    sra_cols = [c for c in col_df.columns if c.startswith("sra_attribute.")]
+   print(sra_cols)
+   print(col_df[["sra_attribute.cells", "sra_attribute.cell_line"]].head(4))
+
+Output::
+
+   ['sra_attribute.cell_line', 'sra_attribute.shRNA_expression',
+    'sra_attribute.source_name', 'sra_attribute.treatment',
+    'sra_attribute.cells']
+             sra_attribute.cells sra_attribute.cell_line
+   SRR389077                 NaN                    K562
+   SRR387777                K562                     NaN
+   SRR387778                K562                     NaN
+   SRR389078                 NaN                    K562
+
+Worth dwelling on: the submitters of this study recorded the same fact under
+two different attribute names, so neither column alone describes every sample.
+``expand_sra_attributes`` reports what the submitters wrote and does not
+reconcile it for you. Inspect the expanded columns before defining analysis
+groups; here you would combine them, for example with
+``col_df["sra_attribute.cell_line"].combine_first(col_df["sra_attribute.cells"])``.
 
 
 Normalization and scaling
 -------------------------
 
-recount3 distributes coverage-sum counts ("``raw_counts``" assay), not
-read counts. :mod:`recount3.se` provides recount3-compatible helpers to
-convert and normalize them. All require a
-:class:`~summarizedexperiment.RangedSummarizedExperiment`.
+Gene and exon matrices contain base-pair coverage sums (the ``raw_counts``
+assay). Junction matrices contain junction-supporting counts (the ``counts``
+assay); do not apply the gene coverage-to-read or TPM formulas to junctions.
+:mod:`recount3.se` provides helpers consistent with the R implementation.
+These reach the ``se`` submodule rather than the package root, so they are
+called as ``r3.se.compute_tpm(rse)``, whereas the builders and discovery
+helpers used so far are available directly as ``r3.create_rse(...)``.
+
+``compute_read_counts``, ``transform_counts``, and ``compute_tpm`` require an
+RSE. ``compute_scale_factors`` and ``is_paired_end`` also accept sample
+metadata DataFrames and plain SE objects.
 
 Approximate read counts
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: python
 
-   from recount3.se import compute_read_counts
+   import recount3 as r3
 
-   reads = compute_read_counts(rse)        # pandas DataFrame, integer-rounded
+   reads = r3.se.compute_read_counts(rse)        # pandas DataFrame, integer-rounded
 
 Values are rounded to whole reads by default; pass ``round_to_integers=False``
 to retain the fractional estimates.
@@ -735,30 +894,228 @@ Two methods are supported, matching the R ``recount3`` reference:
 
 .. code:: python
 
-   from recount3.se import compute_scale_factors, transform_counts
+   import recount3 as r3
 
-   sf_auc      = compute_scale_factors(rse, by="auc")
-   sf_mapreads = compute_scale_factors(rse, by="mapped_reads")
+   sf_auc = r3.se.compute_scale_factors(rse, by="auc")
+   sf_mapreads = r3.se.compute_scale_factors(rse, by="mapped_reads")
+   print(pd.DataFrame({"auc": sf_auc, "mapped_reads": sf_mapreads}).head(3))
+
+Both return a :class:`pandas.Series` indexed by ``external_id``::
+
+                     auc  mapped_reads
+   external_id
+   SRR389077    0.045855      0.129044
+   SRR387777    0.039961      0.112357
+   SRR387778    0.034571      0.097252
 
 Apply scale factors to the assay:
 
 .. code:: python
 
-   scaled = transform_counts(rse, by="auc")          # default
-   scaled = transform_counts(rse, by="mapped_reads", target_read_count=4e7)
+   scaled = r3.se.transform_counts(rse, by="auc")          # default
+   scaled = r3.se.transform_counts(rse, by="mapped_reads", target_read_count=4e7)
 
 TPM (gene/exon only, needs feature widths)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code:: python
 
-   from recount3.se import compute_tpm
+   import recount3 as r3
 
-   tpm = compute_tpm(rse)                  # requires rowRanges with widths
+   tpm = r3.se.compute_tpm(rse)
+   print(type(tpm).__name__, tpm.shape)
+   print(tpm.sum(axis=0).round().unique())
 
-:func:`recount3.se.is_paired_end` and the other helpers documented in
-:mod:`recount3.se` accept either a DataFrame of metadata or an SE/RSE
-object. See the API reference for full signatures.
+Output::
+
+   DataFrame (63856, 12)
+   [1000000.]
+
+Every sample sums to one million across the full feature set, which is the
+quickest check that the normalization ran over the whole matrix rather than a
+subset. The five highest-expressed genes in the first three samples::
+
+                          gene_name  SRR389077  SRR387777  SRR387778
+   ENSG00000210082.2        MT-RNR2   36013.14   16179.52   14534.20
+   ENSG00000281383.1  CH507-513H4.5   67606.31    7793.08   10009.38
+   ENSG00000213934.6           HBG1    7827.91   12294.58   10770.67
+   ENSG00000198712.1         MT-CO2    6718.71    9145.23    6520.00
+   ENSG00000228253.1        MT-ATP8    4585.29    6566.27    8629.65
+
+TPM uses annotated ``bp_length`` (covered exonic bases) when present, falling
+back to range widths. A gene's genomic span can include introns and is not an
+interchangeable length. Normalize the full gene matrix before selecting genes
+for display; each nonzero sample should sum to approximately one million.
+Check for missing or non-finite results before downstream analysis. The helpers
+return new DataFrames and do not replace the RSE assay; rounded estimates have
+integer-like values but may retain a floating dtype.
+
+:func:`recount3.se.is_paired_end`, ``compute_scale_factors``, and
+``expand_sra_attributes`` accept a metadata DataFrame or an SE/RSE object.
+See the API reference for full signatures.
+
+
+From package objects to downstream analysis
+-------------------------------------------
+
+The gene assay is a NumPy array, metadata and normalized counts are pandas
+objects, and the junction assay is a SciPy sparse matrix. Inspect the real
+objects and preserve their labels when moving between representations:
+
+.. code:: python
+
+   import numpy as np
+   import pandas as pd
+   from scipy import sparse
+
+   raw = rse.get_assay("raw_counts")
+   print(type(raw), raw.shape)
+   print(type(tpm), tpm.shape)
+   assert np.isfinite(tpm.to_numpy()).all()
+   nonzero = tpm.sum(axis=0) > 0
+   np.testing.assert_allclose(tpm.sum(axis=0)[nonzero], 1_000_000)
+
+   # Filter only after normalizing the complete gene matrix.
+   expressed = (tpm >= 1).sum(axis=1) >= 3
+   log_tpm = np.log2(tpm.loc[expressed] + 1)
+   variable_ids = log_tpm.var(axis=1).nlargest(2000).index
+   X = log_tpm.loc[variable_ids].T.to_numpy()  # samples × genes
+   sample_metadata = rse.get_column_data().to_pandas().reindex(tpm.columns)
+   assert sample_metadata.index.tolist() == tpm.columns.tolist()
+   correlation = pd.DataFrame(
+       np.corrcoef(X), index=tpm.columns, columns=tpm.columns,
+   )
+   print("Analysis array (samples x genes):", X.shape, type(X).__name__)
+   print(correlation.iloc[:4, :4].round(3))
+
+Output::
+
+   Analysis array (samples x genes): (12, 2000) ndarray
+              SRR389077  SRR387777  SRR387778  SRR389078
+   SRR389077      1.000      0.731      0.736      0.902
+   SRR387777      0.731      1.000      0.955      0.723
+   SRR387778      0.736      0.955      1.000      0.724
+   SRR389078      0.902      0.723      0.724      1.000
+
+``X`` is a samples-by-genes :class:`numpy.ndarray`, the orientation
+scikit-learn and most Python machine-learning tooling expect, and it can be
+handed straight to an estimator.
+
+The same array summarizes by principal component analysis (PCA). NumPy's SVD
+is enough; no extra dependency is needed:
+
+.. code:: python
+
+   X_centered = X - X.mean(axis=0, keepdims=True)
+   U, singular_values, _ = np.linalg.svd(X_centered, full_matrices=False)
+   scores = U[:, :2] * singular_values[:2]
+   variance_fraction = singular_values**2 / np.sum(singular_values**2)
+   pc_df = pd.DataFrame(scores, index=tpm.columns, columns=["PC1", "PC2"])
+   print(pc_df.head(4).round(3))
+   print("PC1/PC2 explained variance (%):",
+         np.round(100 * variance_fraction[:2], 2).tolist())
+
+Output::
+
+                 PC1     PC2
+   SRR389077 -56.396   5.020
+   SRR387777  -6.816 -23.199
+   SRR387778  -4.931 -20.632
+   SRR389078 -67.903   7.778
+   PC1/PC2 explained variance (%): [42.19, 14.57]
+
+This is an exploratory expression-profile comparison. The thresholds are
+explicit choices for SRP009615, not universal defaults; component signs can
+flip between numerical libraries without changing the result. For prediction,
+fit gene selection and centering within training folds. This example does not
+estimate treatment effects or remove batch effects.
+
+For a junction RSE built earlier, summarize sparse counts without allocating
+the entire dense matrix:
+
+.. code:: python
+
+   junctions = junction_rse.get_assay("counts")
+   assert sparse.issparse(junctions)
+   totals = np.asarray(junctions.sum(axis=0)).ravel()
+   detected = np.asarray((junctions > 0).sum(axis=0)).ravel()
+   junction_summary = pd.DataFrame(
+       {"count_sum": totals, "detected_junctions": detected},
+       index=junction_rse.get_column_names(),
+   )
+   print(type(junctions).__module__ + "." + type(junctions).__name__)
+   print("Features x samples:", junctions.shape, "stored entries:", junctions.nnz)
+   print(junction_summary.head(3))
+
+Output::
+
+   scipy.sparse._csc.csc_matrix
+   Features x samples: (281448, 12) stored entries: 1341130
+              count_sum  detected_junctions
+   SRR389079    1732182              142791
+   SRR389080    1315344              117890
+   SRR389081     844075              106754
+
+281,448 junctions by 12 samples, of which 1,341,130 cells are nonzero. The
+three SciPy buffers hold about 16 MB against roughly 27 MB for the equivalent
+dense array, and that gap widens sharply for a multi-project assembly.
+
+The default junction assay is named ``counts``, not ``raw_counts``. Summing or
+filtering it with SciPy keeps the full matrix sparse; ``toarray()`` allocates
+every cell. For Parquet output, pandas sparse columns must be densified
+explicitly (CLI ``--densify``), so estimate the memory requirement first.
+
+Exporting to AnnData
+~~~~~~~~~~~~~~~~~~~~
+
+AnnData is the container most Python single-cell and machine-learning tooling
+reads. It is transposed relative to BiocPy: samples are rows (``obs``),
+features are columns (``var``), and each recount3 assay becomes a layer.
+:func:`recount3.se.to_anndata` performs the conversion and needs the
+``anndata`` extra:
+
+.. code:: python
+
+   adata = r3.se.to_anndata(rse)
+   print("samples x genes:", adata.shape)
+   print("uns provenance:", adata.uns["project"], adata.uns["annotation"],
+         len(adata.uns["resource_urls"]), "resource URLs")
+   print("layers:", list(adata.layers), "| obs columns:", adata.obs.shape[1])
+
+Output::
+
+   samples x genes: (12, 63856)
+   uns provenance: SRP009615 gencode_v26 7 resource URLs
+   layers: ['raw_counts'] | obs columns: 176
+
+Sample metadata travels as ``obs``, gene annotations as ``var``, and the
+experiment's provenance as ``uns``.
+
+Call :func:`~recount3.se.to_anndata` rather than the BiocPy
+``rse.to_anndata()`` method. BiocPy holds experiment metadata as a
+``NamedList`` and hands it to ``AnnData(uns=...)`` unchanged, which AnnData
+rejects with ``Only mutable mapping types (e.g. dict) are allowed for
+`.uns`.``. Since every experiment built here carries provenance metadata, that
+applies to all of them. :func:`~recount3.se.to_anndata` converts the
+provenance to plain dicts and lists first, so ``project``, ``annotation``,
+``resource_urls``, and ``metadata_columns`` all survive the conversion.
+
+Writing the result to HDF5 has a second requirement. recount3 STAR QC fields
+are named after splice motifs and contain ``/``, which HDF5 reads as a path
+separator, both in the sample column names and in the ``uns`` provenance map
+keyed by them. Pass ``sanitize_for_hdf5=True`` to rename them:
+
+.. code:: python
+
+   adata = r3.se.to_anndata(rse, sanitize_for_hdf5=True)
+   adata.write_h5ad("rse.h5ad")
+
+That is the same fixup ``recount3 bundle rse --sanitize-columns`` applies.
+Renaming is opt-in because it changes what an analysis indexes by; each
+renamed provenance entry keeps its original name in its value, so nothing is
+lost. If you would rather not rename anything, write ``.pkl`` instead, which
+preserves the RSE itself, including its genomic ranges, which AnnData has no
+place for.
 
 
 BigWig coverage
@@ -770,7 +1127,7 @@ to add them. Requires the ``bigwig`` extra.
 
 .. code:: python
 
-   bundle = R3ResourceBundle.discover(
+   bundle = r3.R3ResourceBundle.discover(
        organism="human",
        data_source="sra",
        project="SRP009615",
@@ -789,9 +1146,43 @@ to add them. Requires the ``bigwig`` extra.
 .. code:: python
 
    bw_res = bundle.bigwigs().resources[0]
-   bw = bw_res.load()                       # BigWigFile
+   bw = bw_res.load()                       # a BigWigFile wrapper
    with bw:                                 # closes the handle on exit
        values = bw.values("chr1", 0, 1000, numpy=True)
+
+Note which object each spelling gives you. ``load()`` returns the
+:class:`~recount3._bigwig.BigWigFile` wrapper, so ``bw`` above is the wrapper
+and reopens its handle automatically on the next read after a ``close()``.
+Entering the wrapper as a context manager instead yields the live ``pyBigWig``
+handle, not the wrapper:
+
+.. code:: python
+
+   bw_res = r3.search_bigwig_files(
+       organism="human", data_source="sra", project="SRP009615",
+       sample="SRR387777",
+   )[0]
+   with bw_res.load() as bw:                # bw is the pyBigWig handle here
+       coverage = bw.values("chr1", 10_000, 11_000, numpy=True)
+       mean_signal = bw.stats("chr1", 10_000, 11_000, type="mean", exact=True)[0]
+   print(type(coverage).__name__, coverage.shape, "| mean:", mean_signal)
+
+Output::
+
+   ndarray (1000,) | mean: 0.036
+
+Per-base coverage comes back as a :class:`numpy.ndarray`, one value per base
+over the requested interval.
+
+Both spellings close the file on exit and expose the same ``values()``,
+``stats()``, and ``intervals()`` calls, so either spelling works; just do not
+expect wrapper-only behaviour from the second.
+
+BigWig intervals use zero-based, half-open coordinates; uncovered positions can
+be NaN. ``load()`` first caches the full BigWig file. Reading a small interval
+limits the array returned, not the initial download. To limit downloads to one
+sample, use ``r3.search_bigwig_files(..., sample="SRR387777")`` as shown above
+rather than discovering a whole project's coverage files.
 
 
 .. _cache-and-configuration:
@@ -806,21 +1197,16 @@ The :mod:`recount3.config` helpers let you inspect and prune the cache:
 
 .. code:: python
 
-   from recount3 import (
-       recount3_cache,
-       recount3_cache_files,
-       recount3_cache_rm,
-   )
-
-   print(recount3_cache())                 # cache directory Path
-   files = recount3_cache_files(pattern="*.gtf.gz")
+   import recount3 as r3
+   print(r3.recount3_cache())                 # cache directory Path
+   files = r3.recount3_cache_files(pattern="*.gtf.gz")
 
    # Dry-run a deletion first:
-   to_remove = recount3_cache_rm(
+   to_remove = r3.recount3_cache_rm(
        predicate=lambda p: ".junctions." in p.name,
        dry_run=True,
    )
-   recount3_cache_rm(predicate=lambda p: ".junctions." in p.name)
+   r3.recount3_cache_rm(predicate=lambda p: ".junctions." in p.name)
 
 
 Threaded operations
@@ -952,23 +1338,30 @@ options.
 
 In Python, select the backend before its default directory is resolved::
 
-    from recount3.config import default_config
+    import recount3 as r3
 
-    cfg = default_config(cache_backend="pybiocfilecache")
+    cfg = r3.default_config(cache_backend="pybiocfilecache")
 
 To use a custom shared directory instead::
 
     from dataclasses import replace
     from pathlib import Path
-    from recount3.config import default_config
+    import recount3 as r3
 
     cfg = replace(
-        default_config(cache_backend="pybiocfilecache"),
+        r3.default_config(cache_backend="pybiocfilecache"),
         cache_dir=Path("/data/recount3-shared"),
     )
 
-Pass ``config=cfg`` to resources or discovery. The supported backend values are
-``filesystem`` and ``pybiocfilecache``. ``recount3[all]`` includes this extra.
+Pass ``config=cfg`` to :class:`~recount3.R3Resource`, the only entry point
+that retrieves data and takes this keyword. The cache helpers
+:func:`~recount3.recount3_cache`, :func:`~recount3.recount3_cache_files`, and
+:func:`~recount3.recount3_cache_rm` accept it too, so that cache inspection
+and pruning address the same backend. The search functions,
+``R3ResourceBundle.discover``, and ``create_rse`` do not take it; configure
+their defaults through the environment variables below before calling them.
+The supported backend values are ``filesystem`` and ``pybiocfilecache``.
+``recount3[all]`` includes this extra.
 The CLI flag overrides the environment; the default remains ``filesystem``.
 Changing an existing configuration with ``dataclasses.replace`` preserves
 its ``cache_dir`` unless that field is also replaced.
@@ -1080,9 +1473,9 @@ explicitly:
 .. code:: python
 
    from pathlib import Path
-   from recount3 import Config, R3Resource, R3GeneOrExonCounts
+   import recount3 as r3
 
-   cfg = Config(
+   cfg = r3.Config(
        base_url="http://duffel.rail.bio/recount3/",
        timeout=60,
        insecure_ssl=False,
@@ -1093,8 +1486,8 @@ explicitly:
        chunk_size=1024 * 1024,
    )
 
-   res = R3Resource(
-       R3GeneOrExonCounts(
+   res = r3.R3Resource(
+       r3.R3GeneOrExonCounts(
            organism="human", data_source="sra", genomic_unit="gene",
            project="SRP009615", annotation_extension="G026",
        ),
@@ -1138,15 +1531,16 @@ Common pitfalls
    ``.csv`` instead.
 
 ``Cannot write .h5ad: Optional dependency 'anndata' is required``
-   ``SummarizedExperiment.to_anndata()`` needs ``anndata`` and
-   ``delayedarray``. Run ``pip install "recount3[anndata]"``, or write a
-   ``.pkl`` instead.
+   AnnData export needs ``anndata`` and ``delayedarray``. Run
+   ``pip install "recount3[anndata]"``, or write a ``.pkl`` instead.
 
-``Cannot write .h5ad: N column name(s) contain a forward slash``
+``Cannot write .h5ad: N name(s) contain a forward slash``
    HDF5 reads ``/`` as a path separator, and recount3 STAR QC fields are
-   named after splice motifs (``..._gt/ag``). Pass ``--sanitize-columns``
-   to rename them to ``..._gt_ag``, or write a ``.pkl`` instead, which
-   keeps the names verbatim.
+   named after splice motifs (``..._gt/ag``). This affects the sample
+   columns and the ``uns`` provenance map keyed by them. Pass
+   ``--sanitize-columns`` to rename both to ``..._gt_ag`` (in Python,
+   ``r3.se.to_anndata(rse, sanitize_for_hdf5=True)``), or write a ``.pkl``
+   instead, which keeps the names verbatim.
 
 ``Cannot write Parquet: N columns use a pandas sparse dtype``
    Junction count matrices load sparse-backed and no Parquet engine accepts
@@ -1166,7 +1560,7 @@ Common pitfalls
 ``RangesError: Could not derive genomic ranges …``
    The rest of the message names the cause: the annotation (or, for
    junctions, the RR coordinate file) could not be retrieved, could not be
-   parsed, or does not cover every counted feature -- a mismatch, fixed by
+   parsed, or does not cover every counted feature. This is a mismatch, fixed by
    passing the matching ``annotation_extension``. A fourth variant, "no
    annotation providing genomic ranges was in the bundle", means there is
    no GTF or RR file to work from at all; include one at discovery time.
