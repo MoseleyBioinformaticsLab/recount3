@@ -82,23 +82,21 @@ Typical usage example::
 
     import dataclasses
     from pathlib import Path
-    from recount3.config import (
-        default_config, recount3_cache, recount3_cache_rm,
-    )
+    import recount3 as r3
 
     # Read the current cache directory (creates it if absent):
-    cache_dir = recount3_cache()
+    cache_dir = r3.recount3_cache()
 
     # Use a custom cache location for this session (override one field of
     # the environment-derived defaults; Config is immutable):
     cfg = dataclasses.replace(
-        default_config(), cache_dir=Path("/scratch/recount3_cache")
+        r3.default_config(), cache_dir=Path("/scratch/recount3_cache")
     )
-    custom_cache_dir = recount3_cache(cfg)
+    custom_cache_dir = r3.recount3_cache(cfg)
 
     # Remove cached files matching a pattern (dry run first):
-    to_delete = recount3_cache_rm(dry_run=True)
-    recount3_cache_rm(predicate=lambda p: "sra" in str(p))
+    to_delete = r3.recount3_cache_rm(dry_run=True)
+    r3.recount3_cache_rm(predicate=lambda p: "sra" in str(p))
 """
 
 from __future__ import annotations
@@ -313,15 +311,15 @@ def recount3_cache_rm(
     Examples:
         List everything that would be removed, without deleting::
 
-            to_delete = recount3_cache_rm(dry_run=True)
+            to_delete = r3.recount3_cache_rm(dry_run=True)
 
         Remove all cached files (empty the cache)::
 
-            recount3_cache_rm()
+            r3.recount3_cache_rm()
 
         Remove only files related to the ``"sra"`` data source::
 
-            recount3_cache_rm(predicate=lambda p: "sra" in str(p))
+            r3.recount3_cache_rm(predicate=lambda p: "sra" in str(p))
     """
     cfg = config or default_config()
     root = cfg.cache_dir

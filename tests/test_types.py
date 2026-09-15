@@ -32,6 +32,8 @@
 from __future__ import annotations
 
 import collections.abc
+import os
+import pathlib
 import types
 import typing
 
@@ -88,3 +90,19 @@ def test_field_spec_contains_expected_union_members() -> None:
     assert callable_origin is collections.abc.Callable
     assert len(callable_args) == 2
     assert callable_args[1] is bool
+
+
+def test_str_path_is_union_of_str_and_pathlike_str() -> None:
+    """StrPath must accept a plain str or any os.PathLike[str]."""
+    union_type = recount3.types.StrPath
+    origin = typing.get_origin(union_type)
+    args = typing.get_args(union_type)
+
+    assert origin is types.UnionType
+    assert set(args) == {str, os.PathLike[str]}
+
+
+def test_str_path_admits_pathlib_path() -> None:
+    """pathlib.Path is the PathLike the path-taking API is expected to take."""
+    assert isinstance(pathlib.Path("x"), os.PathLike)
+    assert issubclass(pathlib.Path, os.PathLike)

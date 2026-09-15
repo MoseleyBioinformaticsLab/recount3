@@ -41,8 +41,8 @@ The optional dependency is imported through
 Typical usage example::
 
   >>> from pathlib import Path
-  >>> from recount3._bigwig import BigWigFile
-  >>> with BigWigFile(Path("example.bw")) as bw:
+  >>> import recount3 as r3
+  >>> with r3.BigWigFile(Path("example.bw")) as bw:
   ...     lengths = bw.chroms()
   ...     mean = bw.stats("chr1", 0, 1000)[0]
 

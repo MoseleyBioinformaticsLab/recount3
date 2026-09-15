@@ -57,13 +57,13 @@ has always raised, so ``except ValueError`` keeps catching them.
 Example:
     Catch all recount3 errors with the base class::
 
-        from recount3.errors import Recount3Error, DownloadError
+        import recount3 as r3
 
         try:
             res.download(path="/data")
-        except DownloadError as exc:
+        except r3.DownloadError as exc:
             print(f"Network failure: {exc}")
-        except Recount3Error as exc:
+        except r3.Recount3Error as exc:
             print(f"Unexpected recount3 error: {exc}")
 """
 

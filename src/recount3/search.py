@@ -81,10 +81,10 @@ Annotation names and extension codes
 
 Typical usage example::
 
-    from recount3 import search_count_files_gene_or_exon, search_project_all
+    import recount3 as r3
 
     # Single project, gene-level counts:
-    resources = search_count_files_gene_or_exon(
+    resources = r3.search_count_files_gene_or_exon(
         organism="human",
         data_source="sra",
         genomic_unit="gene",
@@ -92,7 +92,7 @@ Typical usage example::
     )
 
     # All resource types for a project in one call:
-    all_res = search_project_all(
+    all_res = r3.search_project_all(
         organism="human",
         data_source="sra",
         project="SRP009615",
@@ -348,7 +348,7 @@ def search_count_files_gene_or_exon(
     Examples:
         Single project, gene-level counts::
 
-            resources = search_count_files_gene_or_exon(
+            resources = r3.search_count_files_gene_or_exon(
                 organism="human",
                 data_source="sra",
                 genomic_unit="gene",
@@ -358,7 +358,7 @@ def search_count_files_gene_or_exon(
         Multiple projects return one resource per project
         (Cartesian product)::
 
-            resources = search_count_files_gene_or_exon(
+            resources = r3.search_count_files_gene_or_exon(
                 organism="human",
                 data_source="sra",
                 genomic_unit="gene",
@@ -1147,13 +1147,14 @@ def annotation_label(organism: str | None, annotation_extension: str) -> str:
         caller mistake rather than an unfamiliar annotation.
 
     Examples:
-        >>> annotation_label("human", "G026")
+        >>> import recount3 as r3
+        >>> r3.annotation_label("human", "G026")
         'gencode_v26'
-        >>> annotation_label("mouse", "M023")
+        >>> r3.annotation_label("mouse", "M023")
         'gencode_v23'
-        >>> annotation_label("human", "Z999")
+        >>> r3.annotation_label("human", "Z999")
         'Z999'
-        >>> annotation_label(None, "G026")
+        >>> r3.annotation_label(None, "G026")
         'G026'
     """
     if not annotation_extension or not annotation_extension.strip():

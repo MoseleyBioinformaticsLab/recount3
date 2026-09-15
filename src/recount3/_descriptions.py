@@ -60,9 +60,9 @@ the module-level constants :data:`VALID_ORGANISMS` and
 
 Typical usage example::
 
-  from recount3._descriptions import R3ResourceDescription
+  import recount3 as r3
 
-  desc = R3ResourceDescription(
+  desc = r3.R3ResourceDescription(
       resource_type="count_files_gene_or_exon",
       organism="human",
       data_source="sra",
@@ -73,7 +73,7 @@ Typical usage example::
   path = desc.url_path()
 
   # Resource type can also be passed as the first positional argument:
-  desc = R3ResourceDescription("data_sources", organism="human")
+  desc = r3.R3ResourceDescription("data_sources", organism="human")
 """
 
 from __future__ import annotations
@@ -183,13 +183,14 @@ class R3ResourceDescription:
     registered concrete subclass.
 
     Example:
-        >>> desc = R3ResourceDescription(
+        >>> import recount3 as r3
+        >>> desc = r3.R3ResourceDescription(
         ...     resource_type="annotations",
         ...     organism="human",
         ...     genomic_unit="gene",
         ...     annotation_extension="G026",
         ... )
-        >>> isinstance(desc, R3Annotations)
+        >>> isinstance(desc, r3.R3Annotations)
         True
 
     Concrete subclasses should:
@@ -273,10 +274,14 @@ class R3ResourceDescription:
             A decorator that registers the decorated subclass.
 
         Example:
-            >>> @R3ResourceDescription.register_type("annotations")
-            ... @dataclasses.dataclass(slots=True)
-            ... class R3Annotations(_R3CommonFields, R3ResourceDescription):
-            ...     ...
+            Concrete subclasses register themselves at definition time, from
+            inside this module, where the base class and the shared field
+            mixin are in scope::
+
+                @R3ResourceDescription.register_type("annotations")
+                @dataclasses.dataclass(slots=True)
+                class R3Annotations(_R3CommonFields, R3ResourceDescription):
+                    ...
         """
 
         def _decorator(

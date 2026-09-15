@@ -57,9 +57,9 @@ Filtering with FieldSpec
 
 Typical usage example::
 
-  from recount3 import R3ResourceBundle
+  import recount3 as r3
 
-  bundle = R3ResourceBundle.discover(
+  bundle = r3.R3ResourceBundle.discover(
       organism="human",
       data_source="sra",
       project="SRP009615",
