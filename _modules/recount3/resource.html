@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.resource &mdash; recount3 1.2.0 documentation</title>
+  <title>recount3.resource &mdash; recount3 1.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=6efca38a"></script>
+      <script src="../../_static/documentation_options.js?v=1f29e9d3"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -178,24 +178,12 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">scipy.io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._bigwig</span><span class="w"> </span><span class="kn">import</span> <span class="n">BigWigFile</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._descriptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">R3ResourceDescription</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_cache_path</span><span class="p">,</span>
-    <span class="n">_biocfilecache_path</span><span class="p">,</span>
-    <span class="n">_register_biocfilecache</span><span class="p">,</span>
-    <span class="n">_path_lock_for_path</span><span class="p">,</span>
-    <span class="n">_derive_junction_sidecar_url</span><span class="p">,</span>
-    <span class="n">_ensure_dir</span><span class="p">,</span>
-    <span class="n">_hardlink_or_copy</span><span class="p">,</span>
-    <span class="n">canonical_identifier_series</span><span class="p">,</span>
-    <span class="n">download_stream_to_zip</span><span class="p">,</span>
-    <span class="n">download_to_file</span><span class="p">,</span>
-    <span class="n">write_cached_file_to_zip</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">default_config</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.errors</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoadError</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">CacheMode</span><span class="p">,</span> <span class="n">StrPath</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_bigwig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_descriptions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_utils</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">config</span> <span class="k">as</span> <span class="n">r3_config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">errors</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">types</span> <span class="k">as</span> <span class="n">r3_types</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_detect_mmread_kwargs</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -277,7 +265,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">cache_root</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
-    <span class="n">cfg</span><span class="p">:</span> <span class="n">Config</span><span class="p">,</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span><span class="p">,</span>
     <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">refresh</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
@@ -302,14 +290,14 @@
 <span class="sd">        The absolute path pointing to the locally cached file.</span>
 <span class="sd">    """</span>
     <span class="n">cache_path</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">_biocfilecache_path</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_root</span><span class="p">)</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_biocfilecache_path</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_root</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_backend</span> <span class="o">==</span> <span class="s2">"pybiocfilecache"</span>
-        <span class="k">else</span> <span class="n">_cache_path</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_root</span><span class="p">)</span>
+        <span class="k">else</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_cache_path</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">cache_root</span><span class="p">)</span>
     <span class="p">)</span>
-    <span class="k">with</span> <span class="n">_path_lock_for_path</span><span class="p">(</span><span class="n">cache_path</span><span class="p">):</span>
+    <span class="k">with</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_path_lock_for_path</span><span class="p">(</span><span class="n">cache_path</span><span class="p">):</span>
         <span class="n">transferred</span> <span class="o">=</span> <span class="n">refresh</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">cache_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">transferred</span><span class="p">:</span>
-            <span class="n">download_to_file</span><span class="p">(</span>
+            <span class="n">_utils</span><span class="o">.</span><span class="n">download_to_file</span><span class="p">(</span>
                 <span class="n">url</span><span class="p">,</span>
                 <span class="n">cache_path</span><span class="p">,</span>
                 <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
@@ -319,7 +307,7 @@
                 <span class="n">attempts</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">max_retries</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_backend</span> <span class="o">==</span> <span class="s2">"pybiocfilecache"</span><span class="p">:</span>
-            <span class="n">_register_biocfilecache</span><span class="p">(</span>
+            <span class="n">_utils</span><span class="o">.</span><span class="n">_register_biocfilecache</span><span class="p">(</span>
                 <span class="n">cache_root</span><span class="p">,</span> <span class="n">url</span><span class="p">,</span> <span class="n">cache_path</span><span class="p">,</span> <span class="n">transferred</span><span class="o">=</span><span class="n">transferred</span>
             <span class="p">)</span>
     <span class="k">return</span> <span class="n">cache_path</span>
@@ -362,7 +350,9 @@
         <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Junction ID file </span><span class="si">{</span><span class="n">id_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> parsed empty."</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Junction ID file </span><span class="si">{</span><span class="n">id_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> parsed empty."</span>
+        <span class="p">)</span>
 
     <span class="n">cols_lower</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
     <span class="n">rail_col</span> <span class="o">=</span> <span class="kc">None</span>
@@ -371,9 +361,13 @@
     <span class="k">else</span><span class="p">:</span>
         <span class="n">rail_col</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="n">rail_ids</span> <span class="o">=</span> <span class="n">canonical_identifier_series</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">rail_col</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">rail_ids</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_utils</span><span class="o">.</span><span class="n">canonical_identifier_series</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">rail_col</span><span class="p">])</span>
+    <span class="p">]</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">rail_ids</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Junction ID file </span><span class="si">{</span><span class="n">id_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> has no rail IDs."</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Junction ID file </span><span class="si">{</span><span class="n">id_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> has no rail IDs."</span>
+        <span class="p">)</span>
     <span class="k">return</span> <span class="n">rail_ids</span>
 
 
@@ -405,12 +399,14 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">mat</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">mmread</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">mm_path</span><span class="p">),</span> <span class="o">**</span><span class="n">_MMREAD_KWARGS</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"Failed to read MatrixMarket from </span><span class="si">{</span><span class="n">mm_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">."</span>
         <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
     <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">mat</span><span class="p">,</span> <span class="s2">"ndim"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"MatrixMarket </span><span class="si">{</span><span class="n">mm_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not 2-dimensional."</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"MatrixMarket </span><span class="si">{</span><span class="n">mm_path</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not 2-dimensional."</span>
+        <span class="p">)</span>
     <span class="k">return</span> <span class="n">scipy</span><span class="o">.</span><span class="n">sparse</span><span class="o">.</span><span class="n">csr_array</span><span class="p">(</span><span class="n">mat</span><span class="p">)</span>
 
 
@@ -419,7 +415,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">build_url</span><span class="p">(</span>
     <span class="n">resource_type</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
-    <span class="n">config</span><span class="p">:</span> <span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">fields</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Build the absolute URL for a resource from its description fields.</span>
@@ -447,8 +443,10 @@
 <span class="sd">      KeyError, ValueError: If ``resource_type`` is unknown or the supplied</span>
 <span class="sd">        fields are invalid for it (propagated from the description factory).</span>
 <span class="sd">    """</span>
-    <span class="n">cfg</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
-    <span class="n">desc</span> <span class="o">=</span> <span class="n">R3ResourceDescription</span><span class="p">(</span><span class="n">resource_type</span><span class="o">=</span><span class="n">resource_type</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span><span class="p">)</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
+    <span class="n">desc</span> <span class="o">=</span> <span class="n">_descriptions</span><span class="o">.</span><span class="n">R3ResourceDescription</span><span class="p">(</span>
+        <span class="n">resource_type</span><span class="o">=</span><span class="n">resource_type</span><span class="p">,</span> <span class="o">**</span><span class="n">fields</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urljoin</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">base_url</span><span class="p">,</span> <span class="n">desc</span><span class="o">.</span><span class="n">url_path</span><span class="p">())</span></div>
 
 
@@ -488,10 +486,10 @@
 <span class="sd">        of which file it is, so leaving it out is also the right meaning.</span>
 <span class="sd">    """</span>
 
-    <span class="n">description</span><span class="p">:</span> <span class="n">R3ResourceDescription</span>
+    <span class="n">description</span><span class="p">:</span> <span class="n">_descriptions</span><span class="o">.</span><span class="n">R3ResourceDescription</span>
     <span class="n">url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">filepath</span><span class="p">:</span> <span class="n">StrPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">config</span><span class="p">:</span> <span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">filepath</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StrPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">_cached_data</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
         <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span>
@@ -501,7 +499,7 @@
 <span class="w">        </span><span class="sd">"""Initialize derived fields after dataclass instantiation."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filepath</span><span class="p">)</span>
-        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urljoin</span><span class="p">(</span>
                 <span class="n">cfg</span><span class="o">.</span><span class="n">base_url</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">url_path</span><span class="p">()</span>
@@ -514,7 +512,7 @@
         <span class="bp">cls</span><span class="p">,</span>
         <span class="n">mapping</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">config</span><span class="p">:</span> <span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">R3Resource</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Rehydrate an :class:`R3Resource` from a serialized mapping.</span>
 
@@ -541,7 +539,7 @@
         <span class="n">fields</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
         <span class="n">fields</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"url"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">fields</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"arcname"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="n">desc</span> <span class="o">=</span> <span class="n">R3ResourceDescription</span><span class="p">(</span><span class="o">**</span><span class="n">fields</span><span class="p">)</span>
+        <span class="n">desc</span> <span class="o">=</span> <span class="n">_descriptions</span><span class="o">.</span><span class="n">R3ResourceDescription</span><span class="p">(</span><span class="o">**</span><span class="n">fields</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="n">desc</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span></div>
 
 
@@ -557,7 +555,7 @@
 <span class="sd">            The absolute directory path where safely downloaded files are</span>
 <span class="sd">            globally cached, determined entirely by the active configuration.</span>
 <span class="sd">        """</span>
-        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_cached_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
@@ -568,12 +566,16 @@
 <span class="sd">            resource's data persistently resides within the local cache</span>
 <span class="sd">            hierarchy.</span>
 <span class="sd">        """</span>
-        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_backend</span> <span class="o">==</span> <span class="s2">"pybiocfilecache"</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">_biocfilecache_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">())</span>
-        <span class="k">return</span> <span class="n">_cache_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">())</span>
+            <span class="k">return</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_biocfilecache_path</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">()</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_cache_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache_root</span><span class="p">())</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_cached</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">CacheMode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_cached</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">CacheMode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Ensure the resource data is available in the local cache.</span>
 
 <span class="sd">        Args:</span>
@@ -594,7 +596,7 @@
 <span class="sd">                mode), or if the universally provided mode string is completely</span>
 <span class="sd">                unrecognized.</span>
 <span class="sd">        """</span>
-        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"disable"</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Cache is not used in 'disable' mode"</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">mode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"enable"</span><span class="p">,</span> <span class="s2">"update"</span><span class="p">):</span>
@@ -671,9 +673,9 @@
 <a class="viewcode-back" href="../../api.html#recount3.resource.R3Resource.download">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">download</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">path</span><span class="p">:</span> <span class="n">StrPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">path</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StrPath</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="n">cache_mode</span><span class="p">:</span> <span class="n">CacheMode</span> <span class="o">=</span> <span class="s2">"enable"</span><span class="p">,</span>
+        <span class="n">cache_mode</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">CacheMode</span> <span class="o">=</span> <span class="s2">"enable"</span><span class="p">,</span>
         <span class="n">overwrite</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -721,7 +723,7 @@
 
 <span class="sd">                dest = res.download(path="/data/recount3", cache_mode="update")</span>
 <span class="sd">        """</span>
-        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_disabled</span><span class="p">:</span>
             <span class="n">cache_mode</span> <span class="o">=</span> <span class="s2">"disable"</span>
         <span class="n">cs</span> <span class="o">=</span> <span class="n">chunk_size</span> <span class="ow">or</span> <span class="n">cfg</span><span class="o">.</span><span class="n">chunk_size</span>
@@ -751,7 +753,7 @@
         <span class="k">if</span> <span class="n">is_zip</span><span class="p">:</span>
             <span class="n">arcname</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcname</span>
             <span class="k">if</span> <span class="n">cache_mode</span> <span class="o">==</span> <span class="s2">"disable"</span><span class="p">:</span>
-                <span class="n">download_stream_to_zip</span><span class="p">(</span>
+                <span class="n">_utils</span><span class="o">.</span><span class="n">download_stream_to_zip</span><span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span>
                     <span class="n">path_p</span><span class="p">,</span>
                     <span class="n">arcname</span><span class="p">,</span>
@@ -764,7 +766,7 @@
                 <span class="p">)</span>
                 <span class="k">return</span> <span class="kc">None</span>
             <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_cached</span><span class="p">(</span><span class="n">mode</span><span class="o">=</span><span class="n">cache_mode</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">)</span>
-            <span class="n">write_cached_file_to_zip</span><span class="p">(</span>
+            <span class="n">_utils</span><span class="o">.</span><span class="n">write_cached_file_to_zip</span><span class="p">(</span>
                 <span class="n">cached</span><span class="p">,</span> <span class="n">path_p</span><span class="p">,</span> <span class="n">arcname</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span>
             <span class="p">)</span>
             <span class="k">return</span> <span class="kc">None</span>
@@ -773,7 +775,7 @@
         <span class="n">dest_filename</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">url_path</span><span class="p">())</span><span class="o">.</span><span class="n">name</span>
         <span class="n">dest_path</span> <span class="o">=</span> <span class="n">path_p</span> <span class="o">/</span> <span class="n">dest_filename</span>
         <span class="k">if</span> <span class="n">cache_mode</span> <span class="o">==</span> <span class="s2">"disable"</span><span class="p">:</span>
-            <span class="n">download_to_file</span><span class="p">(</span>
+            <span class="n">_utils</span><span class="o">.</span><span class="n">download_to_file</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span>
                 <span class="n">dest_path</span><span class="p">,</span>
                 <span class="n">chunk_size</span><span class="o">=</span><span class="n">cs</span><span class="p">,</span>
@@ -790,7 +792,7 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
                 <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
-        <span class="n">_hardlink_or_copy</span><span class="p">(</span><span class="n">cached</span><span class="p">,</span> <span class="n">dest_path</span><span class="p">)</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_hardlink_or_copy</span><span class="p">(</span><span class="n">cached</span><span class="p">,</span> <span class="n">dest_path</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">filepath</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">dest_path</span><span class="p">)</span></div>
 
@@ -842,7 +844,7 @@
             <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">cached</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
                 <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">cached</span><span class="p">))</span>
-            <span class="n">reader</span> <span class="o">=</span> <span class="n">BigWigFile</span><span class="p">(</span><span class="n">cached</span><span class="p">)</span>
+            <span class="n">reader</span> <span class="o">=</span> <span class="n">_bigwig</span><span class="o">.</span><span class="n">BigWigFile</span><span class="p">(</span><span class="n">cached</span><span class="p">)</span>
             <span class="n">reader</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">reader</span>
             <span class="k">return</span> <span class="n">reader</span>
@@ -875,7 +877,7 @@
                     <span class="n">engine</span><span class="o">=</span><span class="s2">"python"</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">if</span> <span class="n">df</span><span class="o">.</span><span class="n">empty</span> <span class="ow">or</span> <span class="n">df</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
                     <span class="sa">f</span><span class="s2">"Parsed an empty or 1-column matrix from </span><span class="si">{</span><span class="n">cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">."</span>
                 <span class="p">)</span>
             <span class="n">cols_lower</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">c</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
@@ -897,7 +899,7 @@
                 <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="s2">"junction_extension"</span><span class="p">,</span> <span class="s2">"MM"</span><span class="p">)</span>
             <span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
 
-            <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
+            <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">cache_mode</span><span class="o">=</span><span class="s2">"enable"</span><span class="p">)</span>
             <span class="n">mm_cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_path</span><span class="p">()</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">mm_cached</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
@@ -905,9 +907,11 @@
 
             <span class="k">if</span> <span class="n">jxn_ext</span> <span class="o">==</span> <span class="s2">"MM"</span><span class="p">:</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">id_url</span> <span class="o">=</span> <span class="n">_derive_junction_sidecar_url</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"ID"</span><span class="p">)</span>
+                    <span class="n">id_url</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_derive_junction_sidecar_url</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">url</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">,</span> <span class="s2">"ID"</span>
+                    <span class="p">)</span>
                 <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                    <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">"Cannot derive junction ID URL from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">url</span><span class="si">!r}</span><span class="s2">."</span>
                     <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
 
@@ -923,11 +927,11 @@
 
                 <span class="n">mat_shape</span> <span class="o">=</span> <span class="n">mat</span><span class="o">.</span><span class="n">shape</span>
                 <span class="k">if</span> <span class="n">mat_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                    <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
                         <span class="sa">f</span><span class="s2">"MatrixMarket </span><span class="si">{</span><span class="n">mm_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> has undefined shape."</span>
                     <span class="p">)</span>
                 <span class="k">if</span> <span class="n">mat_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rail_ids</span><span class="p">):</span>
-                    <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+                    <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
                         <span class="s2">"Junction MM column count does not match ID length: "</span>
                         <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">mat_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">rail_ids</span><span class="p">)</span><span class="si">}</span><span class="s2"> "</span>
                         <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">mm_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> vs </span><span class="si">{</span><span class="n">id_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">)."</span>
@@ -945,7 +949,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="n">obj</span>
                 <span class="k">return</span> <span class="n">obj</span>
 
-            <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+            <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"Unsupported junction_extension </span><span class="si">{</span><span class="n">jxn_ext</span><span class="si">!r}</span><span class="s2"> "</span>
                 <span class="sa">f</span><span class="s2">"for </span><span class="si">{</span><span class="n">mm_cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">."</span>
             <span class="p">)</span>
@@ -966,7 +970,7 @@
             <span class="k">return</span> <span class="n">obj</span>
 
         <span class="n">resource_type</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="s2">"resource_type"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="n">LoadError</span><span class="p">(</span>
+        <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>
             <span class="s2">"Unsupported load() for resource type "</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">resource_type</span><span class="si">!r}</span><span class="s2"> with file </span><span class="si">{</span><span class="n">cached</span><span class="o">.</span><span class="n">name</span><span class="si">!r}</span><span class="s2">"</span>
         <span class="p">)</span></div>
@@ -1003,7 +1007,7 @@
 <span class="sd">        """</span>
         <span class="n">obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">BigWigFile</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">_bigwig</span><span class="o">.</span><span class="n">BigWigFile</span><span class="p">):</span>
                 <span class="n">obj</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_cached_data</span> <span class="o">=</span> <span class="kc">None</span></div>

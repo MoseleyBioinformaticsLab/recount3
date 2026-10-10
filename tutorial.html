@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tutorial &mdash; recount3 1.2.0 documentation</title>
+  <title>Tutorial &mdash; recount3 1.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=6efca38a"></script>
+      <script src="_static/documentation_options.js?v=1f29e9d3"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -140,8 +140,9 @@ managing the on-disk cache.</p>
 documentation, see <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a>.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
-<p>The core package depends only on NumPy, pandas, and SciPy. The optional
-extras enable features used throughout this tutorial:</p>
+<p>The core package supports Python 3.10 through 3.15 and depends only on NumPy,
+pandas, and SciPy. The optional extras enable features used throughout this
+tutorial:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">               </span><span class="c1"># core only</span>
 python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[biocpy]"</span><span class="w">     </span><span class="c1"># + SummarizedExperiment</span>
 python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[bigwig]"</span><span class="w">     </span><span class="c1"># + pyBigWig</span>
@@ -162,7 +163,7 @@ BiocPy object.</p></li>
 <a class="reference internal" href="api.html#recount3.resource.R3Resource.load" title="recount3.resource.R3Resource.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code></a> on a BigWig resource or use the
 <a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a> reader directly.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">parquet</span></code> installs <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> and is required to write <code class="docutils literal notranslate"><span class="pre">.parquet</span></code>, both
-from <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html#pandas.DataFrame.to_parquet" title="(in pandas v3.0.5)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_parquet()</span></code></a> on a stacked matrix and from
+from <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html#pandas.DataFrame.to_parquet" title="(in pandas v3.0.6)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_parquet()</span></code></a> on a stacked matrix and from
 <code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">bundle</span> <span class="pre">stack-counts</span> <span class="pre">--out=counts.parquet</span></code>. pandas accepts either
 <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> or <code class="docutils literal notranslate"><span class="pre">fastparquet</span></code>; an existing <code class="docutils literal notranslate"><span class="pre">fastparquet</span></code> installation is
 used as-is, and the <code class="docutils literal notranslate"><span class="pre">io.parquet.engine</span></code> option is honoured.</p></li>
@@ -170,7 +171,8 @@ used as-is, and the <code class="docutils literal notranslate"><span class="pre"
 <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>). <code class="docutils literal notranslate"><span class="pre">SummarizedExperiment.to_anndata()</span></code> imports both, and
 <code class="docutils literal notranslate"><span class="pre">summarizedexperiment</span></code> declares neither as a required dependency, so the
 extra is needed to write <code class="docutils literal notranslate"><span class="pre">.h5ad</span></code> from <code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">bundle</span> <span class="pre">se</span></code> /
-<code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">bundle</span> <span class="pre">rse</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">bundle</span> <span class="pre">rse</span></code>. It cannot be installed on Python 3.15 yet, because
+<code class="docutils literal notranslate"><span class="pre">anndata</span></code> depends on <code class="docutils literal notranslate"><span class="pre">h5py</span></code>, which publishes no Python 3.15 wheels.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">pybiocfilecache</span></code> enables a shared R/Python registry. The faster default
 filesystem cache needs no extra; see <a class="reference internal" href="#cache-and-configuration"><span class="std std-ref">Cache and configuration</span></a>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">all</span></code> installs every optional feature above. The <code class="docutils literal notranslate"><span class="pre">dev</span></code> and <code class="docutils literal notranslate"><span class="pre">docs</span></code>
@@ -178,7 +180,7 @@ extras hold the test and documentation toolchains and are installed
 separately, so <code class="docutils literal notranslate"><span class="pre">all</span></code> does not pull them in.</p></li>
 </ul>
 <p>If an optional dependency is missing, the affected function raises
-<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ImportError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ImportError</span></code></a> on first use; the remainder of the package stays importable
+<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ImportError" title="(in Python v3.15)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ImportError</span></code></a> on first use; the remainder of the package stays importable
 and functional. The two output extras are additionally checked up front by the
 CLI, before any download runs, so an unusable output format is reported
 immediately rather than after the data has been fetched and assembled.</p>
@@ -247,7 +249,7 @@ projects:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">study_samples</span><span class="p">[[</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">"external_id"</span><span class="p">]]</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
 </pre></div>
 </div>
-<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>. The human SRA project table has 8,677
+<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>. The human SRA project table has 8,677
 rows; <code class="docutils literal notranslate"><span class="pre">n_samples</span></code> there matches the column count you will get from
 <code class="docutils literal notranslate"><span class="pre">create_rse</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="n">project</span>  <span class="n">n_samples</span> <span class="n">file_source</span>      <span class="n">project_home</span>
@@ -379,7 +381,7 @@ this.</p>
 <p>Every gene or exon row range comes from an annotation GTF, and every
 junction range from an RR sidecar. When that file cannot be turned into
 ranges, <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> raises <code class="xref py py-exc docutils literal notranslate"><span class="pre">RangesError</span></code> (a
-<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code></a>) naming which of three things went wrong:</p>
+<a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code></a>) naming which of three things went wrong:</p>
 <dl class="simple">
 <dt><code class="docutils literal notranslate"><span class="pre">the</span> <span class="pre">annotation</span> <span class="pre">could</span> <span class="pre">not</span> <span class="pre">be</span> <span class="pre">retrieved</span></code></dt><dd><p>The download failed. The HTTP layer has already retried it
 (<code class="docutils literal notranslate"><span class="pre">RECOUNT3_MAX_RETRIES</span></code>, default 3), so this points at a mirror or
@@ -467,7 +469,7 @@ manifest for someone else to fetch.</p></li>
 table, without the other resources in a default bundle. <code class="docutils literal notranslate"><span class="pre">create_rse</span></code>
 already limits counts to the requested genomic unit and annotation.</p></li>
 <li><p><em>Your own assembly.</em> You want the stacked counts as a
-<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> to merge with clinical data of your own, and
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> to merge with clinical data of your own, and
 will build the BiocPy object yourself (or skip it entirely).</p></li>
 </ul>
 <p>A bundle is just a list of resources plus filters, so nothing is downloaded
@@ -598,7 +600,7 @@ bundle first to choose which family you want:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">DataFrame</span> <span class="p">(</span><span class="mi">63856</span><span class="p">,</span> <span class="mi">12</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A plain <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>, feature IDs on the index and sample IDs on
+<p>A plain <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>, feature IDs on the index and sample IDs on
 the columns, identical to what <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> puts in its <code class="docutils literal notranslate"><span class="pre">raw_counts</span></code>
 assay. Junctions stack the same way, and stay sparse-backed:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">junction_counts_df</span> <span class="o">=</span> <span class="p">(</span>
@@ -735,7 +737,7 @@ appropriate subclass based on <code class="docutils literal notranslate"><span c
 <span class="n">res</span><span class="o">.</span><span class="n">download</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">"./recount3.zip"</span><span class="p">)</span>           <span class="c1"># append to a ZIP archive</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">path</span></code> accepts a string or a <a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pathlib.Path</span></code></a>
+<p><code class="docutils literal notranslate"><span class="pre">path</span></code> accepts a string or a <a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pathlib.Path</span></code></a>
 (<a class="reference internal" href="api.html#recount3.types.StrPath" title="recount3.types.StrPath"><code class="xref py py-data docutils literal notranslate"><span class="pre">StrPath</span></code></a>), so a directory built with <code class="docutils literal notranslate"><span class="pre">/</span></code> works as
 well, as does a <code class="docutils literal notranslate"><span class="pre">Path</span></code> handed back by
 <code class="xref py py-meth docutils literal notranslate"><span class="pre">ensure_cached()</span></code> or
@@ -768,16 +770,16 @@ depends on the resource:</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Gene/exon counts</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Junction MM (with ID sidecar)</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> (sparse-backed)</p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> (sparse-backed)</p></td>
 </tr>
 <tr class="row-even"><td><p>Junction ID / RR</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Metadata tables / source listings</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
 </tr>
 <tr class="row-even"><td><p>BigWig</p></td>
 <td><p><a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a></p></td>
@@ -987,7 +989,7 @@ to retain the fractional estimates.</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"auc"</span><span class="p">:</span> <span class="n">sf_auc</span><span class="p">,</span> <span class="s2">"mapped_reads"</span><span class="p">:</span> <span class="n">sf_mapreads</span><span class="p">})</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.Series</span></code></a> indexed by <code class="docutils literal notranslate"><span class="pre">external_id</span></code>:</p>
+<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.Series</span></code></a> indexed by <code class="docutils literal notranslate"><span class="pre">external_id</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>                  <span class="n">auc</span>  <span class="n">mapped_reads</span>
 <span class="n">external_id</span>
 <span class="n">SRR389077</span>    <span class="mf">0.045855</span>      <span class="mf">0.129044</span>
@@ -1589,7 +1591,7 @@ so a single <code class="docutils literal notranslate"><span class="pre">except<
 </tr>
 </tbody>
 </table>
-<p>The three ranges errors also subclass <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code></a>, which is what
+<p>The three ranges errors also subclass <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-exc docutils literal notranslate"><span class="pre">ValueError</span></code></a>, which is what
 <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> has always raised on this failure, so existing
 <code class="docutils literal notranslate"><span class="pre">except</span> <span class="pre">ValueError</span></code> handlers keep working. <code class="docutils literal notranslate"><span class="pre">MissingRangesError</span></code> and
 <code class="docutils literal notranslate"><span class="pre">RangesCoverageError</span></code> are what you catch to tell “there was no
@@ -1614,7 +1616,7 @@ columns and the <code class="docutils literal notranslate"><span class="pre">uns
 instead, which keeps the names verbatim.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">Cannot</span> <span class="pre">write</span> <span class="pre">Parquet:</span> <span class="pre">N</span> <span class="pre">columns</span> <span class="pre">use</span> <span class="pre">a</span> <span class="pre">pandas</span> <span class="pre">sparse</span> <span class="pre">dtype</span></code></dt><dd><p>Junction count matrices load sparse-backed and no Parquet engine accepts
-<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.SparseDtype.html#pandas.SparseDtype" title="(in pandas v3.0.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.SparseDtype</span></code></a>. Write a text format, or pass <code class="docutils literal notranslate"><span class="pre">--densify</span></code>
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.SparseDtype.html#pandas.SparseDtype" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.SparseDtype</span></code></a>. Write a text format, or pass <code class="docutils literal notranslate"><span class="pre">--densify</span></code>
 to materialize every implicit zero first. Densifying a junction matrix
 can need far more memory than the sparse form.</p>
 </dd>

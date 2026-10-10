@@ -15,8 +15,9 @@ documentation, see :doc:`api`.
 Installation
 ------------
 
-The core package depends only on NumPy, pandas, and SciPy. The optional
-extras enable features used throughout this tutorial:
+The core package supports Python 3.10 through 3.15 and depends only on NumPy,
+pandas, and SciPy. The optional extras enable features used throughout this
+tutorial:
 
 .. code:: bash
 
@@ -47,7 +48,8 @@ What each extra enables:
   ``biocpy``). ``SummarizedExperiment.to_anndata()`` imports both, and
   ``summarizedexperiment`` declares neither as a required dependency, so the
   extra is needed to write ``.h5ad`` from ``recount3 bundle se`` /
-  ``recount3 bundle rse``.
+  ``recount3 bundle rse``. It cannot be installed on Python 3.15 yet, because
+  ``anndata`` depends on ``h5py``, which publishes no Python 3.15 wheels.
 - ``pybiocfilecache`` enables a shared R/Python registry. The faster default
   filesystem cache needs no extra; see :ref:`cache-and-configuration`.
 - ``all`` installs every optional feature above. The ``dev`` and ``docs``

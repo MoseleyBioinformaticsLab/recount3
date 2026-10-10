@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.config &mdash; recount3 1.2.0 documentation</title>
+  <title>recount3.config &mdash; recount3 1.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=6efca38a"></script>
+      <script src="../../_static/documentation_options.js?v=1f29e9d3"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -181,14 +181,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3.version</span><span class="w"> </span><span class="kn">import</span> <span class="n">__version__</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">recount3._utils</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">_ensure_dir</span><span class="p">,</span>
-    <span class="n">_cache_internal</span><span class="p">,</span>
-    <span class="n">_biocfilecache_paths</span><span class="p">,</span>
-    <span class="n">_remove_biocfilecache_files</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_utils</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">version</span>
 
 <span class="n">_DEFAULT_CHUNK_SIZE</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>  <span class="c1"># 1 MiB</span>
 
@@ -285,7 +279,7 @@
         <span class="n">user_agent</span><span class="o">=</span><span class="p">(</span>
             <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"RECOUNT3_USER_AGENT"</span><span class="p">)</span>
             <span class="ow">or</span> <span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"recount3-python/</span><span class="si">{</span><span class="n">__version__</span><span class="si">}</span><span class="s2"> "</span>
+                <span class="sa">f</span><span class="s2">"recount3-python/</span><span class="si">{</span><span class="n">version</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2"> "</span>
                 <span class="s2">"(+https://github.com/MoseleyBioinformaticsLab/recount3)"</span>
             <span class="p">)</span>
         <span class="p">),</span>
@@ -315,7 +309,7 @@
 <span class="sd">      Absolute :class:`pathlib.Path` to the cache directory.</span>
 <span class="sd">    """</span>
     <span class="n">cfg</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">default_config</span><span class="p">()</span>
-    <span class="n">_ensure_dir</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span>
+    <span class="n">_utils</span><span class="o">.</span><span class="n">_ensure_dir</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_dir</span></div>
 
 
@@ -352,11 +346,13 @@
     <span class="n">files</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">root</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="n">glob_pattern</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_cache_internal</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">root</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_cache_internal</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">root</span><span class="p">):</span>
             <span class="n">files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_backend</span> <span class="o">==</span> <span class="s2">"pybiocfilecache"</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">_biocfilecache_paths</span><span class="p">(</span><span class="n">root</span><span class="p">):</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">_cache_internal</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">root</span><span class="p">)</span> <span class="ow">and</span> <span class="n">path</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">glob_pattern</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_biocfilecache_paths</span><span class="p">(</span><span class="n">root</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_utils</span><span class="o">.</span><span class="n">_cache_internal</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">root</span><span class="p">)</span> <span class="ow">and</span> <span class="n">path</span><span class="o">.</span><span class="n">match</span><span class="p">(</span>
+                <span class="n">glob_pattern</span>
+            <span class="p">):</span>
                 <span class="n">files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
         <span class="n">files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">({</span><span class="n">path</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">files</span><span class="p">})</span>
     <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="nb">str</span><span class="p">)</span></div>
@@ -426,7 +422,7 @@
         <span class="k">return</span> <span class="n">candidates</span>
 
     <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">cache_backend</span> <span class="o">==</span> <span class="s2">"pybiocfilecache"</span><span class="p">:</span>
-        <span class="n">_remove_biocfilecache_files</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">candidates</span><span class="p">)</span>
+        <span class="n">_utils</span><span class="o">.</span><span class="n">_remove_biocfilecache_files</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">candidates</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">candidates</span><span class="p">:</span>
             <span class="n">path</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>

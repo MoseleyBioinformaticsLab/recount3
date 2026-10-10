@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3 &mdash; recount3 1.2.0 documentation</title>
+  <title>recount3 &mdash; recount3 1.3.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=6efca38a"></script>
+      <script src="_static/documentation_options.js?v=1f29e9d3"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -141,8 +141,8 @@ emits JSONL/TSV manifests and materializes resources to a directory or a
 </section>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
-<p>The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy. Five optional extras enable additional features:</p>
+<p>The core package supports Python 3.10 through 3.15 and depends on NumPy,
+pandas, and SciPy. Five optional extras enable additional features:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">                </span><span class="c1"># core</span>
 python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[biocpy]"</span><span class="w">      </span><span class="c1"># + SummarizedExperiment builders</span>
 python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[bigwig]"</span><span class="w">      </span><span class="c1"># + BigWig coverage access</span>
@@ -177,10 +177,13 @@ installation with <code class="docutils literal notranslate"><span class="pre">p
 <p><strong>Note:</strong> The optional extras have platform constraints. The <code class="docutils literal notranslate"><span class="pre">bigwig</span></code> extra
 can be difficult or impossible to install on Windows and macOS. The <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>
 extra can be difficult or impossible to install on Windows, and <code class="docutils literal notranslate"><span class="pre">anndata</span></code>
-inherits that constraint because it requires <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>. The <code class="docutils literal notranslate"><span class="pre">parquet</span></code> and
-<code class="docutils literal notranslate"><span class="pre">pybiocfilecache`</span></code> extra installs cleanly on every supported platform. The
-core package and the command-line workflow do not depend on any extra and work
-on all supported platforms.</p>
+inherits that constraint because it requires <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>. On Python 3.15,
+<code class="docutils literal notranslate"><span class="pre">anndata</span></code> (and therefore <code class="docutils literal notranslate"><span class="pre">all</span></code>) cannot be installed yet: its <code class="docutils literal notranslate"><span class="pre">h5py</span></code>
+dependency publishes no Python 3.15 wheels, and building it from source
+requires the HDF5 C library. The <code class="docutils literal notranslate"><span class="pre">parquet</span></code> and <code class="docutils literal notranslate"><span class="pre">pybiocfilecache</span></code> extras
+install cleanly on every supported platform. The core package and the
+command-line workflow do not depend on any extra and work on all supported
+platforms.</p>
 </section>
 <section id="the-three-layer-api">
 <h2>The three-layer API<a class="headerlink" href="#the-three-layer-api" title="Link to this heading"></a></h2>
