@@ -14,8 +14,8 @@ authors:
     given-names: "Hunter N.B."
     orcid: "https://orcid.org/0000-0003-3995-5368"
 title: "recount3"
-version: 1.2.0
-date-released: 2026-09-15
+version: 1.3.0
+date-released: 2026-10-10
 url: "https://github.com/MoseleyBioinformaticsLab/recount3"
 preferred-citation:
   type: article
@@ -71,7 +71,7 @@ references:
     title: "recount3: summaries and queries for large-scale RNA-seq expression and splicing"
     journal: "Genome Biology"
     volume: 22
-    article-number: 323
+    start: 323
     month: 11
     year: 2021
     doi: "10.1186/s13059-021-02533-6"

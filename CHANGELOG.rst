@@ -1,8 +1,8 @@
 Changelog
 =========
 
-Unreleased
-----------
+1.3.0 (2026-10-10)
+------------------
 
 Added
 ~~~~~
@@ -32,6 +32,9 @@ Documentation
 - The release procedure in ``CONTRIBUTING.rst`` lists every file that carries
   the version: ``version.py``, ``tests/test_version.py``, and
   ``CITATION.cff``.
+- ``CITATION.cff`` validates against the Citation File Format 1.2.0 schema.
+  The recount3 data paper's article number is recorded as ``start``, since
+  ``article-number`` is not a CFF key and made tools reject the whole file.
 - The package docstring states that ``recount3.se`` is exposed as ``r3.se``
   rather than flattened into the top-level namespace, since its helpers
   operate on BiocPy experiments.
