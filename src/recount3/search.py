@@ -108,13 +108,9 @@ from typing import Final
 
 import pandas as pd
 
-from recount3._descriptions import (
-    VALID_DATA_SOURCES,
-    VALID_ORGANISMS,
-    R3ResourceDescription,
-)
-from recount3.resource import R3Resource
-from recount3.types import FieldSpec, StringOrIterable
+from recount3 import _descriptions
+from recount3 import resource
+from recount3 import types as r3_types
 
 #   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)
 # Human:  G026 (Gencode v26), G029 (Gencode v29), F006 (FANTOM6_cat),
@@ -155,7 +151,7 @@ _ANNOTATION_EXT_TO_NAME_MOUSE: Final[dict[str, str]] = {
 }
 
 
-def _normalize_to_tuple(value: StringOrIterable) -> tuple[str, ...]:
+def _normalize_to_tuple(value: r3_types.StringOrIterable) -> tuple[str, ...]:
     """Normalize a string or iterable of strings into a tuple of strings.
 
     Args:
@@ -171,7 +167,7 @@ def _normalize_to_tuple(value: StringOrIterable) -> tuple[str, ...]:
 
 
 def _build_param_grid(
-    resource_type: str, **required_values: StringOrIterable
+    resource_type: str, **required_values: r3_types.StringOrIterable
 ) -> list[dict[str, str]]:
     """Build the Cartesian product of field values for resource construction.
 
@@ -206,7 +202,7 @@ def _make_resources(
     *,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Build :class:`~recount3.R3Resource` objects from parameter dicts.
 
     Optionally deduplicates the result.
@@ -230,12 +226,12 @@ def _make_resources(
         Exception: Any exception from description or resource construction
             when ``strict=True``.
     """
-    out: list[R3Resource] = []
+    out: list[resource.R3Resource] = []
     seen: set[str] = set()
     for params in param_dicts:
         try:
-            desc = R3ResourceDescription(**params)
-            res = R3Resource(desc)
+            desc = _descriptions.R3ResourceDescription(**params)
+            res = resource.R3Resource(desc)
         except Exception:  # pylint: disable=broad-exception-caught
             if strict:
                 raise
@@ -251,7 +247,7 @@ def _make_resources(
     return out
 
 
-def match_spec(value: object | None, spec: FieldSpec) -> bool:
+def match_spec(value: object | None, spec: r3_types.FieldSpec) -> bool:
     """Return True if ``value`` satisfies the selection ``spec``.
 
     Args:
@@ -275,12 +271,12 @@ def match_spec(value: object | None, spec: FieldSpec) -> bool:
 
 def search_annotations(
     *,
-    organism: StringOrIterable,
-    genomic_unit: StringOrIterable,
-    annotation_extension: StringOrIterable,
+    organism: r3_types.StringOrIterable,
+    genomic_unit: r3_types.StringOrIterable,
+    annotation_extension: r3_types.StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return :class:`~recount3.R3Resource` objects for annotation GTF files.
 
     Constructs the Cartesian product of all provided values and returns one
@@ -312,14 +308,14 @@ def search_annotations(
 
 def search_count_files_gene_or_exon(
     *,
-    organism: StringOrIterable,
-    data_source: StringOrIterable,
-    genomic_unit: StringOrIterable,
-    project: StringOrIterable,
-    annotation_extension: StringOrIterable = ("G026",),
+    organism: r3_types.StringOrIterable,
+    data_source: r3_types.StringOrIterable,
+    genomic_unit: r3_types.StringOrIterable,
+    project: r3_types.StringOrIterable,
+    annotation_extension: r3_types.StringOrIterable = ("G026",),
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return gene/exon count :class:`~recount3.R3Resource` objects.
 
     Each resource points to a per-project gene or exon count matrix.
@@ -378,14 +374,14 @@ def search_count_files_gene_or_exon(
 
 def search_count_files_junctions(
     *,
-    organism: StringOrIterable,
-    data_source: StringOrIterable,
-    project: StringOrIterable,
-    junction_type: StringOrIterable = "ALL",
-    junction_extension: StringOrIterable = "MM",
+    organism: r3_types.StringOrIterable,
+    data_source: r3_types.StringOrIterable,
+    project: r3_types.StringOrIterable,
+    junction_type: r3_types.StringOrIterable = "ALL",
+    junction_extension: r3_types.StringOrIterable = "MM",
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return junction count :class:`~recount3.R3Resource` objects.
 
     Each resource points to a per-project junction count file.
@@ -431,13 +427,13 @@ def search_count_files_junctions(
 
 def search_metadata_files(
     *,
-    organism: StringOrIterable,
-    data_source: StringOrIterable,
-    table_name: StringOrIterable,
-    project: StringOrIterable,
+    organism: r3_types.StringOrIterable,
+    data_source: r3_types.StringOrIterable,
+    table_name: r3_types.StringOrIterable,
+    project: r3_types.StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return project metadata :class:`~recount3.R3Resource` objects.
 
     Each resource points to a per-project metadata table.
@@ -473,13 +469,13 @@ def search_metadata_files(
 
 def search_bigwig_files(
     *,
-    organism: StringOrIterable,
-    data_source: StringOrIterable,
-    project: StringOrIterable,
-    sample: StringOrIterable,
+    organism: r3_types.StringOrIterable,
+    data_source: r3_types.StringOrIterable,
+    project: r3_types.StringOrIterable,
+    sample: r3_types.StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return BigWig coverage :class:`~recount3.R3Resource` objects.
 
     Each resource points to a per-sample BigWig coverage file.
@@ -515,10 +511,10 @@ def search_bigwig_files(
 
 def search_data_sources(
     *,
-    organism: StringOrIterable,
+    organism: r3_types.StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return data-source index :class:`~recount3.R3Resource` objects.
 
     Each resource resolves to the ``homes_index`` file for one organism,
@@ -542,11 +538,11 @@ def search_data_sources(
 
 def search_data_source_metadata(
     *,
-    organism: StringOrIterable,
-    data_source: StringOrIterable,
+    organism: r3_types.StringOrIterable,
+    data_source: r3_types.StringOrIterable,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Return data-source metadata :class:`~recount3.R3Resource` objects.
 
     Each resource resolves to the ``recount_project`` metadata file for one
@@ -602,7 +598,7 @@ def create_sample_project_lists(
     else:
         sample_frames: list[pd.DataFrame] = []
         project_frames: list[pd.DataFrame] = []
-        for org in sorted(VALID_ORGANISMS):
+        for org in sorted(_descriptions.VALID_ORGANISMS):
             sample_frames.append(available_samples(organism=org, strict=False))
             project_frames.append(
                 available_projects(organism=org, strict=False)
@@ -657,8 +653,8 @@ def _normalize_organism_name(organism: str) -> str:
       ValueError: If the organism is not supported.
     """
     org = organism.strip().lower()
-    if org not in VALID_ORGANISMS:
-        expected = sorted(VALID_ORGANISMS)
+    if org not in _descriptions.VALID_ORGANISMS:
+        expected = sorted(_descriptions.VALID_ORGANISMS)
         msg = (
             f"Unsupported organism {organism!r}; expected one of "
             f"{expected!r}."
@@ -718,7 +714,7 @@ def _posix_dirname(path: str) -> str:
 def available_samples(
     *,
     organism: str = "human",
-    data_sources: StringOrIterable | None = None,
+    data_sources: r3_types.StringOrIterable | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
     """Return a sample overview similar to recount3::available_samples().
@@ -756,19 +752,19 @@ def available_samples(
     org = _normalize_organism_name(organism)
 
     if data_sources is None:
-        selected_sources = sorted(VALID_DATA_SOURCES)
+        selected_sources = sorted(_descriptions.VALID_DATA_SOURCES)
     else:
         selected_sources = list(_normalize_to_tuple(data_sources))
         invalid = [
             source
             for source in selected_sources
-            if source not in VALID_DATA_SOURCES
+            if source not in _descriptions.VALID_DATA_SOURCES
         ]
         if invalid:
             msg = (
                 "Unsupported data_sources "
                 f"{invalid!r}; expected a subset of "
-                f"{sorted(VALID_DATA_SOURCES)!r}."
+                f"{sorted(_descriptions.VALID_DATA_SOURCES)!r}."
             )
             raise ValueError(msg)
 
@@ -884,7 +880,7 @@ def available_samples(
 def available_projects(
     *,
     organism: str = "human",
-    data_sources: StringOrIterable | None = None,
+    data_sources: r3_types.StringOrIterable | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
     """Return a project overview like recount3::available_projects().
@@ -982,7 +978,7 @@ def available_projects(
 def project_homes(
     *,
     organism: str = "human",
-    data_sources: StringOrIterable | None = None,
+    data_sources: r3_types.StringOrIterable | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
     """Return a project home summary similar to recount3::project_homes().
@@ -1286,7 +1282,7 @@ def search_project_all(
     include_bigwig: bool = False,
     strict: bool = True,
     deduplicate: bool = True,
-) -> list[R3Resource]:
+) -> list[resource.R3Resource]:
     """Enumerate all files for a project (counts, junctions, metadata, bw).
 
     This function composes the existing search helpers to implement a
@@ -1340,7 +1336,7 @@ def search_project_all(
         explicit_exts=None,
     )
 
-    found: list[R3Resource] = []
+    found: list[resource.R3Resource] = []
 
     include_gene = "gene" in set(u.lower() for u in genomic_units)
     include_exon = "exon" in set(u.lower() for u in genomic_units)
@@ -1406,7 +1402,7 @@ def search_project_all(
             deduplicate=deduplicate,
         )
 
-    def _sort_key(r: R3Resource) -> tuple:
+    def _sort_key(r: resource.R3Resource) -> tuple:
         d = r.description
         return (
             getattr(d, "resource_type", ""),

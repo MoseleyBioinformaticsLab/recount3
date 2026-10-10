@@ -149,6 +149,16 @@ Code style
 * **Typing.** Every function and method is fully annotated. Modules begin with
   ``from __future__ import annotations``. The package ships ``py.typed``, so
   annotations are part of the public contract.
+* **Imports.** Import modules, not individual names, as the Google Python
+  Style Guide specifies: ``from recount3 import resource``, then
+  ``resource.R3Resource``. ``typing`` and ``collections.abc`` are exempt, and
+  ``src/recount3/__init__.py`` imports names directly because it re-exports
+  them. Alias a module only when its name clashes with something else:
+  ``types`` is imported as ``r3_types`` (the standard library module), and
+  ``config`` and ``bundle`` as ``r3_config`` and ``r3_bundle`` (public
+  parameter names). Use the same alias in every module, and add any new alias
+  to ``_MODULE_ALIASES`` in ``docs/conf.py`` so that annotations using it
+  still link in the API reference.
 * **Docstrings.** Google-style sections (``Args``, ``Returns``, ``Raises``),
   rendered by ``sphinx.ext.napoleon``. Reference other objects with Sphinx
   roles, for example ``:class:`~recount3.resource.R3Resource```. Every public

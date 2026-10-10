@@ -51,6 +51,7 @@ import pytest
 import scipy.io
 import scipy.sparse
 
+import recount3._utils as _utils_module
 import recount3.resource as res_module
 from recount3._bigwig import BigWigFile
 from recount3._descriptions import R3ResourceDescription
@@ -193,7 +194,7 @@ def test_ensure_cached_url_outer_cache_hit(cfg: Config) -> None:
     cache_p = _cache_path(url, cfg.cache_dir)
     cache_p.parent.mkdir(parents=True, exist_ok=True)
     cache_p.touch()
-    with mock.patch("recount3.resource.download_to_file") as mock_dl:
+    with mock.patch("recount3._utils.download_to_file") as mock_dl:
         result = _ensure_cached_url(
             url=url,
             cache_root=cfg.cache_dir,
@@ -220,9 +221,9 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
             return False
 
     with mock.patch.object(
-        res_module, "_path_lock_for_path", return_value=_SeedOnEnter()
+        _utils_module, "_path_lock_for_path", return_value=_SeedOnEnter()
     ):
-        with mock.patch("recount3.resource.download_to_file") as mock_dl:
+        with mock.patch("recount3._utils.download_to_file") as mock_dl:
             result = _ensure_cached_url(
                 url=url,
                 cache_root=cfg.cache_dir,
@@ -236,7 +237,7 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
 def test_ensure_cached_url_downloads_missing_file(cfg: Config) -> None:
     """Calls download_to_file when file is absent on both checks."""
     url = "https://example.org/recount3/human/thing3.tsv.gz"
-    with mock.patch("recount3.resource.download_to_file") as mock_dl:
+    with mock.patch("recount3._utils.download_to_file") as mock_dl:
         result = _ensure_cached_url(
             url=url,
             cache_root=cfg.cache_dir,
@@ -323,7 +324,7 @@ def test_read_id_rail_ids_empty_list_raises_load_error(
     with (
         mock.patch("recount3.resource.pd.read_csv", return_value=mock_df),
         mock.patch(
-            "recount3.resource.canonical_identifier_series",
+            "recount3._utils.canonical_identifier_series",
             return_value=mock_canonical,
         ),
     ):
@@ -465,7 +466,7 @@ def test_post_init_config_none_calls_default_config(
     """default_config() is called when config=None in __post_init__."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
-    with mock.patch("recount3.resource.default_config", return_value=fc):
+    with mock.patch("recount3.config.default_config", return_value=fc):
         res = R3Resource(description=desc)
     assert res.url is not None
     assert res.url.startswith("https://fallback.org/recount3/")
@@ -500,7 +501,7 @@ def test_cache_root_calls_default_config(tmp_path: Path) -> None:
     """_cache_root() calls default_config() when config=None."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
-    with mock.patch("recount3.resource.default_config", return_value=fc):
+    with mock.patch("recount3.config.default_config", return_value=fc):
         res = R3Resource(description=desc)
         root = res._cache_root()
     assert root == tmp_path / "dc"
@@ -596,7 +597,7 @@ class TestEnsureCached:
         src.write_bytes(b"payload")
         seeded = _seed(res, src)
 
-        with mock.patch.object(res_module, "download_to_file") as dl:
+        with mock.patch.object(_utils_module, "download_to_file") as dl:
             assert res.ensure_cached() == seeded
         dl.assert_not_called()
 
@@ -609,7 +610,7 @@ class TestEnsureCached:
             out_path.write_bytes(b"fetched")
 
         with mock.patch.object(
-            res_module, "download_to_file", side_effect=fake_download
+            _utils_module, "download_to_file", side_effect=fake_download
         ) as dl:
             path = res.ensure_cached()
         dl.assert_called_once()
@@ -619,7 +620,7 @@ class TestEnsureCached:
         self, cfg: Config
     ) -> None:
         res = self._resource(cfg)
-        with mock.patch.object(res_module, "download_to_file") as dl:
+        with mock.patch.object(_utils_module, "download_to_file") as dl:
             with pytest.raises(FileNotFoundError):
                 res.ensure_cached(download=False)
         dl.assert_not_called()
@@ -645,7 +646,7 @@ class TestEnsureCached:
         with (
             mock.patch.object(R3Resource, "_cached_path", flaky_cached_path),
             mock.patch.object(
-                res_module, "download_to_file", side_effect=fake_download
+                _utils_module, "download_to_file", side_effect=fake_download
             ),
         ):
             assert res.ensure_cached().read_bytes() == b"fetched"
@@ -682,7 +683,7 @@ def test_ensure_cached_update_calls_download_to_file(
 ) -> None:
     """_ensure_cached('update') calls download_to_file under the lock."""
     res = _make("data_sources", cfg, organism="human")
-    with mock.patch("recount3.resource.download_to_file") as mock_dl:
+    with mock.patch("recount3._utils.download_to_file") as mock_dl:
         res._ensure_cached(mode="update", chunk_size=256)
     mock_dl.assert_called_once()
     assert mock_dl.call_args.kwargs["chunk_size"] == 256
@@ -704,9 +705,9 @@ def test_ensure_cached_config_none_calls_default_config(
     """_ensure_cached calls default_config() when config=None."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
-    with mock.patch("recount3.resource.default_config", return_value=fc):
+    with mock.patch("recount3.config.default_config", return_value=fc):
         res = R3Resource(description=desc)
-        with mock.patch("recount3.resource.download_to_file"):
+        with mock.patch("recount3._utils.download_to_file"):
             res._ensure_cached(mode="update", chunk_size=512)
 
 
@@ -739,7 +740,7 @@ def test_download_cache_disabled_forces_disable_mode(
     res = R3Resource(description=desc, config=disabled_cfg)
     dest_dir = tmp_path / "out"
     dest_dir.mkdir()
-    with mock.patch("recount3.resource.download_to_file") as mock_dl:
+    with mock.patch("recount3._utils.download_to_file") as mock_dl:
         res.download(str(dest_dir))
     mock_dl.assert_called_once()
 
@@ -751,10 +752,10 @@ def test_download_config_none_calls_default_config(
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
     (tmp_path / "out").mkdir()
-    with mock.patch("recount3.resource.default_config", return_value=fc):
+    with mock.patch("recount3.config.default_config", return_value=fc):
         res = R3Resource(description=desc)
-        with mock.patch("recount3.resource.download_to_file"):
-            with mock.patch("recount3.resource._hardlink_or_copy"):
+        with mock.patch("recount3._utils.download_to_file"):
+            with mock.patch("recount3._utils._hardlink_or_copy"):
                 res.download(str(tmp_path / "out"))
 
 
@@ -805,7 +806,7 @@ def test_download_chunk_size_explicit_value_used(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake
     ) as mock_ec:
-        with mock.patch("recount3.resource._hardlink_or_copy"):
+        with mock.patch("recount3._utils._hardlink_or_copy"):
             res.download(str(tmp_path / "out"), chunk_size=128)
     assert mock_ec.call_args.kwargs["chunk_size"] == 128
 
@@ -821,7 +822,7 @@ def test_download_chunk_size_defaults_to_config(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake
     ) as mock_ec:
-        with mock.patch("recount3.resource._hardlink_or_copy"):
+        with mock.patch("recount3._utils._hardlink_or_copy"):
             res.download(str(tmp_path / "out"))
     assert mock_ec.call_args.kwargs["chunk_size"] == cfg.chunk_size
 
@@ -837,7 +838,7 @@ def test_download_to_zip_disable_streams_directly(
     """ZIP + disable: calls download_stream_to_zip without caching."""
     res = _make("data_sources", cfg, organism="human")
     zip_path = tmp_path / "out.zip"
-    with mock.patch("recount3.resource.download_stream_to_zip") as mock_ds:
+    with mock.patch("recount3._utils.download_stream_to_zip") as mock_ds:
         result = res.download(str(zip_path), cache_mode="disable")
     mock_ds.assert_called_once()
     assert result is None
@@ -854,9 +855,7 @@ def test_download_to_zip_enable_caches_then_writes(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch(
-            "recount3.resource.write_cached_file_to_zip"
-        ) as mock_wc:
+        with mock.patch("recount3._utils.write_cached_file_to_zip") as mock_wc:
             result = res.download(
                 str(zip_path), cache_mode="enable", overwrite=True
             )
@@ -877,9 +876,7 @@ def test_download_to_zip_update_caches_then_writes(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch(
-            "recount3.resource.write_cached_file_to_zip"
-        ) as mock_wc:
+        with mock.patch("recount3._utils.write_cached_file_to_zip") as mock_wc:
             result = res.download(str(zip_path), cache_mode="update")
     mock_wc.assert_called_once_with(
         fake_cached, zip_path, res.arcname, overwrite=False
@@ -899,7 +896,7 @@ def test_download_to_dir_disable_calls_download_to_file(
     res = _make("data_sources", cfg, organism="human")
     dest_dir = tmp_path / "out"
     dest_dir.mkdir()
-    with mock.patch("recount3.resource.download_to_file") as mock_dl:
+    with mock.patch("recount3._utils.download_to_file") as mock_dl:
         result = res.download(str(dest_dir), cache_mode="disable")
     mock_dl.assert_called_once()
     assert result is not None
@@ -919,7 +916,7 @@ def test_download_to_dir_enable_hardlinks_from_cache(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
+        with mock.patch("recount3._utils._hardlink_or_copy") as mock_hl:
             result = res.download(str(dest_dir), cache_mode="enable")
     mock_hl.assert_called_once()
     assert result is not None
@@ -939,7 +936,7 @@ def test_download_to_dir_dest_exists_no_overwrite_returns_early(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
+        with mock.patch("recount3._utils._hardlink_or_copy") as mock_hl:
             result = res.download(
                 str(dest_dir), cache_mode="enable", overwrite=False
             )
@@ -961,7 +958,7 @@ def test_download_to_dir_dest_exists_overwrite_relinks(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
+        with mock.patch("recount3._utils._hardlink_or_copy") as mock_hl:
             result = res.download(
                 str(dest_dir), cache_mode="enable", overwrite=True
             )
@@ -982,7 +979,7 @@ def test_download_to_dir_with_suffix_uses_is_dir(
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch("recount3.resource._hardlink_or_copy"):
+        with mock.patch("recount3._utils._hardlink_or_copy"):
             result = res.download(str(dest_dir), cache_mode="enable")
     assert result is not None
 
@@ -1002,7 +999,7 @@ def test_download_to_dir_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch("recount3.resource._hardlink_or_copy") as mock_hl:
+        with mock.patch("recount3._utils._hardlink_or_copy") as mock_hl:
             result = res.download(dest_dir, cache_mode="enable")
     mock_hl.assert_called_once()
     assert result == str(dest_dir / "homes_index")
@@ -1018,9 +1015,7 @@ def test_download_to_zip_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
     with mock.patch.object(
         R3Resource, "_ensure_cached", return_value=fake_cached
     ):
-        with mock.patch(
-            "recount3.resource.write_cached_file_to_zip"
-        ) as mock_wc:
+        with mock.patch("recount3._utils.write_cached_file_to_zip") as mock_wc:
             result = res.download(zip_path, cache_mode="enable")
     mock_wc.assert_called_once_with(
         fake_cached, zip_path, res.arcname, overwrite=False
@@ -1040,7 +1035,7 @@ def test_download_accepts_pathlike_from_the_packages_own_output(
     with mock.patch.object(R3Resource, "_ensure_cached", return_value=cached):
         # ensure_cached() returns a Path; its parent is a Path too.
         assert isinstance(res.ensure_cached(), Path)
-        with mock.patch("recount3.resource._hardlink_or_copy"):
+        with mock.patch("recount3._utils._hardlink_or_copy"):
             result = res.download(dest_dir, cache_mode="enable")
     assert result == str(dest_dir / "homes_index")
 
@@ -1387,7 +1382,7 @@ def test_load_junctions_mm_bad_sidecar_url_raises_load_error(
     res = _make_jxn(cfg, "MM")
     _seed(res, _JXN_MM_GZ)
     with mock.patch(
-        "recount3.resource._derive_junction_sidecar_url",
+        "recount3._utils._derive_junction_sidecar_url",
         side_effect=ValueError("bad url"),
     ):
         with pytest.raises(LoadError, match="Cannot derive junction ID URL"):
@@ -1445,7 +1440,7 @@ def test_load_junctions_mm_config_none_calls_default_config(
         junction_type="ALL",
         junction_extension="MM",
     )
-    with mock.patch("recount3.resource.default_config", return_value=fc):
+    with mock.patch("recount3.config.default_config", return_value=fc):
         res = R3Resource(description=desc)
         _seed(res, _JXN_MM_GZ)
         id_url = _derive_junction_sidecar_url(res.url or "", "ID")
@@ -1740,7 +1735,7 @@ def test_build_url_with_explicit_config(cfg: Config) -> None:
 def test_build_url_uses_default_config_when_omitted(tmp_path: Path) -> None:
     """Falls back to default_config() when no config is given."""
     fallback = _fake_cfg(tmp_path)
-    with mock.patch("recount3.resource.default_config", return_value=fallback):
+    with mock.patch("recount3.config.default_config", return_value=fallback):
         url = res_module.build_url(
             "bigwig_files",
             organism="human",
@@ -1792,7 +1787,7 @@ def test_from_mapping_ignores_derived_url_and_arcname_keys(cfg: Config) -> None:
 def test_from_mapping_defaults_config_when_omitted(tmp_path: Path) -> None:
     """With no config, the url derives from default_config()'s base_url."""
     fallback = _fake_cfg(tmp_path)
-    with mock.patch("recount3.resource.default_config", return_value=fallback):
+    with mock.patch("recount3.config.default_config", return_value=fallback):
         res = R3Resource.from_mapping(
             {"resource_type": "data_sources", "organism": "human"}
         )
@@ -1874,7 +1869,7 @@ def test_ensure_cached_url_lets_distinct_destinations_overlap(
         barrier.wait()
         path.write_bytes(url.encode())
 
-    with mock.patch.object(res_module, "download_to_file", transfer):
+    with mock.patch.object(_utils_module, "download_to_file", transfer):
         with futures.ThreadPoolExecutor(4) as pool:
             pending = [
                 pool.submit(
@@ -1925,8 +1920,8 @@ def test_ensure_cached_url_same_destination_waits_and_recovers(
                 raise DownloadError("controlled failure")
         path.write_bytes(str(len(calls)).encode())
 
-    with mock.patch.object(res_module, "_path_lock_for_path", observed_lock):
-        with mock.patch.object(res_module, "download_to_file", transfer):
+    with mock.patch.object(_utils_module, "_path_lock_for_path", observed_lock):
+        with mock.patch.object(_utils_module, "download_to_file", transfer):
             with futures.ThreadPoolExecutor(2) as pool:
                 first = pool.submit(_fetch, cfg, refresh=refresh)
                 try:
@@ -1987,7 +1982,7 @@ def test_ensure_cached_url_adopts_a_native_payload_into_the_registry(
     path = _cache_path(_CACHE_URL, cfg.cache_dir)
     path.write_bytes(b"native")
 
-    with mock.patch.object(res_module, "download_to_file") as download:
+    with mock.patch.object(_utils_module, "download_to_file") as download:
         assert _fetch(cfg) == path
         assert _fetch(cfg) == path
         download.assert_not_called()
@@ -2053,12 +2048,12 @@ def test_ensure_cached_url_registry_failure_keeps_the_payload(
         "recount3._utils.http_open", return_value=io.BytesIO(b"good")
     ):
         with mock.patch.object(
-            res_module, "_register_biocfilecache", side_effect=OSError
+            _utils_module, "_register_biocfilecache", side_effect=OSError
         ):
             with pytest.raises(OSError):
                 _fetch(cfg)
 
-    with mock.patch.object(res_module, "download_to_file") as download:
+    with mock.patch.object(_utils_module, "download_to_file") as download:
         assert _fetch(cfg).read_bytes() == b"good"
         download.assert_not_called()
 
@@ -2074,7 +2069,7 @@ def test_ensure_cached_url_repairs_a_failed_refresh_on_the_next_hit(
     ):
         _fetch(cfg)
     with mock.patch.object(
-        res_module, "_register_biocfilecache", side_effect=OSError
+        _utils_module, "_register_biocfilecache", side_effect=OSError
     ):
         with mock.patch(
             "recount3._utils.http_open", return_value=io.BytesIO(b"new")
@@ -2082,7 +2077,7 @@ def test_ensure_cached_url_repairs_a_failed_refresh_on_the_next_hit(
             with pytest.raises(OSError):
                 _fetch(cfg, refresh=True)
 
-    with mock.patch.object(res_module, "download_to_file") as download:
+    with mock.patch.object(_utils_module, "download_to_file") as download:
         assert _fetch(cfg).read_bytes() == b"new"
         download.assert_not_called()
 
@@ -2106,7 +2101,7 @@ def test_resource_reuses_and_repairs_an_r_created_relative_entry(
         registered = Path(row["rpath"])
 
     assert res._cached_path() == registered
-    with mock.patch.object(res_module, "download_to_file") as download:
+    with mock.patch.object(_utils_module, "download_to_file") as download:
         assert res.ensure_cached(download=False) == registered
         res.download()
         download.assert_not_called()
@@ -2153,7 +2148,9 @@ def test_optional_backend_reports_the_extra_and_disable_bypasses_it(
             ):
                 _fetch(cfg)
             path.unlink()
-            with mock.patch.object(res_module, "download_to_file") as download:
+            with mock.patch.object(
+                _utils_module, "download_to_file"
+            ) as download:
                 with pytest.raises(
                     ImportError, match=r"recount3\[pybiocfilecache\]"
                 ):
@@ -2161,7 +2158,9 @@ def test_optional_backend_reports_the_extra_and_disable_bypasses_it(
                 download.assert_not_called()
 
             res = _counts_resource(cfg)
-            with mock.patch.object(res_module, "download_to_file") as download:
+            with mock.patch.object(
+                _utils_module, "download_to_file"
+            ) as download:
                 res.download(str(tmp_path / "direct"), cache_mode="disable")
                 download.assert_called_once()
     finally:

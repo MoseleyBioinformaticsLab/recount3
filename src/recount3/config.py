@@ -107,14 +107,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from recount3.version import __version__
-
-from recount3._utils import (
-    _ensure_dir,
-    _cache_internal,
-    _biocfilecache_paths,
-    _remove_biocfilecache_files,
-)
+from recount3 import _utils
+from recount3 import version
 
 _DEFAULT_CHUNK_SIZE: int = 1024 * 1024  # 1 MiB
 
@@ -206,7 +200,7 @@ def default_config(*, cache_backend: str | None = None) -> Config:
         user_agent=(
             os.environ.get("RECOUNT3_USER_AGENT")
             or (
-                f"recount3-python/{__version__} "
+                f"recount3-python/{version.__version__} "
                 "(+https://github.com/MoseleyBioinformaticsLab/recount3)"
             )
         ),
@@ -233,7 +227,7 @@ def recount3_cache(config: Config | None = None) -> Path:
       Absolute :class:`pathlib.Path` to the cache directory.
     """
     cfg = config or default_config()
-    _ensure_dir(cfg.cache_dir)
+    _utils._ensure_dir(cfg.cache_dir)
     return cfg.cache_dir
 
 
@@ -267,11 +261,13 @@ def recount3_cache_files(
     files: list[Path] = []
 
     for path in root.rglob(glob_pattern):
-        if path.is_file() and not _cache_internal(path, root):
+        if path.is_file() and not _utils._cache_internal(path, root):
             files.append(path)
     if cfg.cache_backend == "pybiocfilecache":
-        for path in _biocfilecache_paths(root):
-            if not _cache_internal(path, root) and path.match(glob_pattern):
+        for path in _utils._biocfilecache_paths(root):
+            if not _utils._cache_internal(path, root) and path.match(
+                glob_pattern
+            ):
                 files.append(path)
         files = list({path.resolve() for path in files})
     return sorted(files, key=str)
@@ -338,7 +334,7 @@ def recount3_cache_rm(
         return candidates
 
     if cfg.cache_backend == "pybiocfilecache":
-        _remove_biocfilecache_files(root, candidates)
+        _utils._remove_biocfilecache_files(root, candidates)
     else:
         for path in candidates:
             path.unlink()

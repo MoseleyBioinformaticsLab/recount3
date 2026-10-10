@@ -3025,7 +3025,7 @@ class TestR3ResourceBundleDownload:
             path.write_bytes(url.encode())
 
         target = tmp_path / "bundle.zip"
-        with patch.object(resource_module, "download_to_file", transfer):
+        with patch.object(_utils_module, "download_to_file", transfer):
             R3ResourceBundle(resources=resources).download(
                 dest=str(target), max_workers=4
             )
@@ -3812,7 +3812,7 @@ class TestAddBigwigUrls:
         )
         mock_cfg = MagicMock()
         mock_cfg.base_url = "https://duffel.example.com/recount3/"
-        with patch("recount3.resource.default_config", return_value=mock_cfg):
+        with patch("recount3.config.default_config", return_value=mock_cfg):
             result = b._add_bigwig_urls(col_df)
         assert "BigWigURL" in result.columns
         url = result["BigWigURL"].iloc[0]

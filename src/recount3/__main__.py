@@ -38,7 +38,7 @@ Delegates to :mod:`recount3.cli`. Invoke via ``python -m recount3 --help``.
 
 from __future__ import annotations
 
-from recount3.cli import main
+from recount3 import cli
 
 if __name__ == "__main__":
-    main()
+    cli.main()

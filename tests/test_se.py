@@ -408,7 +408,9 @@ class TestResolveAnnotationExtension:
         assert result == "M023"
 
     def test_annotation_label_calls_annotation_ext(self) -> None:
-        with mock.patch("recount3.se.annotation_ext", return_value="G029") as m:
+        with mock.patch(
+            "recount3.search.annotation_ext", return_value="G029"
+        ) as m:
             result = _resolve_annotation_extension(
                 organism="human",
                 genomic_unit="gene",
@@ -547,7 +549,7 @@ class TestCreateRangedSummarizedExperiment:
     def test_default_junction_extensions_for_gene(self) -> None:
         """Gene/exon assemblies do not need RR; default stays ('MM',)."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
@@ -561,7 +563,7 @@ class TestCreateRangedSummarizedExperiment:
         """Junction-level RSEs need the RR sidecar for coordinates; the
         default must include 'RR' so create_rse works out of the box."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
@@ -574,7 +576,7 @@ class TestCreateRangedSummarizedExperiment:
     def test_explicit_junction_extensions(self) -> None:
         """Provided junction_extensions are tupled with strip()."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
@@ -588,7 +590,7 @@ class TestCreateRangedSummarizedExperiment:
     def test_annotations_default_when_ann_ext_none(self) -> None:
         """Junction unit -> ann_ext=None -> annotations='default'."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
@@ -601,7 +603,7 @@ class TestCreateRangedSummarizedExperiment:
     def test_annotations_tuple_when_ann_ext_provided(self) -> None:
         """Gene unit with default human -> ann_ext='G026' -> annotations=('G026',)."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
@@ -613,7 +615,7 @@ class TestCreateRangedSummarizedExperiment:
 
     def test_all_kwargs_forwarded_to_rse(self) -> None:
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.se.R3ResourceBundle") as MockBundle:
+        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
             MockBundle.discover.return_value = bundle
             result = create_ranged_summarized_experiment(
                 project="SRP009615",

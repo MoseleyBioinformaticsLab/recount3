@@ -46,8 +46,8 @@ def test_main_module_imports_without_error() -> None:
 
 
 def test_main_delegates_to_cli() -> None:
-    """The 'main' name in __main__ must be the same object as recount3.cli.main."""
-    assert main_module.main is recount3.cli.main
+    """__main__ must dispatch through the recount3.cli module."""
+    assert main_module.cli is recount3.cli
 
 
 def test_python_m_recount3_help() -> None:

@@ -104,24 +104,12 @@ import pandas as pd
 import scipy.io
 import scipy.sparse
 
-from recount3._bigwig import BigWigFile
-from recount3._descriptions import R3ResourceDescription
-from recount3._utils import (
-    _cache_path,
-    _biocfilecache_path,
-    _register_biocfilecache,
-    _path_lock_for_path,
-    _derive_junction_sidecar_url,
-    _ensure_dir,
-    _hardlink_or_copy,
-    canonical_identifier_series,
-    download_stream_to_zip,
-    download_to_file,
-    write_cached_file_to_zip,
-)
-from recount3.config import Config, default_config
-from recount3.errors import LoadError
-from recount3.types import CacheMode, StrPath
+from recount3 import _bigwig
+from recount3 import _descriptions
+from recount3 import _utils
+from recount3 import config as r3_config
+from recount3 import errors
+from recount3 import types as r3_types
 
 
 def _detect_mmread_kwargs() -> dict[str, Any]:
@@ -203,7 +191,7 @@ def _ensure_cached_url(
     *,
     url: str,
     cache_root: Path,
-    cfg: Config,
+    cfg: r3_config.Config,
     chunk_size: int,
     refresh: bool = False,
 ) -> Path:
@@ -228,14 +216,14 @@ def _ensure_cached_url(
         The absolute path pointing to the locally cached file.
     """
     cache_path = (
-        _biocfilecache_path(url, cache_root)
+        _utils._biocfilecache_path(url, cache_root)
         if cfg.cache_backend == "pybiocfilecache"
-        else _cache_path(url, cache_root)
+        else _utils._cache_path(url, cache_root)
     )
-    with _path_lock_for_path(cache_path):
+    with _utils._path_lock_for_path(cache_path):
         transferred = refresh or not cache_path.exists()
         if transferred:
-            download_to_file(
+            _utils.download_to_file(
                 url,
                 cache_path,
                 chunk_size=chunk_size,
@@ -245,7 +233,7 @@ def _ensure_cached_url(
                 attempts=cfg.max_retries,
             )
         if cfg.cache_backend == "pybiocfilecache":
-            _register_biocfilecache(
+            _utils._register_biocfilecache(
                 cache_root, url, cache_path, transferred=transferred
             )
     return cache_path
@@ -288,7 +276,9 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
         )
 
     if df.empty:
-        raise LoadError(f"Junction ID file {id_path.name!r} parsed empty.")
+        raise errors.LoadError(
+            f"Junction ID file {id_path.name!r} parsed empty."
+        )
 
     cols_lower = [str(c).strip().lower() for c in df.columns]
     rail_col = None
@@ -297,9 +287,13 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
     else:
         rail_col = df.columns[0]
 
-    rail_ids = canonical_identifier_series(df[rail_col]).astype(str).tolist()
+    rail_ids = (
+        _utils.canonical_identifier_series(df[rail_col]).astype(str).tolist()
+    )
     if not rail_ids:
-        raise LoadError(f"Junction ID file {id_path.name!r} has no rail IDs.")
+        raise errors.LoadError(
+            f"Junction ID file {id_path.name!r} has no rail IDs."
+        )
     return rail_ids
 
 
@@ -331,19 +325,21 @@ def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_array:
         else:
             mat = scipy.io.mmread(str(mm_path), **_MMREAD_KWARGS)
     except Exception as exc:
-        raise LoadError(
+        raise errors.LoadError(
             f"Failed to read MatrixMarket from {mm_path.name!r}."
         ) from exc
 
     if getattr(mat, "ndim", None) != 2:
-        raise LoadError(f"MatrixMarket {mm_path.name!r} is not 2-dimensional.")
+        raise errors.LoadError(
+            f"MatrixMarket {mm_path.name!r} is not 2-dimensional."
+        )
     return scipy.sparse.csr_array(mat)
 
 
 def build_url(
     resource_type: str,
     *,
-    config: Config | None = None,
+    config: r3_config.Config | None = None,
     **fields: Any,
 ) -> str:
     """Build the absolute URL for a resource from its description fields.
@@ -371,8 +367,10 @@ def build_url(
       KeyError, ValueError: If ``resource_type`` is unknown or the supplied
         fields are invalid for it (propagated from the description factory).
     """
-    cfg = config or default_config()
-    desc = R3ResourceDescription(resource_type=resource_type, **fields)
+    cfg = config or r3_config.default_config()
+    desc = _descriptions.R3ResourceDescription(
+        resource_type=resource_type, **fields
+    )
     return urllib.parse.urljoin(cfg.base_url, desc.url_path())
 
 
@@ -409,10 +407,10 @@ class R3Resource:
         of which file it is, so leaving it out is also the right meaning.
     """
 
-    description: R3ResourceDescription
+    description: _descriptions.R3ResourceDescription
     url: str | None = None
-    filepath: StrPath | None = None
-    config: Config | None = None
+    filepath: r3_types.StrPath | None = None
+    config: r3_config.Config | None = None
 
     _cached_data: object | None = dataclasses.field(
         default=None, init=False, repr=False, compare=False
@@ -422,7 +420,7 @@ class R3Resource:
         """Initialize derived fields after dataclass instantiation."""
         if self.filepath is not None:
             self.filepath = str(self.filepath)
-        cfg = self.config or default_config()
+        cfg = self.config or r3_config.default_config()
         if self.url is None:
             self.url = urllib.parse.urljoin(
                 cfg.base_url, self.description.url_path()
@@ -433,7 +431,7 @@ class R3Resource:
         cls,
         mapping: Mapping[str, Any],
         *,
-        config: Config | None = None,
+        config: r3_config.Config | None = None,
     ) -> R3Resource:
         """Rehydrate an :class:`R3Resource` from a serialized mapping.
 
@@ -460,7 +458,7 @@ class R3Resource:
         fields = dict(mapping)
         fields.pop("url", None)
         fields.pop("arcname", None)
-        desc = R3ResourceDescription(**fields)
+        desc = _descriptions.R3ResourceDescription(**fields)
         return cls(description=desc, config=config)
 
     @property
@@ -475,7 +473,7 @@ class R3Resource:
             The absolute directory path where safely downloaded files are
             globally cached, determined entirely by the active configuration.
         """
-        cfg = self.config or default_config()
+        cfg = self.config or r3_config.default_config()
         return Path(cfg.cache_dir)
 
     def _cached_path(self) -> Path:
@@ -486,12 +484,16 @@ class R3Resource:
             resource's data persistently resides within the local cache
             hierarchy.
         """
-        cfg = self.config or default_config()
+        cfg = self.config or r3_config.default_config()
         if cfg.cache_backend == "pybiocfilecache":
-            return _biocfilecache_path(self.url or "", self._cache_root())
-        return _cache_path(self.url or "", self._cache_root())
+            return _utils._biocfilecache_path(
+                self.url or "", self._cache_root()
+            )
+        return _utils._cache_path(self.url or "", self._cache_root())
 
-    def _ensure_cached(self, *, mode: CacheMode, chunk_size: int) -> Path:
+    def _ensure_cached(
+        self, *, mode: r3_types.CacheMode, chunk_size: int
+    ) -> Path:
         """Ensure the resource data is available in the local cache.
 
         Args:
@@ -512,7 +514,7 @@ class R3Resource:
                 mode), or if the universally provided mode string is completely
                 unrecognized.
         """
-        cfg = self.config or default_config()
+        cfg = self.config or r3_config.default_config()
         if mode == "disable":
             raise ValueError("Cache is not used in 'disable' mode")
         if mode not in ("enable", "update"):
@@ -584,9 +586,9 @@ class R3Resource:
 
     def download(
         self,
-        path: StrPath | None = None,
+        path: r3_types.StrPath | None = None,
         *,
-        cache_mode: CacheMode = "enable",
+        cache_mode: r3_types.CacheMode = "enable",
         overwrite: bool = False,
         chunk_size: int | None = None,
     ) -> str | None:
@@ -634,7 +636,7 @@ class R3Resource:
 
                 dest = res.download(path="/data/recount3", cache_mode="update")
         """
-        cfg = self.config or default_config()
+        cfg = self.config or r3_config.default_config()
         if cfg.cache_disabled:
             cache_mode = "disable"
         cs = chunk_size or cfg.chunk_size
@@ -664,7 +666,7 @@ class R3Resource:
         if is_zip:
             arcname = self.arcname
             if cache_mode == "disable":
-                download_stream_to_zip(
+                _utils.download_stream_to_zip(
                     self.url or "",
                     path_p,
                     arcname,
@@ -677,7 +679,7 @@ class R3Resource:
                 )
                 return None
             cached = self._ensure_cached(mode=cache_mode, chunk_size=cs)
-            write_cached_file_to_zip(
+            _utils.write_cached_file_to_zip(
                 cached, path_p, arcname, overwrite=overwrite
             )
             return None
@@ -686,7 +688,7 @@ class R3Resource:
         dest_filename = Path(self.description.url_path()).name
         dest_path = path_p / dest_filename
         if cache_mode == "disable":
-            download_to_file(
+            _utils.download_to_file(
                 self.url or "",
                 dest_path,
                 chunk_size=cs,
@@ -703,7 +705,7 @@ class R3Resource:
             if not overwrite:
                 self.filepath = str(dest_path)
                 return str(dest_path)
-        _hardlink_or_copy(cached, dest_path)
+        _utils._hardlink_or_copy(cached, dest_path)
         self.filepath = str(dest_path)
         return str(dest_path)
 
@@ -752,7 +754,7 @@ class R3Resource:
             cached = self._cached_path()
             if not cached.exists():
                 raise FileNotFoundError(str(cached))
-            reader = BigWigFile(cached)
+            reader = _bigwig.BigWigFile(cached)
             reader._ensure_open()
             self._cached_data = reader
             return reader
@@ -785,7 +787,7 @@ class R3Resource:
                     engine="python",
                 )
             if df.empty or df.shape[1] < 2:
-                raise LoadError(
+                raise errors.LoadError(
                     f"Parsed an empty or 1-column matrix from {cached.name!r}."
                 )
             cols_lower = [str(c).strip().lower() for c in df.columns]
@@ -807,7 +809,7 @@ class R3Resource:
                 getattr(self.description, "junction_extension", "MM")
             ).upper()
 
-            cfg = self.config or default_config()
+            cfg = self.config or r3_config.default_config()
             self.download(path=None, cache_mode="enable")
             mm_cached = self._cached_path()
             if not mm_cached.exists():
@@ -815,9 +817,11 @@ class R3Resource:
 
             if jxn_ext == "MM":
                 try:
-                    id_url = _derive_junction_sidecar_url(self.url or "", "ID")
+                    id_url = _utils._derive_junction_sidecar_url(
+                        self.url or "", "ID"
+                    )
                 except Exception as exc:
-                    raise LoadError(
+                    raise errors.LoadError(
                         f"Cannot derive junction ID URL from {self.url!r}."
                     ) from exc
 
@@ -833,11 +837,11 @@ class R3Resource:
 
                 mat_shape = mat.shape
                 if mat_shape is None:
-                    raise LoadError(
+                    raise errors.LoadError(
                         f"MatrixMarket {mm_cached.name!r} has undefined shape."
                     )
                 if mat_shape[1] != len(rail_ids):
-                    raise LoadError(
+                    raise errors.LoadError(
                         "Junction MM column count does not match ID length: "
                         f"{mat_shape[1]} != {len(rail_ids)} "
                         f"({mm_cached.name!r} vs {id_cached.name!r})."
@@ -855,7 +859,7 @@ class R3Resource:
                 self._cached_data = obj
                 return obj
 
-            raise LoadError(
+            raise errors.LoadError(
                 f"Unsupported junction_extension {jxn_ext!r} "
                 f"for {mm_cached.name!r}."
             )
@@ -876,7 +880,7 @@ class R3Resource:
             return obj
 
         resource_type = getattr(self.description, "resource_type", None)
-        raise LoadError(
+        raise errors.LoadError(
             "Unsupported load() for resource type "
             f"{resource_type!r} with file {cached.name!r}"
         )
@@ -904,7 +908,7 @@ class R3Resource:
         """
         obj = self._cached_data
         try:
-            if isinstance(obj, BigWigFile):
+            if isinstance(obj, _bigwig.BigWigFile):
                 obj.close()
         finally:
             self._cached_data = None

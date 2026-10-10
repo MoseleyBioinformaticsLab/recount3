@@ -105,10 +105,12 @@ from scipy import sparse
 
 from recount3 import _bigwig
 from recount3 import _utils
+from recount3 import config as r3_config
 from recount3 import errors
 from recount3 import resource
 from recount3 import search
 from recount3 import types as r3_types
+from recount3 import version
 
 if TYPE_CHECKING:  # pragma: no cover
     import biocframe
@@ -2934,7 +2936,6 @@ class R3ResourceBundle:
             )
             counts.index = _make_unique_names(original_ids)
         rows = pd.DataFrame({"feature_id": original_ids}, index=counts.index)
-        from recount3.version import __version__
 
         def collapse(values: Iterable[str | None]) -> str | list[str]:
             """Deduplicate provenance values and simplify a singleton to a
@@ -2952,7 +2953,7 @@ class R3ResourceBundle:
 
         metadata = {
             "time_created": datetime.now(timezone.utc).isoformat(),
-            "recount3_version": __version__,
+            "recount3_version": version.__version__,
             "project": collapse(key[2] for key in keys),
             "organism": collapse(key[0] for key in keys),
             "project_home": collapse(
@@ -2972,7 +2973,7 @@ class R3ResourceBundle:
             "metadata_join": metadata_join,
             "join_policy": join_policy,
             "recount3_url": collapse(
-                (res.config or resource.default_config()).base_url
+                (res.config or r3_config.default_config()).base_url
                 for res in selected.resources
                 if isinstance(res, resource.R3Resource)
             ),

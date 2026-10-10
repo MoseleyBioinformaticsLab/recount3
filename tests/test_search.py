@@ -279,9 +279,9 @@ class TestMakeResources:
             {"resource_type": "data_sources", "organism": "human"},
         ]
         with (
-            mock.patch("recount3.search.R3ResourceDescription"),
+            mock.patch("recount3._descriptions.R3ResourceDescription"),
             mock.patch(
-                "recount3.search.R3Resource",
+                "recount3.resource.R3Resource",
                 side_effect=[mock_res1, mock_res2],
             ),
         ):
@@ -729,7 +729,7 @@ class TestAvailableSamples:
 
     def test_returns_dataframe_with_expected_columns(self, cfg: Config) -> None:
         _seed_human_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             df = available_samples(organism="human", data_sources=["sra"])
         assert isinstance(df, pd.DataFrame)
         assert not df.empty
@@ -740,7 +740,7 @@ class TestAvailableSamples:
         self, cfg: Config
     ) -> None:
         _seed_human_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             df = available_samples(organism="human", data_sources=["sra"])
         assert (df["organism"] == "human").all()
 
@@ -921,7 +921,7 @@ class TestAvailableSamples:
     def test_data_sources_none_uses_all(self, cfg: Config) -> None:
         _seed_human_sra(cfg)
         # gtex and tcga not seeded -> strict=False
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             df = available_samples(
                 organism="human", data_sources=None, strict=False
             )
@@ -945,7 +945,7 @@ class TestAvailableProjects:
 
     def test_one_row_per_project(self, cfg: Config) -> None:
         _seed_human_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             df = available_projects(organism="human", data_sources=["sra"])
         assert isinstance(df, pd.DataFrame)
         assert df["project"].nunique() == len(df)
@@ -1067,7 +1067,7 @@ class TestProjectHomes:
 class TestSamplesForProject:
     def test_returns_sorted_sample_ids(self, cfg: Config) -> None:
         _seed_human_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             ids = samples_for_project(
                 organism="human", data_source="sra", project="SRP009615"
             )
@@ -1163,7 +1163,7 @@ class TestSamplesForProject:
     def test_md_prefix_stripped_before_column_lookup(self, cfg: Config) -> None:
         """Columns like 'sra.study' must be stripped before proj_keys lookup."""
         _seed_human_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             ids = samples_for_project(
                 organism="human", data_source="sra", project="SRP014565"
             )
@@ -1174,14 +1174,14 @@ class TestCreateSampleProjectLists:
     def test_empty_organism_loops_all(self, cfg: Config) -> None:
         _seed_human_sra(cfg)
         _seed_mouse_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             samples, projects = create_sample_project_lists(organism="")
         assert isinstance(samples, list)
         assert isinstance(projects, list)
 
     def test_specific_organism_filters(self, cfg: Config) -> None:
         _seed_human_sra(cfg)
-        with mock.patch("recount3.resource.default_config", return_value=cfg):
+        with mock.patch("recount3.config.default_config", return_value=cfg):
             samples, projects = create_sample_project_lists(organism="human")
         assert len(projects) > 0
         assert isinstance(projects[0], str)

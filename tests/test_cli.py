@@ -886,7 +886,7 @@ class TestCmdSearchRejectsUnreadFilters:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_project_all"
+            "recount3.cli.search.search_project_all"
         ) as mock_search:
             with pytest.raises(ValueError, match="Unknown filter"):
                 _cmd_search(args, cfg)
@@ -908,7 +908,7 @@ class TestCmdSearchAnnotations:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -923,7 +923,7 @@ class TestCmdSearchAnnotations:
             filters=["organism=human"],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[]
+            "recount3.cli.search.search_annotations", return_value=[]
         ):
             with pytest.raises(ValueError, match="Missing required filters"):
                 _cmd_search(args, cfg)
@@ -953,7 +953,7 @@ class TestCmdSearchGeneExon:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_count_files_gene_or_exon",
+            "recount3.cli.search.search_count_files_gene_or_exon",
             return_value=[res],
         ) as m:
             code = _cmd_search(args, cfg)
@@ -985,7 +985,7 @@ class TestCmdSearchGeneExon:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_count_files_gene_or_exon",
+            "recount3.cli.search.search_count_files_gene_or_exon",
             return_value=[res],
         ) as m:
             code = _cmd_search(args, cfg)
@@ -1022,7 +1022,7 @@ class TestCmdSearchJunctions:
             filters=["organism=human", "data_source=sra", "project=SRP000001"],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_count_files_junctions",
+            "recount3.cli.search.search_count_files_junctions",
             return_value=[res],
         ) as m:
             code = _cmd_search(args, cfg)
@@ -1055,7 +1055,7 @@ class TestCmdSearchJunctions:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_count_files_junctions",
+            "recount3.cli.search.search_count_files_junctions",
             return_value=[res],
         ) as m:
             code = _cmd_search(args, cfg)
@@ -1086,7 +1086,7 @@ class TestCmdSearchMetadata:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_metadata_files", return_value=[res]
+            "recount3.cli.search.search_metadata_files", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1121,7 +1121,7 @@ class TestCmdSearchBigwig:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_bigwig_files", return_value=[res]
+            "recount3.cli.search.search_bigwig_files", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1144,7 +1144,7 @@ class TestCmdSearchSources:
         res = R3Resource(description=desc)
         args = _make_search_args(mode="sources", filters=["organism=human"])
         with mock.patch(
-            "recount3.cli.r3_search.search_data_sources", return_value=[res]
+            "recount3.cli.search.search_data_sources", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1172,7 +1172,7 @@ class TestCmdSearchSourceMeta:
             filters=["organism=human", "data_source=sra"],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_data_source_metadata",
+            "recount3.cli.search.search_data_source_metadata",
             return_value=[res],
         ):
             code = _cmd_search(args, cfg)
@@ -1209,7 +1209,7 @@ class TestCmdSearchProject:
         if found is None:
             found = []
         with mock.patch(
-            "recount3.cli.r3_search.search_project_all", return_value=found
+            "recount3.cli.search.search_project_all", return_value=found
         ) as m:
             code = _cmd_search(args, cfg)
         return code, m
@@ -1223,7 +1223,7 @@ class TestCmdSearchProject:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="project", filters=["organism=human"])
         with mock.patch(
-            "recount3.cli.r3_search.search_project_all", return_value=[]
+            "recount3.cli.search.search_project_all", return_value=[]
         ):
             with pytest.raises(ValueError, match="Missing required filters"):
                 _cmd_search(args, cfg)
@@ -1331,7 +1331,7 @@ class TestCmdSearchOutputDestination:
             output=str(out_file),
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1352,7 +1352,7 @@ class TestCmdSearchOutputDestination:
             outdir=str(outdir),
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1375,7 +1375,7 @@ class TestCmdSearchOutputDestination:
             format="tsv",
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1398,7 +1398,7 @@ class TestCmdSearchOutputDestination:
             format="tsv",
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             _cmd_search(args, cfg)
         files = list(outdir.iterdir())
@@ -1418,7 +1418,7 @@ class TestCmdSearchOutputDestination:
             ],
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             with caplog.at_level(logging.INFO, logger="recount3"):
                 _cmd_search(args, cfg)
@@ -1437,7 +1437,7 @@ class TestCmdSearchOutputDestination:
             output=str(out_file),
         )
         with mock.patch(
-            "recount3.cli.r3_search.search_annotations", return_value=[res]
+            "recount3.cli.search.search_annotations", return_value=[res]
         ):
             code = _cmd_search(args, cfg)
         assert code == 0
@@ -1692,7 +1692,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_parquet_engine", return_value="pyarrow"
@@ -1716,7 +1716,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_parquet_engine",
@@ -1750,7 +1750,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_parquet_engine",
@@ -1782,7 +1782,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -1800,7 +1800,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -1819,7 +1819,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -1835,7 +1835,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -1851,7 +1851,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -1869,7 +1869,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_parquet_engine", return_value="pyarrow"
@@ -1892,7 +1892,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_parquet_engine", return_value="pyarrow"
@@ -1927,7 +1927,7 @@ class TestCmdBundleStackCounts:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             return _cmd_bundle_stack_counts(args, cfg)
@@ -2002,7 +2002,7 @@ class TestCmdBundleStackCounts:
                 "recount3._utils.ensure_parquet_engine", side_effect=boom
             ),
             mock.patch("recount3.cli._iter_manifest") as mock_manifest,
-            mock.patch("recount3.cli.R3ResourceBundle") as mock_bundle_cls,
+            mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle_cls,
             caplog.at_level(logging.ERROR),
         ):
             code = _cmd_bundle_stack_counts(args, cfg)
@@ -2148,7 +2148,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("pickle.dump") as mock_pickle,
         ):
@@ -2168,7 +2168,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2194,7 +2194,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2236,7 +2236,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2277,7 +2277,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_se(args, cfg)
@@ -2293,7 +2293,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_se(args, cfg)
@@ -2310,7 +2310,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("pickle.dump", side_effect=OSError("disk full")),
         ):
@@ -2330,7 +2330,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2357,7 +2357,7 @@ class TestCmdBundleSe:
                 "recount3._utils.ensure_anndata_support", side_effect=boom
             ),
             mock.patch("recount3.cli._iter_manifest") as mock_manifest,
-            mock.patch("recount3.cli.R3ResourceBundle") as mock_bundle_cls,
+            mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle_cls,
             caplog.at_level(logging.ERROR),
         ):
             code = _cmd_bundle_se(args, cfg)
@@ -2379,7 +2379,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_anndata_support",
@@ -2416,7 +2416,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_se(args, cfg)
@@ -2457,7 +2457,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_se(args, cfg)
@@ -2492,7 +2492,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             caplog.at_level(logging.ERROR),
         ):
@@ -2529,7 +2529,7 @@ class TestCmdBundleSe:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             caplog.at_level(logging.WARNING),
         ):
@@ -2569,7 +2569,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("pickle.dump") as mock_pickle,
         ):
@@ -2589,7 +2589,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2615,7 +2615,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2657,7 +2657,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2697,7 +2697,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("pickle.dump"),
         ):
@@ -2718,7 +2718,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_rse(args, cfg)
@@ -2736,7 +2736,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_rse(args, cfg)
@@ -2753,7 +2753,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("pickle.dump", side_effect=OSError("disk full")),
         ):
@@ -2773,7 +2773,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch("recount3._utils.ensure_anndata_support"),
             mock.patch(
@@ -2800,7 +2800,7 @@ class TestCmdBundleRse:
                 "recount3._utils.ensure_anndata_support", side_effect=boom
             ),
             mock.patch("recount3.cli._iter_manifest") as mock_manifest,
-            mock.patch("recount3.cli.R3ResourceBundle") as mock_bundle_cls,
+            mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle_cls,
             caplog.at_level(logging.ERROR),
         ):
             code = _cmd_bundle_rse(args, cfg)
@@ -2822,7 +2822,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             mock.patch(
                 "recount3._utils.ensure_anndata_support",
@@ -2859,7 +2859,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_rse(args, cfg)
@@ -2900,7 +2900,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
         ):
             code = _cmd_bundle_rse(args, cfg)
@@ -2935,7 +2935,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             caplog.at_level(logging.ERROR),
         ):
@@ -2972,7 +2972,7 @@ class TestCmdBundleRse:
         with (
             mock.patch("recount3.cli._iter_manifest", return_value=[res]),
             mock.patch(
-                "recount3.cli.R3ResourceBundle", return_value=mock_bundle
+                "recount3.bundle.R3ResourceBundle", return_value=mock_bundle
             ),
             caplog.at_level(logging.WARNING),
         ):
@@ -3001,7 +3001,7 @@ class TestCmdSmokeTest:
         res = R3Resource(description=desc)
         with (
             mock.patch(
-                "recount3.cli.r3_search.search_data_source_metadata",
+                "recount3.cli.search.search_data_source_metadata",
                 return_value=[res],
             ),
             mock.patch("recount3.cli._download_one") as m,
@@ -3026,7 +3026,7 @@ class TestCmdSmokeTest:
         res2 = R3Resource(description=desc)
         with (
             mock.patch(
-                "recount3.cli.r3_search.search_data_source_metadata",
+                "recount3.cli.search.search_data_source_metadata",
                 return_value=[res1, res2],
             ),
             mock.patch("recount3.cli._download_one") as m,
@@ -3214,7 +3214,7 @@ class TestSmokeTestCustomDest:
         res = R3Resource(description=desc)
         with (
             mock.patch(
-                "recount3.cli.r3_search.search_data_source_metadata",
+                "recount3.cli.search.search_data_source_metadata",
                 return_value=[res],
             ),
             mock.patch("recount3.cli._download_one") as m,

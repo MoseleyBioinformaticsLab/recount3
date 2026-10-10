@@ -90,9 +90,9 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
-from recount3.bundle import R3ResourceBundle
-from recount3.search import annotation_ext
 from recount3 import _utils
+from recount3 import bundle as r3_bundle
+from recount3 import search
 
 if TYPE_CHECKING:  # pragma: no cover
     from numpy.typing import NDArray
@@ -235,7 +235,9 @@ def _resolve_annotation_extension(
         return str(annotation_extension).strip()
 
     if annotation_label:
-        return annotation_ext(organism=organism, annotation=annotation_label)
+        return search.annotation_ext(
+            organism=organism, annotation=annotation_label
+        )
 
     org = organism.strip().lower()
     if org == "human":
@@ -249,7 +251,7 @@ def _resolve_annotation_extension(
 
 
 def build_summarized_experiment(
-    bundle: R3ResourceBundle,
+    bundle: r3_bundle.R3ResourceBundle,
     *,
     genomic_unit: str,
     annotation_extension: str | None = None,
@@ -305,7 +307,7 @@ def build_summarized_experiment(
 
 
 def build_ranged_summarized_experiment(
-    bundle: R3ResourceBundle,
+    bundle: r3_bundle.R3ResourceBundle,
     *,
     genomic_unit: str,
     annotation_extension: str | None = None,
@@ -508,7 +510,7 @@ def create_ranged_summarized_experiment(
     else:
         junction_exts = tuple(str(ext).strip() for ext in junction_extensions)
 
-    project_bundle = R3ResourceBundle.discover(
+    project_bundle = r3_bundle.R3ResourceBundle.discover(
         organism=organism,
         data_source=data_source,
         project=project,

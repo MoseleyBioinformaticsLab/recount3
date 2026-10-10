@@ -56,19 +56,14 @@ import sys
 import types
 from typing import Any, Iterable, Iterator, Mapping
 
-from recount3.bundle import R3ResourceBundle
-from recount3.config import Config, default_config
-from recount3.errors import (
-    CompatibilityError,
-    ConfigurationError,
-    LoadError,
-    Recount3Error,
-)
-from recount3.resource import R3Resource
-from recount3.types import CacheMode, CompatibilityMode
 from recount3 import _utils
-from recount3 import search as r3_search
-from recount3.version import __version__
+from recount3 import bundle as r3_bundle
+from recount3 import config as r3_config
+from recount3 import errors
+from recount3 import resource
+from recount3 import search
+from recount3 import types as r3_types
+from recount3 import version
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -195,7 +190,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=f"%(prog)s {version.__version__}",
     )
 
     subparsers = parser.add_subparsers(
@@ -800,7 +795,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
+def _build_config_from_env_and_flags(
+    args: argparse.Namespace,
+) -> r3_config.Config:
     """Construct a :class:`Config` from environment and CLI flags.
 
     Flag values override environment; unspecified flags keep defaults from
@@ -815,7 +812,9 @@ def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
     Raises:
       ConfigurationError: If a provided path is invalid or incompatible.
     """
-    base = default_config(cache_backend=getattr(args, "cache_backend", None))
+    base = r3_config.default_config(
+        cache_backend=getattr(args, "cache_backend", None)
+    )
 
     base_url = args.base_url or base.base_url
     cache_dir = Path(args.cache_dir) if args.cache_dir else base.cache_dir
@@ -830,11 +829,11 @@ def _build_config_from_env_and_flags(args: argparse.Namespace) -> Config:
     try:
         cache_dir = cache_dir.expanduser().resolve()
     except Exception as exc:
-        raise ConfigurationError(
+        raise errors.ConfigurationError(
             f"Invalid cache directory: {cache_dir!s}"
         ) from exc
 
-    return Config(
+    return r3_config.Config(
         base_url=base_url,
         timeout=int(timeout),
         insecure_ssl=bool(insecure_ssl),
@@ -978,7 +977,9 @@ def _reject_unknown_filters(mode: str, filters: Mapping[str, str]) -> None:
     )
 
 
-def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
+def _resource_from_dict(
+    mapping: Mapping[str, Any], cfg: r3_config.Config
+) -> resource.R3Resource:
     """Create an :class:`R3Resource` from a manifest mapping.
 
     The mapping may contain convenience keys like ``url`` and ``arcname``.
@@ -997,11 +998,11 @@ def _resource_from_dict(mapping: Mapping[str, Any], cfg: Config) -> R3Resource:
       KeyError: If ``resource_type`` is missing.
       ValueError: If the resource fields are invalid for that type.
     """
-    return R3Resource.from_mapping(mapping, config=cfg)
+    return resource.R3Resource.from_mapping(mapping, config=cfg)
 
 
 def _write_jsonl(
-    resources: Iterable[R3Resource], output_path: Path | None
+    resources: Iterable[resource.R3Resource], output_path: Path | None
 ) -> None:
     """Write one JSON object per line describing each resource.
 
@@ -1038,7 +1039,7 @@ def _write_jsonl(
 
 
 def _write_tsv(
-    resources: Iterable[R3Resource], output_path: Path | None
+    resources: Iterable[resource.R3Resource], output_path: Path | None
 ) -> None:
     """Write a TSV manifest with a stable column ordering.
 
@@ -1096,7 +1097,9 @@ def _write_tsv(
             sink.close()
 
 
-def _iter_manifest(path_or_dash: str, cfg: Config) -> Iterator[R3Resource]:
+def _iter_manifest(
+    path_or_dash: str, cfg: r3_config.Config
+) -> Iterator[resource.R3Resource]:
     """Yield :class:`R3Resource` objects from a JSONL manifest.
 
     Args:
@@ -1132,7 +1135,7 @@ def _iter_manifest(path_or_dash: str, cfg: Config) -> Iterator[R3Resource]:
         yield _resource_from_dict(obj, cfg)
 
 
-def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_ids(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Implement the ``ids`` subcommand.
 
     Writes two lists (samples and projects) to the specified files or stdout.
@@ -1146,11 +1149,9 @@ def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
     """
     del cfg  # Unused in this handler.
 
-    from recount3.search import (  # pylint: disable=import-outside-toplevel
-        create_sample_project_lists,
+    samples, projects = search.create_sample_project_lists(
+        organism=args.organism
     )
-
-    samples, projects = create_sample_project_lists(organism=args.organism)
 
     def _emit(items: list[str], path: str | None, label: str) -> None:
         if path:
@@ -1168,7 +1169,7 @@ def _cmd_ids(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Execute the 'search' subcommand.
 
     Dispatches to one of the supported modes and writes a manifest to
@@ -1230,11 +1231,11 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
                 f"Missing required filters for mode={mode!r}: {missing_str}"
             )
 
-    found: list[R3Resource]
+    found: list[resource.R3Resource]
     match mode:
         case "annotations":
             _require("organism", "genomic_unit", "annotation_extension")
-            found = r3_search.search_annotations(
+            found = search.search_annotations(
                 organism=filters["organism"],
                 genomic_unit=filters["genomic_unit"],
                 annotation_extension=filters["annotation_extension"],
@@ -1243,7 +1244,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
         case "gene-exon":
             _require("organism", "data_source", "genomic_unit", "project")
             ann_ext = filters.get("annotation_extension", ("G026",))
-            found = r3_search.search_count_files_gene_or_exon(
+            found = search.search_count_files_gene_or_exon(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
                 genomic_unit=filters["genomic_unit"],
@@ -1253,7 +1254,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
 
         case "junctions":
             _require("organism", "data_source", "project")
-            found = r3_search.search_count_files_junctions(
+            found = search.search_count_files_junctions(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
                 project=filters["project"],
@@ -1263,7 +1264,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
 
         case "metadata":
             _require("organism", "data_source", "table_name", "project")
-            found = r3_search.search_metadata_files(
+            found = search.search_metadata_files(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
                 table_name=filters["table_name"],
@@ -1272,7 +1273,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
 
         case "bigwig":
             _require("organism", "data_source", "project", "sample")
-            found = r3_search.search_bigwig_files(
+            found = search.search_bigwig_files(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
                 project=filters["project"],
@@ -1310,7 +1311,7 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
             inc_meta = _as_bool(filters.get("include_metadata"), True)
             inc_bw = _as_bool(filters.get("include_bigwig"), False)
 
-            found = r3_search.search_project_all(
+            found = search.search_project_all(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
                 project=filters["project"],
@@ -1324,11 +1325,11 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
 
         case "sources":
             _require("organism")
-            found = r3_search.search_data_sources(organism=filters["organism"])
+            found = search.search_data_sources(organism=filters["organism"])
 
         case "source-meta":
             _require("organism", "data_source")
-            found = r3_search.search_data_source_metadata(
+            found = search.search_data_source_metadata(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
             )
@@ -1362,10 +1363,10 @@ def _cmd_search(args: argparse.Namespace, cfg: Config) -> int:
 
 
 def _download_one(
-    res: R3Resource,
-    cfg: Config,
+    res: resource.R3Resource,
+    cfg: r3_config.Config,
     dest: Path,
-    cache_mode: CacheMode,
+    cache_mode: r3_types.CacheMode,
     overwrite: bool,
 ) -> dict[str, Any]:
     """Download one resource and return a JSON-serializable event.
@@ -1417,7 +1418,7 @@ def _download_one(
         }
 
 
-def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_download(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Implement the ``download`` subcommand.
 
     Prints one JSONL progress event per attempted download to stdout. The exit
@@ -1449,7 +1450,7 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
         return 0
 
     dest = Path(args.dest)
-    cache_mode: CacheMode = args.cache  # type: ignore[assignment]
+    cache_mode: r3_types.CacheMode = args.cache  # type: ignore[assignment]
     overwrite: bool = bool(args.overwrite)
 
     if dest.suffix.lower() == ".zip":
@@ -1458,7 +1459,7 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
         dest.mkdir(parents=True, exist_ok=True)
 
     total = len(resources)
-    errors = 0
+    failures = 0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futs = [
@@ -1469,9 +1470,9 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
             evt = fut.result()
             sys.stdout.write(json.dumps(evt, ensure_ascii=False) + "\n")
             if evt.get("status") == "error":
-                errors += 1
+                failures += 1
 
-    if errors == 0:
+    if failures == 0:
         logging.info(
             "Downloaded %d/%d successfully to: %s",
             total,
@@ -1479,24 +1480,26 @@ def _cmd_download(args: argparse.Namespace, cfg: Config) -> int:
             dest,
         )
         return 0
-    if errors < total:
+    if failures < total:
         logging.warning(
             "Partial success: %d/%d failed. Destination: %s",
-            errors,
+            failures,
             total,
             dest,
         )
         return 3
     logging.error(
         "All downloads failed: %d/%d errors. Destination: %s",
-        errors,
+        failures,
         total,
         dest,
     )
     return 2
 
 
-def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_bundle_stack_counts(
+    args: argparse.Namespace, cfg: r3_config.Config
+) -> int:
     """Implement ``bundle stack-counts`` subcommand.
 
     Loads resources from a manifest and concatenates compatible count matrices.
@@ -1523,10 +1526,10 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
         logging.debug("Parquet engine resolved by pandas: %s", engine)
 
     resources = list(_iter_manifest(args.manifest, cfg))
-    bundle = R3ResourceBundle()
+    bundle = r3_bundle.R3ResourceBundle()
     bundle.extend(resources)
 
-    compat: CompatibilityMode = args.compat  # type: ignore[assignment]
+    compat: r3_types.CompatibilityMode = args.compat  # type: ignore[assignment]
     try:
         df = bundle.stack_count_matrices(
             join_policy=args.join,
@@ -1535,7 +1538,12 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
             autoload=True,
             compat=compat,
         )
-    except (CompatibilityError, LoadError, ValueError, ImportError) as exc:
+    except (
+        errors.CompatibilityError,
+        errors.LoadError,
+        ValueError,
+        ImportError,
+    ) as exc:
         logging.error("Failed to stack count matrices (reason: %r)", exc)
         return 2
 
@@ -1581,7 +1589,7 @@ def _cmd_bundle_stack_counts(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_bundle_se(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Implement ``bundle se`` subcommand.
 
     Loads resources from a manifest and assembles a
@@ -1607,7 +1615,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
             return 2
 
     resources = list(_iter_manifest(args.manifest, cfg))
-    bundle = R3ResourceBundle()
+    bundle = r3_bundle.R3ResourceBundle()
     bundle.extend(resources)
 
     try:
@@ -1676,7 +1684,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_bundle_rse(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Implement ``bundle rse`` subcommand.
 
     Loads resources from a manifest and assembles a
@@ -1702,7 +1710,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
             return 2
 
     resources = list(_iter_manifest(args.manifest, cfg))
-    bundle = R3ResourceBundle()
+    bundle = r3_bundle.R3ResourceBundle()
     bundle.extend(resources)
 
     try:
@@ -1772,7 +1780,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
+def _cmd_smoke_test(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Implement the ``smoke-test`` subcommand (small connectivity test).
 
     This downloads a handful of sources metadata files for 'human' (which are
@@ -1787,7 +1795,7 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
       Process exit code.
     """
     limit = max(1, int(args.limit))
-    resources = r3_search.search_data_source_metadata(
+    resources = search.search_data_source_metadata(
         organism="human", data_source="sra"
     )
     resources = [dataclasses.replace(r, config=cfg) for r in resources[:limit]]
@@ -1804,7 +1812,7 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: Config) -> int:
     return 0
 
 
-def _dispatch(args: argparse.Namespace, cfg: Config) -> int:
+def _dispatch(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     """Dispatch parsed arguments to the appropriate subcommand handler.
 
     Args:
@@ -1868,7 +1876,7 @@ def main(argv: list[str] | None = None) -> None:
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
         code = 0
-    except (ConfigurationError, Recount3Error, ValueError) as exc:
+    except (errors.ConfigurationError, errors.Recount3Error, ValueError) as exc:
         logging.error("Fatal error: %r", exc)
         code = 2
 

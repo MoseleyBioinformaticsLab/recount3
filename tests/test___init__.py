@@ -127,10 +127,7 @@ def test_se_submodule_is_a_declared_export() -> None:
 
 def test_se_submodule_is_exposed_by_a_bare_package_import() -> None:
     """``import recount3`` alone must make ``recount3.se`` resolve."""
-    code = (
-        "import recount3 as r3\n"
-        "assert callable(r3.se.compute_tpm)\n"
-    )
+    code = "import recount3 as r3\n" "assert callable(r3.se.compute_tpm)\n"
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
