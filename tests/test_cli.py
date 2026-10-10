@@ -3246,7 +3246,9 @@ class TestMainBrokenPipe:
 
 
 class TestMainGuard:
-    def test_dunder_main_calls_main(self) -> None:
+    def test_dunder_main_calls_main(
+        self, recount3_subprocess_env: dict[str, str]
+    ) -> None:
         import subprocess
         import sys
 
@@ -3255,6 +3257,7 @@ class TestMainGuard:
             capture_output=True,
             text=True,
             timeout=10,
+            env=recount3_subprocess_env,
         )
         assert result.returncode == 0
         assert "recount3" in result.stdout

@@ -44,8 +44,13 @@ centralizes that skipping logic. Each optional stack gets one marker.
 from __future__ import annotations
 
 import importlib.util
+import os
+import pathlib
 
 import pytest
+
+_REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+_SRC_DIR = _REPO_ROOT / "src"
 
 
 def _all_installed(*module_names: str) -> bool:
@@ -119,6 +124,48 @@ def pytest_configure(config: pytest.Config) -> None:
         "requires_anndata: test needs anndata and delayedarray from the "
         "'recount3[anndata]' extra, plus the BiocPy stack.",
     )
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Refuse to verify an installed package while importing the checkout.
+
+    Release verification sets ``RECOUNT3_TEST_INSTALLED=1`` and disables the
+    ``pythonpath = ["src"]`` setting, so the suite exercises the published
+    artifact. If ``recount3`` still resolves inside the repository, the run
+    would only retest the source tree, so it stops before collecting tests.
+    """
+    del session  # Unused; the check depends only on the import location.
+    if os.environ.get("RECOUNT3_TEST_INSTALLED") != "1":
+        return
+    import recount3  # pylint: disable=import-outside-toplevel
+
+    location = pathlib.Path(recount3.__file__).resolve()
+    if location.is_relative_to(_REPO_ROOT):
+        raise pytest.UsageError(
+            f"RECOUNT3_TEST_INSTALLED=1, but recount3 was imported from the "
+            f"checkout ({location}). Run pytest with -o pythonpath= and install "
+            "the package without -e."
+        )
+
+
+@pytest.fixture
+def recount3_subprocess_env() -> dict[str, str]:
+    """Environment for a child interpreter that imports the recount3 under test.
+
+    pytest's ``pythonpath`` setting adds ``src`` to ``sys.path`` only in the
+    test process, so a child interpreter would otherwise import whichever
+    recount3 is installed. When the tests run against the checkout, ``src`` is
+    passed on through ``PYTHONPATH``; when they run against an installed
+    package, the child already imports that package and nothing is added.
+    """
+    import recount3  # pylint: disable=import-outside-toplevel
+
+    env = os.environ.copy()
+    if pathlib.Path(recount3.__file__).resolve().parent.parent == _SRC_DIR:
+        env["PYTHONPATH"] = os.pathsep.join(
+            filter(None, [str(_SRC_DIR), env.get("PYTHONPATH")])
+        )
+    return env
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

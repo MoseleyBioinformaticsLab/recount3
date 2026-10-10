@@ -125,7 +125,9 @@ def test_se_submodule_is_a_declared_export() -> None:
     assert recount3.se is sys.modules["recount3.se"]
 
 
-def test_se_submodule_is_exposed_by_a_bare_package_import() -> None:
+def test_se_submodule_is_exposed_by_a_bare_package_import(
+    recount3_subprocess_env: dict[str, str],
+) -> None:
     """``import recount3`` alone must make ``recount3.se`` resolve."""
     code = "import recount3 as r3\n" "assert callable(r3.se.compute_tpm)\n"
     result = subprocess.run(
@@ -133,6 +135,7 @@ def test_se_submodule_is_exposed_by_a_bare_package_import() -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=recount3_subprocess_env,
     )
     assert result.returncode == 0, result.stderr
 

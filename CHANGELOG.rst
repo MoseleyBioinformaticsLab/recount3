@@ -1,6 +1,28 @@
 Changelog
 =========
 
+Unreleased
+----------
+
+Internal
+~~~~~~~~
+
+- The release workflow's verify jobs test the installed package. The
+  ``pythonpath = ["src"]`` pytest setting put the checkout ahead of
+  site-packages, so they retested the source tree and could pass with a
+  defective artifact. They now run pytest with that setting disabled, and
+  the suite stops if ``recount3`` still imports from the repository. Tests
+  that start a child interpreter import the same ``recount3`` as the test
+  process.
+- The release workflow's verify jobs wait until TestPyPI or PyPI lists the
+  version just published before installing it. Each runner checks every 30
+  seconds and starts no new check after 15 minutes, reporting whether the
+  version was not yet listed or the index could not be reached, with pip's
+  last output. The package index is served through a CDN that took several
+  minutes to list 1.2.0 and 1.3.0 in some regions, longer than the install
+  step's retries cover, so both releases needed their failed verify jobs
+  re-run by hand.
+
 1.3.0 (2026-10-10)
 ------------------
 

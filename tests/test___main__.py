@@ -31,8 +31,6 @@
 
 from __future__ import annotations
 
-import os
-import pathlib
 import subprocess
 import sys
 
@@ -50,17 +48,16 @@ def test_main_delegates_to_cli() -> None:
     assert main_module.cli is recount3.cli
 
 
-def test_python_m_recount3_help() -> None:
+def test_python_m_recount3_help(
+    recount3_subprocess_env: dict[str, str],
+) -> None:
     """python -m recount3 --help must exit 0 and print usage information."""
-    src = str(pathlib.Path(__file__).parent.parent / "src")
-    env = os.environ.copy()
-    env["PYTHONPATH"] = src + os.pathsep + env.get("PYTHONPATH", "")
-
     result = subprocess.run(
         [sys.executable, "-m", "recount3", "--help"],
         capture_output=True,
         text=True,
-        env=env,
+        check=False,
+        env=recount3_subprocess_env,
     )
 
     assert result.returncode == 0

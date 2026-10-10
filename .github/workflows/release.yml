@@ -28,6 +28,9 @@ jobs:
     needs: [release-version, publish-testpypi]
     uses: ./.github/workflows/run-tests.yml
     with:
+      wait_for_requirement: recount3==${{ needs.release-version.outputs.version }}
+      wait_for_index_url: https://test.pypi.org/simple/
+      test_installed_package: true
       install_command_linux: >-
         python3 -m pip install
         -i https://test.pypi.org/simple/
@@ -71,6 +74,8 @@ jobs:
     needs: [release-version, publish-pypi]
     uses: ./.github/workflows/run-tests.yml
     with:
+      wait_for_requirement: recount3==${{ needs.release-version.outputs.version }}
+      test_installed_package: true
       install_command_linux: >-
         python3 -m pip install
         "recount3[dev,biocpy,parquet,anndata,pybiocfilecache]"

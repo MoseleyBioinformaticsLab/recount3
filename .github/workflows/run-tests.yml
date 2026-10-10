@@ -40,6 +40,32 @@ on:
           omitted too. BiocPy- and anndata-dependent tests skip there.
         required: true
         type: string
+      wait_for_requirement:
+        description: >-
+          Requirement to wait for on wait_for_index_url before installing, for
+          jobs that verify a release published moments earlier (for example
+          recount3==1.3.0). The index is served through a CDN that can take
+          several minutes to list a new upload, and longer in some regions,
+          so every runner checks until it can download the exact version. No
+          new check starts after 15 minutes, and each check is bounded by
+          pip's 30-second timeout and two retries. Empty skips the wait.
+        required: false
+        type: string
+        default: ""
+      test_installed_package:
+        description: >-
+          Test the installed package rather than the checkout. pytest's
+          pythonpath setting puts src ahead of site-packages, so this
+          disables it and has the suite stop if recount3 still imports from
+          the repository. Set it for jobs that verify a published release.
+        required: false
+        type: boolean
+        default: false
+      wait_for_index_url:
+        description: Simple index URL that wait_for_requirement is polled on.
+        required: false
+        type: string
+        default: https://pypi.org/simple/
 
 jobs:
   run:
@@ -69,6 +95,58 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
+      - name: Wait for ${{ inputs.wait_for_requirement }} on the index
+        if: inputs.wait_for_requirement != ''
+        shell: python
+        timeout-minutes: 20
+        env:
+          REQUIREMENT: ${{ inputs.wait_for_requirement }}
+          INDEX_URL: ${{ inputs.wait_for_index_url }}
+        run: |
+          import os, re, subprocess, sys, time
+
+          requirement = os.environ["REQUIREMENT"]
+          index_url = os.environ["INDEX_URL"]
+          dest = os.path.join(os.environ["RUNNER_TEMP"], "wait-for-index")
+          deadline = time.monotonic() + 15 * 60
+          unreachable = re.compile(
+              r"Retrying \(Retry\(|NewConnectionError|ConnectTimeout|"
+              r"ReadTimeout|Max retries exceeded|Could not fetch URL|SSLError|"
+              r"ProxyError|Network is unreachable|Name or service not known"
+          )
+          attempt = 0
+          while True:
+              attempt += 1
+              result = subprocess.run(
+                  [sys.executable, "-m", "pip", "download", "--no-deps",
+                   "--no-cache-dir", "--timeout", "30", "--retries", "2",
+                   "--index-url", index_url, "--dest", dest, requirement],
+                  capture_output=True, text=True,
+              )
+              output = result.stdout + result.stderr
+              if result.returncode == 0:
+                  print(f"{requirement} is available on {index_url}.")
+                  sys.exit(0)
+              if unreachable.search(output):
+                  reason = f"{index_url} could not be reached"
+              elif "No matching distribution found" in output:
+                  listed = re.search(r"\(from versions: ([^)]*)\)", output)
+                  versions = listed.group(1) if listed else "unknown"
+                  reason = f"{requirement} is not listed yet (listed: {versions})"
+              else:
+                  print(output)
+                  print(f"::error::Checking {index_url} for {requirement} failed "
+                        "for a reason other than an unlisted version or an "
+                        "unreachable index; pip's output is above.")
+                  sys.exit(1)
+              if time.monotonic() + 30 > deadline:
+                  print(output)
+                  print(f"::error::Gave up after 15 minutes: {reason}. pip's "
+                        "last output is above.")
+                  sys.exit(1)
+              print(f"Check {attempt}: {reason}; checking again in 30 s.",
+                    flush=True)
+              time.sleep(30)
       - name: Install package (Linux)
         if: runner.os == 'Linux'
         uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea # v3.8.0
@@ -97,4 +175,6 @@ jobs:
           attempt_limit: 5
           attempt_delay: 10000
       - name: Run tests
-        run: python -m pytest
+        env:
+          RECOUNT3_TEST_INSTALLED: ${{ inputs.test_installed_package && '1' || '' }}
+        run: python -m pytest ${{ inputs.test_installed_package && '-o pythonpath=' || '' }}
