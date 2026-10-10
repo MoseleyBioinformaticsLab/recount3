@@ -29,6 +29,9 @@ Documentation
 - The README, the tutorial, and ``CONTRIBUTING.rst`` state that Python 3.10
   through 3.15 is supported, and note that the ``anndata`` extra is not yet
   installable on Python 3.15.
+- The release procedure in ``CONTRIBUTING.rst`` lists every file that carries
+  the version: ``version.py``, ``tests/test_version.py``, and
+  ``CITATION.cff``.
 - The package docstring states that ``recount3.se`` is exposed as ``r3.se``
   rather than flattened into the top-level namespace, since its helpers
   operate on BiocPy experiments.

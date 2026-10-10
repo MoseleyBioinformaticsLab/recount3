@@ -246,7 +246,11 @@ Releases
 Releases are prepared by the maintainers. The package follows semantic
 versioning. The procedure is:
 
-1. Update ``__version__`` in ``src/recount3/version.py``.
+1. Set the new version in ``src/recount3/version.py`` (``__version__``),
+   ``tests/test_version.py`` (the expected version), and ``CITATION.cff``
+   (``version``, with ``date-released`` set to the release date). The release
+   workflow runs the suite only after publishing to TestPyPI, so a stale
+   expected version fails the release there.
 2. Retitle the ``Unreleased`` section of ``CHANGELOG.rst`` as
    ``<version> (<YYYY-MM-DD>)``.
 3. Publish a GitHub release tagged ``v<version>``.
