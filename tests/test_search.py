@@ -33,6 +33,7 @@
 
 from __future__ import annotations
 
+import math
 import shutil
 from pathlib import Path
 from unittest import mock
@@ -839,6 +840,30 @@ class TestAvailableSamples:
             df = available_samples(organism="human", data_sources=["sra"])
         assert df["file_source"].iloc[0] == "sra"
 
+    def test_blank_path_cells_render_the_same_on_every_pandas(self) -> None:
+        """A blank cell is rendered as text rather than reaching the path
+        helpers as a float, which pandas 3's string dtype passes through."""
+        sample_df = pd.DataFrame(
+            {
+                "external_id": ["SRR1", "SRR2"],
+                "project": ["SRP1", "SRP2"],
+                "organism": ["human", math.nan],
+                "file_source": ["data_sources/sra", math.nan],
+                "project_home": ["data_sources/sra", math.nan],
+            }
+        )
+        mock_res = mock.MagicMock()
+        mock_res.url = "https://example.org/fake"
+        mock_res.load.return_value = sample_df
+        with mock.patch(
+            "recount3.search.search_data_source_metadata",
+            return_value=[mock_res],
+        ):
+            df = available_samples(organism="human", data_sources=["sra"])
+        assert df["organism"].tolist() == ["human", "nan"]
+        assert df["file_source"].tolist() == ["sra", "nan"]
+        assert df["project_type"].tolist() == ["data_sources", ""]
+
     def test_metadata_source_renamed_to_project_home(self) -> None:
         sample_df = pd.DataFrame(
             {
@@ -969,6 +994,28 @@ class TestAvailableProjects:
             df = available_projects(organism="human")
         row_srp1 = df[df["project"] == "SRP1"].iloc[0]
         assert row_srp1["n_samples"] == 2
+
+    def test_blank_key_cells_still_count_samples(self) -> None:
+        """Sample keys join their columns as text, blank cells included."""
+        samples = pd.DataFrame(
+            {
+                "external_id": ["SRR1", "SRR2", "SRR3"],
+                "project": ["SRP1", "SRP1", "SRP2"],
+                "organism": ["human", "human", "human"],
+                "project_home": [
+                    "data_sources/sra",
+                    "data_sources/sra",
+                    math.nan,
+                ],
+            }
+        )
+        with mock.patch(
+            "recount3.search.available_samples", return_value=samples
+        ):
+            df = available_projects(organism="human")
+        counts = dict(zip(df["project"], df["n_samples"]))
+        assert counts == {"SRP1": 2, "SRP2": 1}
+        assert df["project_type"].tolist() == ["data_sources", ""]
 
     def test_project_type_derived_from_project_home(self) -> None:
         samples = pd.DataFrame(

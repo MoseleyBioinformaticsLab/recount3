@@ -287,9 +287,9 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
     else:
         rail_col = df.columns[0]
 
-    rail_ids = (
-        _utils.canonical_identifier_series(df[rail_col]).astype(str).tolist()
-    )
+    rail_ids = [
+        str(value) for value in _utils.canonical_identifier_series(df[rail_col])
+    ]
     if not rail_ids:
         raise errors.LoadError(
             f"Junction ID file {id_path.name!r} has no rail IDs."

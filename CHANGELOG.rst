@@ -4,9 +4,31 @@ Changelog
 Unreleased
 ----------
 
+Added
+~~~~~
+
+- Python 3.15 support, tested in CI on Linux, macOS, and Windows. The
+  ``anndata`` extra, and therefore ``all``, cannot be installed on Python 3.15
+  yet, because its ``h5py`` dependency publishes no Python 3.15 wheels; every
+  other extra installs.
+
+Changed
+~~~~~~~
+
+- pandas 3 is supported, and the requirement is ``pandas>=2.2.2,<4.0``, up
+  from ``>=2.2,<3.0``. pandas 2 publishes no Python 3.15 wheels. The floor is
+  2.2.2, the first pandas release that supports NumPy 2, which the package
+  already required. Text conversions that can meet a blank metadata cell
+  render it the same way on both major versions, so discovery does not raise
+  on a blank ``file_source`` or ``project_home`` under pandas 3, and a blank
+  junction rail ID still reads as ``"<NA>"``.
+
 Documentation
 ~~~~~~~~~~~~~
 
+- The README, the tutorial, and ``CONTRIBUTING.rst`` state that Python 3.10
+  through 3.15 is supported, and note that the ``anndata`` extra is not yet
+  installable on Python 3.15.
 - The package docstring states that ``recount3.se`` is exposed as ``r3.se``
   rather than flattened into the top-level namespace, since its helpers
   operate on BiocPy experiments.
@@ -23,6 +45,9 @@ Internal
   ``config``, and ``bundle`` (as ``r3_types``, ``r3_config``, and
   ``r3_bundle``), where the plain name would clash. ``CONTRIBUTING.rst``
   documents the convention. Tests patch helpers where they are defined.
+- CI runs the suite on Python 3.15 on Linux, macOS, and Windows, without the
+  ``anndata`` extra on Python 3.15. The coverage job runs on Python 3.14, the
+  newest version on which every extra installs.
 
 1.2.0 (2026-09-15)
 ------------------

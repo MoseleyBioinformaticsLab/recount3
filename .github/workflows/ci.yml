@@ -12,8 +12,12 @@ jobs:
     uses: ./.github/workflows/run-tests.yml
     with:
       install_command_linux: 'python -m pip install -e ".[dev,all]"'
+      install_command_linux_without_anndata: >-
+        python -m pip install -e ".[dev,bigwig,biocpy,parquet,pybiocfilecache]"
       install_command_macos: >-
         python -m pip install -e ".[dev,biocpy,parquet,anndata,pybiocfilecache]"
+      install_command_macos_without_anndata: >-
+        python -m pip install -e ".[dev,biocpy,parquet,pybiocfilecache]"
       install_command_windows: >-
         python -m pip install -e ".[dev,parquet,pybiocfilecache]"
 

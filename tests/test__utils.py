@@ -1956,7 +1956,7 @@ def test_normalize_anndata_casts_all_missing_object_columns() -> None:
 def test_normalize_anndata_leaves_partly_populated_columns() -> None:
     """A column with any string still writes correctly, so it is untouched."""
     adata = _FakeAnnData(
-        obs=pd.DataFrame({"mixed": ["a", None]}),
+        obs=pd.DataFrame({"mixed": pd.Series(["a", None], dtype=object)}),
         var=pd.DataFrame({"strings": ["x", "y"], "numbers": [1, 2]}),
     )
 

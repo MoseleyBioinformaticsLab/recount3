@@ -9,11 +9,26 @@ on:
           (bigwig included) installs cleanly.
         required: true
         type: string
+      install_command_linux_without_anndata:
+        description: >-
+          Install command for Linux on Python versions without anndata
+          support (matrix entries with without_anndata set). The anndata
+          extra needs h5py, which publishes no Python 3.15 wheels yet, so
+          these jobs install every other extra and the anndata tests skip.
+        required: true
+        type: string
       install_command_macos:
         description: >-
           Install command for macOS. It must omit the bigwig extra (pyBigWig
           has no reliable macOS wheel); the BiocPy stack builds from source
           there.
+        required: true
+        type: string
+      install_command_macos_without_anndata:
+        description: >-
+          Install command for macOS on Python versions without anndata
+          support, for the same reason as the Linux variant. It must also
+          omit the bigwig extra.
         required: true
         type: string
       install_command_windows:
@@ -32,16 +47,20 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
         include:
+          - os: ubuntu-latest
+            python-version: "3.15"
+            without_anndata: true
           - os: windows-latest
             python-version: "3.10"
           - os: windows-latest
-            python-version: "3.14"
+            python-version: "3.15"
           - os: macos-latest
             python-version: "3.10"
           - os: macos-latest
-            python-version: "3.14"
+            python-version: "3.15"
+            without_anndata: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -55,7 +74,7 @@ jobs:
         with:
           command: |
             python -m pip install --upgrade pip
-            ${{ inputs.install_command_linux }}
+            ${{ matrix.without_anndata && inputs.install_command_linux_without_anndata || inputs.install_command_linux }}
           attempt_limit: 5
           attempt_delay: 10000
       - name: Install package (macOS)
@@ -64,7 +83,7 @@ jobs:
         with:
           command: |
             python -m pip install --upgrade pip
-            ${{ inputs.install_command_macos }}
+            ${{ matrix.without_anndata && inputs.install_command_macos_without_anndata || inputs.install_command_macos }}
           attempt_limit: 5
           attempt_delay: 10000
       - name: Install package (Windows)

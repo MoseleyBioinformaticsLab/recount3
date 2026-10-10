@@ -73,8 +73,8 @@ Links
 Installation
 ~~~~~~~~~~~~
 
-The core package requires Python 3.10 or newer and depends on NumPy, pandas,
-and SciPy. Five optional extras enable additional features:
+The core package supports Python 3.10 through 3.15 and depends on NumPy,
+pandas, and SciPy. Five optional extras enable additional features:
 
 .. code:: bash
 
@@ -112,10 +112,13 @@ installation with ``python3 -m pip install --upgrade recount3``.
 **Note:** The optional extras have platform constraints. The ``bigwig`` extra
 can be difficult or impossible to install on Windows and macOS. The ``biocpy``
 extra can be difficult or impossible to install on Windows, and ``anndata``
-inherits that constraint because it requires ``biocpy``. The ``parquet`` and 
-``pybiocfilecache``` extra installs cleanly on every supported platform. The
-core package and the command-line workflow do not depend on any extra and work
-on all supported platforms.
+inherits that constraint because it requires ``biocpy``. On Python 3.15,
+``anndata`` (and therefore ``all``) cannot be installed yet: its ``h5py``
+dependency publishes no Python 3.15 wheels, and building it from source
+requires the HDF5 C library. The ``parquet`` and ``pybiocfilecache`` extras
+install cleanly on every supported platform. The core package and the
+command-line workflow do not depend on any extra and work on all supported
+platforms.
 
 
 The three-layer API

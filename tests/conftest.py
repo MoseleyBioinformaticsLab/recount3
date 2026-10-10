@@ -91,7 +91,8 @@ _OPTIONAL_DEPENDENCY_MARKERS: dict[str, tuple[bool, str]] = {
         HAS_ANNDATA,
         "anndata/delayedarray (or the BiocPy stack they convert from) is not "
         "installed; install the 'recount3[anndata]' extra, which is "
-        "unavailable on Windows because BiocPy is.",
+        "unavailable on Windows because BiocPy is, and on Python 3.15 because "
+        "h5py publishes no wheels for it.",
     ),
 }
 

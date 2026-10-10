@@ -57,7 +57,7 @@ Development environment
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 The package requires Python 3.10 or newer and is tested on Python 3.10 through
-3.14. Install in editable mode with the development extras:
+3.15. Install in editable mode with the development extras:
 
 .. code:: bash
 
@@ -70,9 +70,10 @@ The package requires Python 3.10 or newer and is tested on Python 3.10 through
 
 The optional extras are not installable on every platform. Use the command
 above on Linux. On macOS, omit ``bigwig``; on Windows, install
-``-e ".[dev,parquet]"``. Continuous integration applies the same three
-configurations, and tests that require an unavailable extra are skipped
-automatically.
+``-e ".[dev,parquet]"``. On Python 3.15, also omit ``anndata``, whose ``h5py``
+dependency publishes no Python 3.15 wheels yet. Continuous integration applies
+the same configurations, and tests that require an unavailable extra are
+skipped automatically.
 
 
 Repository layout
@@ -235,8 +236,8 @@ Pull requests
    motivation, and any change in public behaviour. Link the relevant issue.
 
 CI runs the suite across the supported Python versions on Linux, macOS, and
-Windows, and enforces the coverage threshold. All checks must pass before
-review concludes.
+Windows, and enforces the coverage threshold on Python 3.14, the newest version
+on which every extra installs. All checks must pass before review concludes.
 
 
 Releases

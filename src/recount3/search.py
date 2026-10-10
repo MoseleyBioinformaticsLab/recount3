@@ -824,7 +824,7 @@ def available_samples(
     if "organism" in samples.columns:
         samples["organism"] = (
             samples["organism"]
-            .astype(str)
+            .map(str)
             .replace({"Homo sapiens": "human", "Mus musculus": "mouse"})
         )
     else:
@@ -843,7 +843,7 @@ def available_samples(
 
     if "file_source" in samples.columns:
         samples["file_source"] = (
-            samples["file_source"].astype(str).map(_posix_basename)
+            samples["file_source"].map(str).map(_posix_basename)
         )
 
     if (
@@ -855,7 +855,7 @@ def available_samples(
 
     if "project_home" in samples.columns:
         samples["project_type"] = (
-            samples["project_home"].astype(str).map(_posix_dirname)
+            samples["project_home"].map(str).map(_posix_dirname)
         )
 
     for col in ("rail_id",):
@@ -949,14 +949,14 @@ def available_projects(
 
     if "project_home" in projects.columns:
         projects["project_type"] = (
-            projects["project_home"].astype(str).map(_posix_dirname)
+            projects["project_home"].map(str).map(_posix_dirname)
         )
 
     if key_cols:
-        sample_keys = df[key_cols].astype(str).agg("_".join, axis=1)
+        sample_keys = df[key_cols].map(str).agg("_".join, axis=1)
         counts = sample_keys.value_counts()
 
-        project_keys = projects[key_cols].astype(str).agg("_".join, axis=1)
+        project_keys = projects[key_cols].map(str).agg("_".join, axis=1)
         projects["n_samples"] = project_keys.map(counts).astype("Int64")
     else:
         projects["n_samples"] = pd.Series(dtype="Int64")
@@ -1022,7 +1022,7 @@ def project_homes(
 
     if "project_type" not in projects.columns:
         projects["project_type"] = (
-            projects["project_home"].astype(str).map(_posix_dirname)
+            projects["project_home"].map(str).map(_posix_dirname)
         )
 
     if "file_source" not in projects.columns:

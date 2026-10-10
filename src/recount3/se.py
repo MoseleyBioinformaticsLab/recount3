@@ -1048,9 +1048,8 @@ def is_paired_end(
     """
     metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
 
-    external_id = _utils._resolve_metadata_column(
-        metadata, "external_id"
-    ).astype(str)
+    external_id = _utils._resolve_metadata_column(metadata, "external_id")
+    external_id = external_id.map(str)
     avg_mapped = _utils._coerce_numeric_column(
         _utils._resolve_metadata_column(
             metadata, avg_mapped_read_length_column
@@ -1211,9 +1210,8 @@ def compute_scale_factors(
     metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
 
     # Match recount3's stopifnot(): all of these must exist even if by="auc".
-    external_id = _utils._resolve_metadata_column(
-        metadata, "external_id"
-    ).astype(str)
+    external_id = _utils._resolve_metadata_column(metadata, "external_id")
+    external_id = external_id.map(str)
 
     auc_values = _utils._coerce_numeric_column(
         _utils._resolve_metadata_column(metadata, auc_column),
