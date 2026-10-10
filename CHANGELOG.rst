@@ -1,6 +1,24 @@
 Changelog
 =========
 
+Unreleased
+----------
+
+Documentation
+~~~~~~~~~~~~~
+
+- The package docstring states that ``recount3.se`` is exposed as ``r3.se``
+  rather than flattened into the top-level namespace, since its helpers
+  operate on BiocPy experiments.
+
+Internal
+~~~~~~~~
+
+- ``recount3.se`` is imported with the explicit ``se as se`` re-export form
+  and listed in ``__all__``, so type checkers treat ``r3.se`` as public.
+- Added tests that ``se`` is a declared export and that a bare
+  ``import recount3`` exposes ``r3.se`` in a fresh interpreter.
+
 1.2.0 (2026-09-15)
 ------------------
 

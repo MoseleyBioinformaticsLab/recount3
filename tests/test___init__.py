@@ -31,6 +31,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import recount3
 import recount3.se
 import recount3.types
@@ -116,11 +119,31 @@ def test_type_aliases_are_exported() -> None:
         ), f"{name} must be the same object as recount3.types.{name}"
 
 
+def test_se_submodule_is_a_declared_export() -> None:
+    """``se`` is a deliberate public submodule, not an incidental attribute."""
+    assert "se" in recount3.__all__
+    assert recount3.se is sys.modules["recount3.se"]
+
+
+def test_se_submodule_is_exposed_by_a_bare_package_import() -> None:
+    """``import recount3`` alone must make ``recount3.se`` resolve."""
+    code = (
+        "import recount3 as r3\n"
+        "assert callable(r3.se.compute_tpm)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_se_submodule_is_reachable_from_the_package() -> None:
     """The tutorial documents r3.se.<helper>; that must keep working.
 
-    The helpers are not top-level exports, so the only thing making
-    ``r3.se`` resolve is the package importing from the submodule.
+    The helpers live on the submodule and are not top-level exports.
     """
     for name in (
         "compute_read_counts",

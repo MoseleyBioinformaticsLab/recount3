@@ -38,7 +38,11 @@ provides a small, typed Python API for discovering, downloading, and loading
 recount3 data files.
 
 The public surface is intentionally flat: core classes and helper functions
-are re-exported here for discovery and convenience.
+are re-exported here for discovery and convenience. The one exception is the
+:mod:`recount3.se` submodule, which is exposed as ``r3.se`` rather than
+flattened. Its normalization and conversion helpers operate on BiocPy
+experiments, so they are called through that prefix, for example
+``r3.se.compute_tpm(rse)``.
 
 Typical usage example: high-level (recommended for most cases)::
 
@@ -109,6 +113,8 @@ from recount3.errors import (
     Recount3Error,
 )
 from recount3.resource import R3Resource
+
+from recount3 import se as se
 from recount3.se import (
     build_ranged_summarized_experiment,
     build_summarized_experiment,
@@ -143,6 +149,8 @@ from recount3.version import __version__
 
 __all__ = [
     "__version__",
+    # Submodules
+    "se",
     # Config
     "Config",
     "default_config",
