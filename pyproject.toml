@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recount3"
 dynamic = ["version"]
-description = "API and CLI to discover, download, and assemble recount3 resources."
+description = "Python API and CLI to discover, download, and assemble recount3 RNA-seq data."
 dependencies = [
   "numpy>=2.0,<3.0",
   "pandas>=2.2.2,<4.0",
@@ -28,13 +28,22 @@ keywords = [
   "genomics",
   "recount3",
   "RNA-seq",
+  "transcriptomics",
+  "gene-expression",
+  "SRA",
+  "GTEx",
+  "TCGA",
+  "SummarizedExperiment",
+  "BiocPy",
   "CLI",
   "data-pipelines",
   "manifests",
 ]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
   "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
@@ -45,6 +54,7 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3.15",
+  "Programming Language :: Python :: Implementation :: CPython",
   "Typing :: Typed",
 ]
 
@@ -58,6 +68,7 @@ Repository = "https://github.com/MoseleyBioinformaticsLab/recount3"
 Issues = "https://github.com/MoseleyBioinformaticsLab/recount3/issues"
 Documentation = "https://moseleybioinformaticslab.github.io/recount3/"
 Changelog = "https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/CHANGELOG.rst"
+Preprint = "https://doi.org/10.64898/2026.06.17.732943"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
