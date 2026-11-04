@@ -4,6 +4,13 @@ Changelog
 Unreleased
 ----------
 
+Documentation
+~~~~~~~~~~~~~
+
+- ``CITATION.cff``, the README citation section, and the project URLs in
+  ``pyproject.toml`` cite the peer-reviewed package paper in *BMC Genomics*
+  (doi: 10.1186/s12864-026-13499-9) in place of the bioRxiv preprint.
+
 Internal
 ~~~~~~~~
 

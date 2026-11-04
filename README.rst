@@ -305,7 +305,7 @@ When using the ``recount3`` Python package in published work, please cite:
 
 * Alexander Alsalihi, Robert M Flight, and Hunter N.B. Moseley. “The recount3
   Python package for programmatic access to uniformly processed RNA-seq data.”
-  *bioRxiv* (2026). doi: `10.64898/2026.06.17.732943`_
+  *BMC Genomics* (2026). doi: `10.1186/s12864-026-13499-9`_
 
 If your work uses the recount3 data resource, please also cite the original
 recount3 publication:
@@ -321,5 +321,5 @@ recount3 publication:
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/
 .. _Tutorial: https://moseleybioinformaticslab.github.io/recount3/tutorial.html
 .. _Issues: https://github.com/MoseleyBioinformaticsLab/recount3/issues
-.. _10.64898/2026.06.17.732943: https://doi.org/10.64898/2026.06.17.732943
+.. _10.1186/s12864-026-13499-9: https://doi.org/10.1186/s12864-026-13499-9
 .. _10.1186/s13059-021-02533-6: https://doi.org/10.1186/s13059-021-02533-6

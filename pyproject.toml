@@ -68,7 +68,7 @@ Repository = "https://github.com/MoseleyBioinformaticsLab/recount3"
 Issues = "https://github.com/MoseleyBioinformaticsLab/recount3/issues"
 Documentation = "https://moseleybioinformaticslab.github.io/recount3/"
 Changelog = "https://github.com/MoseleyBioinformaticsLab/recount3/blob/main/CHANGELOG.rst"
-Preprint = "https://doi.org/10.64898/2026.06.17.732943"
+Paper = "https://doi.org/10.1186/s12864-026-13499-9"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

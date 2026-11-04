@@ -1,8 +1,7 @@
 cff-version: 1.2.0
 message: >
-  If you use this software, please cite the preprint (see preferred-citation).
+  If you use this software, please cite the package paper (see preferred-citation).
   If you use recount3 data, please also cite the original recount3 publication (see references).
-  This file will be updated when a peer-reviewed version of the package paper is available.
 authors:
   - family-names: "Alsalihi"
     given-names: "Alexander"
@@ -30,9 +29,9 @@ preferred-citation:
       given-names: "Hunter N.B."
       orcid: "https://orcid.org/0000-0003-3995-5368"
   title: "The recount3 Python package for programmatic access to uniformly processed RNA-seq data"
-  doi: "10.64898/2026.06.17.732943"
-  journal: "bioRxiv"
-  month: 6
+  doi: "10.1186/s12864-026-13499-9"
+  journal: "BMC Genomics"
+  month: 11
   year: 2026
 references:
   - type: article
