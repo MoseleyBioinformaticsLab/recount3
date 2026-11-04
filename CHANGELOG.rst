@@ -4,6 +4,14 @@ Changelog
 Unreleased
 ----------
 
+Fixed
+~~~~~
+
+- ``--sanitize-columns`` and ``to_anndata(sanitize_for_hdf5=True)`` no
+  longer emit a ``Pandas4Warning`` on pandas 3.1. They renamed ``obs`` and
+  ``var`` columns with ``DataFrame.rename(inplace=True)``, and pandas 3.1
+  deprecates the ``inplace`` keyword for removal in pandas 4.
+
 Documentation
 ~~~~~~~~~~~~~
 

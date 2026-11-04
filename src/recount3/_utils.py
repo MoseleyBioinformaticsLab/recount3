@@ -1455,7 +1455,9 @@ def sanitize_anndata_column_names(adata: Any) -> list[tuple[str, str]]:
             renames.append((name, new_name))
 
         if mapping:
-            frame.rename(columns=mapping, inplace=True)
+            frame.columns = frame.columns.map(
+                lambda column: mapping.get(column, column)
+            )
     return renames
 
 
