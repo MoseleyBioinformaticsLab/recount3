@@ -22,6 +22,8 @@ Documentation
 Internal
 ~~~~~~~~
 
+- The test matrix installs Python 3.15 as a stable release. CPython 3.15.1
+  is out, so ``actions/setup-python`` no longer needs ``allow-prereleases``.
 - The release workflow's verify jobs test the installed package. The
   ``pythonpath = ["src"]`` pytest setting put the checkout ahead of
   site-packages, so they retested the source tree and could pass with a

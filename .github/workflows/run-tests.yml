@@ -94,7 +94,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          allow-prereleases: true
       - name: Wait for ${{ inputs.wait_for_requirement }} on the index
         if: inputs.wait_for_requirement != ''
         shell: python
