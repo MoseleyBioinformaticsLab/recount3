@@ -1177,8 +1177,47 @@ Per-base coverage comes back as a :class:`numpy.ndarray`, one value per base
 over the requested interval.
 
 Both spellings close the file on exit and expose the same ``values()``,
-``stats()``, and ``intervals()`` calls, so either spelling works; just do not
-expect wrapper-only behaviour from the second.
+``stats()``, and ``intervals()`` methods. The wrapper spells the bin-count
+keyword ``n_bins``; the raw handle uses ``nBins``. Wrapper validation and
+unsigned interval endpoint restoration apply to calls on the wrapper.
+
+On the wrapper's ``stats()`` and ``intervals()``, omitted ``start`` and ``end``
+bounds default independently to zero and the chromosome length. Coordinates
+and bin counts must be integers; fractional values and numeric strings raise
+``TypeError``.
+String arguments must be valid UTF-8 without embedded NUL characters;
+invalid strings are rejected before opening or querying the file.
+Coordinates must fit unsigned 32-bit integers, and ``n_bins`` must be between
+one and ``2**31 - 1``. Values outside these numeric limits raise ``ValueError``
+before reaching native code. For example,
+``bw.stats("chr1", start=1000, exact=True)``
+summarizes from base 1000 to the chromosome end. ``exact=True`` computes from
+the stored intervals; the default may use approximate zoom summaries.
+Use ``exact=True`` for sums: native zoom-summary bugs can substantially
+undercount them or return ``None`` for covered zero-signal regions.
+Keep ``n_bins`` at or below the number of bases in the interval: native
+statistics can be inconsistent for bins narrower than one base.
+
+``header()`` returns native metadata unchanged. Some pyBigWig builds truncate
+its floating-point summaries to integers, and writer-generated extrema can
+be inaccurate. Use ``stats(..., exact=True)`` for statistics from the stored
+signal when numerical accuracy matters.
+
+``values(..., numpy=True)`` requires a pyBigWig build with NumPy support
+(``pyBigWig.numpy == 1``). The default list output works with either build.
+List queries are limited to ``2**31 - 1`` bases by the native loop counter.
+Both forms allocate memory proportional to the requested region; request
+smaller regions when working with large chromosomes.
+Uncovered bases yield NaN, whereas a file with no entries at all yields an
+empty list or array. For empty-file NumPy output, use pyBigWig 0.3.25 or newer:
+earlier versions have a native bug that returns a scalar array containing an
+uninitialized value instead. ``intervals()`` returns a tuple of stored intervals
+or ``None`` for no overlaps; endpoints are not clipped to the query bounds.
+
+Read methods reject write mode before opening the file, so an accidental
+read cannot truncate an existing file or call unsafe native reader code on
+a writer. Use the raw context-manager handle for writing. Changes to a
+wrapper's ``path`` or ``mode`` apply after its current handle is closed.
 
 BigWig intervals use zero-based, half-open coordinates; uncovered positions can
 be NaN. ``load()`` first caches the full BigWig file. Reading a small interval

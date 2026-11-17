@@ -29,106 +29,180 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-"""BigWig file access via a small wrapper around ``pyBigWig``.
+"""Read local BigWig coverage with :class:`recount3.BigWigFile`.
 
-This is an internal module. For BigWig access via the public API, use
-:meth:`~recount3.resource.R3Resource.load` on a BigWig
-:class:`~recount3.resource.R3Resource`.
+BigWig resources loaded through :meth:`~recount3.resource.R3Resource.load`
+also return this wrapper. The optional ``pyBigWig`` dependency is imported
+when opening a file; install it with ``pip install "recount3[bigwig]"``.
 
-The optional dependency is imported through
-:func:`~recount3._utils.get_pybigwig_module`.
+Example::
 
-Typical usage example::
-
-  >>> from pathlib import Path
-  >>> import recount3 as r3
-  >>> with r3.BigWigFile(Path("example.bw")) as bw:
-  ...     lengths = bw.chroms()
-  ...     mean = bw.stats("chr1", 0, 1000)[0]
-
-Note:
-    Requires the optional ``pyBigWig`` package. Install with
-    ``pip install "recount3[bigwig]"``. An :exc:`ImportError` is raised on
-    first use if the package is not available. ``pyBigWig`` can be difficult
-    to install on non-Linux systems.
+    >>> import recount3 as r3
+    >>> reader = r3.BigWigFile("example.bw")
+    >>> with reader:
+    ...     lengths = reader.chroms()
+    ...     mean = reader.stats("chr1", 0, 1000, exact=True)[0]
 """
 
 from __future__ import annotations
 
 import dataclasses
+import operator
 from pathlib import Path
-from typing import Any, Mapping, TYPE_CHECKING, cast
 from types import TracebackType
+from typing import Any, Mapping, TYPE_CHECKING, cast
 
-from recount3 import _utils
+from numpy import ndarray
+
+from recount3 import _utils, errors
 
 if TYPE_CHECKING:  # pragma: no cover
     import pyBigWig  # type: ignore[import-not-found]
 
 
+def _native_string(value: str, name: str) -> str:
+    """Return a plain string encodable as UTF-8 and free of NUL characters."""
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string")
+    # Match the contents C reads; str(value) would call an overridden __str__.
+    value = str.__str__(value)
+    if "\0" in value:
+        raise ValueError(f"{name} must not contain NUL characters")
+    value.encode("utf-8")
+    return value
+
+
+def _coordinate(value: int, name: str) -> int:
+    """Return an integer index in the unsigned 32-bit coordinate range."""
+    result = operator.index(value)
+    if not 0 <= result <= 2**32 - 1:
+        raise ValueError(f"{name} must be between 0 and 2**32 - 1")
+    return result
+
+
+def _bounds(start: int | None, end: int | None) -> dict[str, int]:
+    """Return validated coordinate keywords, omitting bounds set to None."""
+    kwargs = {}
+    if start is not None:
+        kwargs["start"] = _coordinate(start, "start")
+    if end is not None:
+        kwargs["end"] = _coordinate(end, "end")
+    return kwargs
+
+
 @dataclasses.dataclass(slots=True)
 class BigWigFile:
-    """A lazily-opened BigWig reader with a small, typed API.
+    """A lazily opened reader for local BigWig files.
 
-    Instances are cheap to construct and do not open the file until the first
-    method call that requires a live ``pyBigWig`` handle. The handle is cached
-    for subsequent calls and can be explicitly released with :meth:`close`.
+    The first read or context entry opens a native ``pyBigWig`` handle, which
+    is cached until :meth:`close`. Changes to ``path`` and ``mode`` take effect
+    on the next open, after the cached handle closes.
+
+    A context yields the native handle and closes it on exit. Call methods on
+    the wrapper inside the context to use its validation and unsigned interval
+    coordinates. Close through the wrapper: closing the native handle directly
+    leaves a closed handle cached in the wrapper.
+
+    Read methods raise :exc:`RuntimeError` in write mode before opening or
+    querying. Use the native context-manager handle for writing.
+
+    String arguments must encode as UTF-8 and contain no embedded NUL
+    characters. Coordinates must be integers in ``0..2**32 - 1``; NumPy
+    integer scalars are accepted.
 
     Attributes:
-        path: Filesystem path to a BigWig file (typically ``.bw``). The
-          file must exist when the handle is opened.
-        mode: File mode passed to ``pyBigWig.open``. Reading is the default
-          (``"r"``).
+        path: Local path to a BigWig file. Must exist when opened for reading.
+        mode: Mode passed to ``pyBigWig.open``; defaults to ``"r"``. A mode
+          containing ``"w"`` creates or overwrites the file on each open.
+
+    Note:
+        Opening errors propagate from read methods and context entry:
+        :exc:`FileNotFoundError` for a missing read path, :exc:`ImportError`
+        for an unavailable ``pyBigWig`` dependency, :exc:`RuntimeError` for a
+        native open failure, and :exc:`~recount3.errors.LoadError` for BigBed
+        input.
     """
 
-    path: Path
+    path: Path | str
     mode: str = "r"
 
     _bw: Any | None = dataclasses.field(default=None, init=False, repr=False)
+    _bw_writable: bool = dataclasses.field(
+        default=False, init=False, repr=False
+    )
 
     def _ensure_open(self) -> pyBigWig.pyBigWig:
-        """Open the file if needed and return the live ``pyBigWig`` handle.
+        """Return the cached handle, or open and cache a validated handle.
 
-        This method is the single place that opens the underlying file. It is
-        called internally by all public read methods.
-
-        Returns:
-            A live ``pyBigWig`` handle.
+        Cache a reader only after format validation succeeds; close rejected
+        handles. Write mode bypasses existence and format checks.
 
         Raises:
-            FileNotFoundError: If ``path`` does not exist at open time.
-            ImportError: If the optional ``pyBigWig`` dependency is missing or
-              fails to import.
-            RuntimeError: If ``pyBigWig.open`` fails (it returns ``None``).
+            TypeError: If ``path`` cannot be converted to a Path or ``mode``
+              is not a string.
+            ValueError: If the path or mode contains an embedded NUL.
+            UnicodeEncodeError: If the path or mode cannot be encoded as UTF-8.
+            FileNotFoundError: If the path does not exist when reading.
+            ImportError: If ``pyBigWig`` is unavailable or fails to import.
+            RuntimeError: If ``pyBigWig.open`` fails.
+            recount3.errors.LoadError: If a reader opens a BigBed file.
         """
         if self._bw is not None:
             return cast("pyBigWig.pyBigWig", self._bw)
 
-        if not self.path.exists():
+        mode = _native_string(self.mode, "mode")
+        path = Path(self.path)
+        filename = _native_string(str(path), "path")
+        writable = "w" in mode
+        if not writable and not path.exists():
             raise FileNotFoundError(str(self.path))
 
         pybigwig = _utils.get_pybigwig_module()
-        bw = pybigwig.open(str(self.path), self.mode)
-        if bw is None:  # pyBigWig returns None on failure
+        bw = pybigwig.open(filename, mode)
+        if bw is None:
             raise RuntimeError(f"Failed to open BigWig file: {self.path}")
 
+        try:
+            if not writable and not bw.isBigWig():
+                raise errors.LoadError(f"Not a BigWig file: {self.path}")
+        except BaseException:
+            bw.close()
+            raise
+
         self._bw = bw
+        self._bw_writable = writable
         return bw
 
-    def close(self) -> None:
-        """Close the underlying ``pyBigWig`` handle if it is open.
+    def _ensure_readable(self) -> pyBigWig.pyBigWig:
+        """Return a read handle, rejecting writers before opening or querying.
 
-        This method is idempotent.
+        Opening a writer would truncate the file, and native ``values()`` can
+        crash on a headerless writer. Check the cached handle's mode when
+        present, since ``mode`` configures the next open.
         """
+        writable = (
+            self._bw_writable
+            if self._bw is not None
+            else "w" in _native_string(self.mode, "mode")
+        )
+        if writable:
+            raise RuntimeError(
+                "BigWig read methods cannot be used in write mode"
+            )
+        return self._ensure_open()
+
+    def close(self) -> None:
+        """Close and clear the cached handle, if any; repeated calls are safe."""
         if self._bw is None:
             return
         try:
             self._bw.close()
         finally:
             self._bw = None
+            self._bw_writable = False
 
     def __enter__(self) -> pyBigWig.pyBigWig:
-        """Enter a context manager and return the live ``pyBigWig`` handle."""
+        """Return the cached or newly opened native ``pyBigWig`` handle."""
         return self._ensure_open()
 
     def __exit__(
@@ -137,33 +211,51 @@ class BigWigFile:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        """Exit a context manager and close the file handle."""
+        """Close the cached handle on normal or exceptional context exit."""
         del exc_type, exc, tb
         self.close()
 
     def is_open(self) -> bool:
-        """Return ``True`` if the underlying handle is currently open."""
+        """Return whether this wrapper holds a cached native handle.
+
+        Closing the native handle directly does not update this result.
+        """
         return self._bw is not None
 
     def chroms(
         self, chrom: str | None = None
     ) -> Mapping[str, int] | int | None:
-        """Return chromosome lengths, or a single chromosome length.
+        """Return chromosome lengths in bases.
 
         Args:
-            chrom: If provided, return only the length for this chromosome.
+            chrom: Chromosome name, or None to request all chromosomes.
 
         Returns:
-            If ``chrom`` is None, a mapping from chromosome name to length.
-            Otherwise, the length for the requested chromosome. ``None`` may be
-            returned if the chromosome is not present.
+            A dictionary of names to lengths when ``chrom`` is None. Otherwise,
+            the requested chromosome's length, or None if the name is unknown.
+
+        Raises:
+            TypeError: If ``chrom`` is neither a string nor None.
+            ValueError: If ``chrom`` contains an embedded NUL.
+            UnicodeEncodeError: If ``chrom`` cannot be encoded as UTF-8.
+            RuntimeError: If the handle is in write mode.
         """
-        bw = self._ensure_open()
-        return bw.chroms(chrom) if chrom else bw.chroms()
+        if chrom is not None:
+            chrom = _native_string(chrom, "chrom")
+        bw = self._ensure_readable()
+        return bw.chroms(chrom) if chrom is not None else bw.chroms()
 
     def header(self) -> dict[str, Any]:
-        """Return the BigWig header metadata."""
-        bw = self._ensure_open()
+        """Return BigWig header metadata as supplied by pyBigWig.
+
+        Floating-point summaries may be truncated to integers, and extrema
+        from the native writer may be inaccurate. Use :meth:`stats` with
+        ``exact=True`` to compute statistics from the stored signal.
+
+        Raises:
+            RuntimeError: If the handle is in write mode.
+        """
+        bw = self._ensure_readable()
         return cast(dict[str, Any], bw.header())
 
     def values(
@@ -173,24 +265,51 @@ class BigWigFile:
         end: int,
         *,
         numpy: bool | None = None,
-    ) -> list[float] | Any:
-        """Return per-base values over a half-open interval ``[start, end)``.
+    ) -> list[float] | ndarray:
+        """Return per-base values over the half-open interval ``[start, end)``.
 
         Args:
             chrom: Chromosome name.
-            start: 0-based start coordinate (inclusive).
-            end: 0-based end coordinate (exclusive).
-            numpy: Forwarded to ``pyBigWig.values``. When True, ``pyBigWig`` may
-              return a NumPy array depending on its configuration.
+            start: 0-based integer start coordinate (inclusive).
+            end: 0-based integer end coordinate (exclusive).
+            numpy: True requests a NumPy array and requires ``pyBigWig`` built
+              with NumPy support. False or None returns a list with either
+              build.
 
         Returns:
-            Values returned by ``pyBigWig.values``. When ``numpy`` is not
-            True, this is typically a ``list[float]``. When ``numpy`` is
-            True, ``pyBigWig`` may return a NumPy array depending on its
-            configuration.
+            A list of floats, or an array with dtype ``float32``, in genomic
+            order. Uncovered bases are NaN. A file with no entries returns an
+            empty result, subject to the older NumPy-output bug noted below.
+
+        Raises:
+            TypeError: If ``chrom`` is not a string or a coordinate is not an
+              integer, or NumPy output is requested from a build without
+              NumPy support.
+            ValueError: If ``chrom`` contains an embedded NUL, a coordinate is
+              outside ``0..2**32 - 1``, or a list query exceeds ``2**31 - 1``
+              bases.
+            UnicodeEncodeError: If ``chrom`` cannot be encoded as UTF-8.
+            RuntimeError: If the handle is in write mode or pyBigWig rejects
+              the chromosome or interval.
+
+        Notes:
+            List output is limited to ``2**31 - 1`` bases by pyBigWig's signed
+            loop counter. Both output forms allocate memory proportional to
+            the query length; use smaller intervals to limit memory use.
+
+            For NumPy reads of files with no entries, pyBigWig versions before
+            0.3.25 return a scalar array containing an uninitialized value.
+            Use 0.3.25 or newer for a correctly empty array.
         """
-        bw = self._ensure_open()
-        return bw.values(chrom, int(start), int(end), numpy=numpy)
+        chrom = _native_string(chrom, "chrom")
+        start = _coordinate(start, "start")
+        end = _coordinate(end, "end")
+        if not numpy and end - start > 2**31 - 1:
+            raise ValueError("List queries cannot exceed 2**31 - 1 bases")
+        bw = self._ensure_readable()
+        if numpy:
+            return bw.values(chrom, start, end, numpy=True)
+        return bw.values(chrom, start, end)
 
     def stats(
         self,
@@ -202,57 +321,99 @@ class BigWigFile:
         n_bins: int | None = None,
         exact: bool | None = None,
     ) -> list[float | None]:
-        """Return summary statistic(s) over an interval or whole chromosome.
+        """Return binned statistics over a half-open interval or chromosome.
 
         Args:
             chrom: Chromosome name.
-            start: 0-based start coordinate (inclusive). If omitted, stats are
-              computed over the whole chromosome.
-            end: 0-based end coordinate (exclusive). If omitted, stats are
-              computed over the whole chromosome.
-            type: Statistic name understood by ``pyBigWig.stats`` (for example,
-              ``"mean"``, ``"min"``, ``"max"``, ``"coverage"``).
-            n_bins: If provided, request binned stats via the ``nBins``
-              argument.
-            exact: If provided, forward to the ``exact`` argument.
+            start: 0-based integer start coordinate (inclusive). Defaults to 0.
+            end: 0-based integer end coordinate (exclusive). Defaults to the
+              chromosome length independently of ``start``.
+            type: One of ``"mean"``, ``"std"``, ``"min"``, ``"max"``,
+              ``"coverage"``, or ``"sum"``. Native aliases ``"dev"`` for
+              ``"std"`` and ``"cov"`` for ``"coverage"`` are also accepted.
+            n_bins: Integer bin count in ``1..2**31 - 1``, forwarded as native
+              ``nBins``. None requests one bin.
+            exact: True computes from the stored intervals. False or None
+              allows approximate zoom summaries when available.
 
         Returns:
-            A list of statistic values as returned by ``pyBigWig.stats``. Values
-            may be ``None`` for missing data regions.
+            A list containing one float or None per bin, in genomic order.
+            Missing-data bins produce None; native undefined results also
+            appear as None.
+
+        Raises:
+            TypeError: If ``chrom`` or ``type`` is not a string, or a coordinate
+              or bin count is not an integer.
+            ValueError: If ``chrom`` or ``type`` contains an embedded NUL, a
+              coordinate is outside ``0..2**32 - 1``, or ``n_bins`` is outside
+              ``1..2**31 - 1``.
+            UnicodeEncodeError: If ``chrom`` or ``type`` cannot be encoded as
+              UTF-8.
+            RuntimeError: If the handle is in write mode or pyBigWig rejects
+              the chromosome, interval, or statistic type.
+
+        Notes:
+            Statistics use covered bases; ``coverage`` is the covered fraction
+            of each bin. ``std`` uses sample standard deviation, returning zero
+            for a single covered base when ``exact=True``.
+
+            Use ``exact=True`` for sums: native zoom-summary bugs can
+            substantially undercount them or return None for covered
+            zero-signal regions. Keep ``n_bins`` at or below the number of
+            queried bases; finer bins can give inconsistent native results
+            even with ``exact=True``.
         """
-        bw = self._ensure_open()
-        kwargs: dict[str, Any] = {"type": type}
+        chrom = _native_string(chrom, "chrom")
+        kwargs: dict[str, Any] = {
+            "type": _native_string(type, "type"),
+            **_bounds(start, end),
+        }
         if n_bins is not None:
-            kwargs["nBins"] = int(n_bins)
+            n_bins = operator.index(n_bins)
+            if not 1 <= n_bins <= 2**31 - 1:
+                raise ValueError("n_bins must be between 1 and 2**31 - 1")
+            kwargs["nBins"] = n_bins
         if exact is not None:
             kwargs["exact"] = bool(exact)
 
-        if start is None or end is None:
-            return bw.stats(chrom, **kwargs)
-
-        return bw.stats(chrom, int(start), int(end), **kwargs)
+        bw = self._ensure_readable()
+        return bw.stats(chrom, **kwargs)
 
     def intervals(
         self,
         chrom: str,
         start: int | None = None,
         end: int | None = None,
-    ) -> list[tuple[int, int, float]] | None | Any:
-        """Return (start, end, value) intervals overlapping a region.
+    ) -> tuple[tuple[int, int, float], ...] | None:
+        """Return stored intervals overlapping a half-open query region.
 
         Args:
             chrom: Chromosome name.
-            start: 0-based start coordinate (inclusive). If omitted, intervals
-              for the entire chromosome may be returned.
-            end: 0-based end coordinate (exclusive). If omitted, intervals for
-              the entire chromosome may be returned.
+            start: 0-based integer start coordinate (inclusive). Defaults to 0.
+            end: 0-based integer end coordinate (exclusive). Defaults to the
+              chromosome length independently of ``start``.
 
         Returns:
-            Intervals returned by ``pyBigWig.intervals``. This is often a
-            list of ``(start, end, value)`` tuples. ``None`` may be returned
-            when no intervals overlap the requested region.
+            A tuple of ``(start, end, value)`` tuples in coordinate order, or
+            None when no intervals overlap. Endpoints are unsigned coordinates
+            from the file and are not clipped to the query bounds.
+
+        Raises:
+            TypeError: If ``chrom`` is not a string or a coordinate is not an
+              integer.
+            ValueError: If ``chrom`` contains an embedded NUL or a coordinate
+              is outside ``0..2**32 - 1``.
+            UnicodeEncodeError: If ``chrom`` cannot be encoded as UTF-8.
+            RuntimeError: If the handle is in write mode or pyBigWig rejects
+              the chromosome or interval.
         """
-        bw = self._ensure_open()
-        if start is None or end is None:
-            return bw.intervals(chrom)
-        return bw.intervals(chrom, int(start), int(end))
+        chrom = _native_string(chrom, "chrom")
+        kwargs = _bounds(start, end)
+        bw = self._ensure_readable()
+        result = bw.intervals(chrom, **kwargs)
+        if result and result[-1][1] < 0:
+            return tuple(
+                (start % 2**32, end % 2**32, value)
+                for start, end, value in result
+            )
+        return result

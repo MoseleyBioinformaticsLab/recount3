@@ -4,6 +4,26 @@ Changelog
 Unreleased
 ----------
 
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- ``BigWigFile`` query methods no longer coerce coordinates or bin counts
+  with ``int()``. Numeric strings and floats, including integral floats,
+  that previously worked now raise ``TypeError``. Pass integers explicitly;
+  NumPy integer scalars remain supported.
+- BigWig query coordinates must be in ``0..2**32 - 1``, and ``n_bins`` must
+  be in ``1..2**31 - 1``. In particular, ``stats()`` and ``values()`` no
+  longer accept ``end=-1`` for the chromosome end, and ``stats()`` no longer
+  accepts ``n_bins=0`` for one bin; these previously successful calls now
+  raise ``ValueError``. Omit ``end`` in ``stats()`` or ``intervals()`` to use
+  the chromosome length, and pass that length explicitly to ``values()``.
+  Omit ``n_bins``, use ``None``, or pass ``1`` to request one bin. Other
+  negative or out-of-range coordinates and bin counts are also rejected.
+- ``BigWigFile`` rejects BigBed input with ``LoadError`` during opening
+  and closes the rejected handle. Previously, metadata queries and raw
+  BigBed-handle access could succeed. Use ``pyBigWig.open()`` directly for
+  BigBed files.
+
 Fixed
 ~~~~~
 
@@ -11,6 +31,28 @@ Fixed
   longer emit a ``Pandas4Warning`` on pandas 3.1. They renamed ``obs`` and
   ``var`` columns with ``DataFrame.rename(inplace=True)``, and pandas 3.1
   deprecates the ``inplace`` keyword for removal in pandas 4.
+- ``BigWigFile.stats()`` and ``intervals()`` preserve a supplied start or
+  end when the other bound is omitted, instead of querying the entire
+  chromosome. ``values()`` list output works with pyBigWig builds without
+  NumPy support, and ``chroms("")`` queries that name instead of returning
+  every chromosome. String paths work, and write mode can create a new file.
+- ``BigWigFile.intervals()`` restores unsigned coordinates above ``2**31 - 1``
+  when pyBigWig returns them as negative signed integers. Queries against
+  large chromosomes now return the stored positive endpoints.
+- BigWig read methods reject write-mode handles before opening a file,
+  preventing accidental truncation and a native ``values()`` crash before
+  a writer has a header. Cached handles retain their actual mode until closed.
+- List-valued BigWig reads reject spans above ``2**31 - 1`` bases, which
+  overflow pyBigWig's signed loop counter. NumPy reads retain the native
+  unsigned coordinate range; all outputs still need proportional memory.
+- BigWig string arguments reject embedded NUL and invalid UTF-8 before
+  native parsing. This prevents chromosome-query ``SystemError`` failures
+  and native open fallbacks that can truncate a file on malformed input.
+  String subclasses use their underlying contents consistently for validation
+  and read-mode checks, preventing overridden string methods from bypassing
+  those guards. Invalid mode types raise ``TypeError`` before opening.
+- BigWig documentation and return annotations describe tuple-valued
+  intervals, missing values, empty files, and the raw context-manager handle.
 
 Documentation
 ~~~~~~~~~~~~~
