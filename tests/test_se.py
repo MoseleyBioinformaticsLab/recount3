@@ -31,13 +31,13 @@
 
 from __future__ import annotations
 
-import logging
-import tracemalloc
-import warnings
 from collections.abc import Sequence
-from pathlib import Path
+import logging
+import pathlib
+import tracemalloc
 from typing import Any
 from unittest import mock
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -45,26 +45,24 @@ import pytest
 from scipy import sparse
 
 import recount3._utils as _utils
-from recount3.se import (
-    _assay_frame,
-    _expand_sra_attributes_df,
-    _resolve_annotation_extension,
-    _resolve_sra_attributes_column,
-    build_summarized_experiment,
-    build_ranged_summarized_experiment,
-    create_ranged_summarized_experiment,
-    create_rse,
-    expand_sra_attributes,
-    compute_read_counts,
-    compute_tpm,
-    is_paired_end,
-    compute_scale_factors,
-    transform_counts,
-    to_anndata,
-)
+from recount3.se import _assay_frame
+from recount3.se import _expand_sra_attributes_df
+from recount3.se import _resolve_annotation_extension
+from recount3.se import _resolve_sra_attributes_column
+from recount3.se import build_ranged_summarized_experiment
+from recount3.se import build_summarized_experiment
+from recount3.se import compute_read_counts
+from recount3.se import compute_scale_factors
+from recount3.se import compute_tpm
+from recount3.se import create_ranged_summarized_experiment
+from recount3.se import create_rse
+from recount3.se import expand_sra_attributes
+from recount3.se import is_paired_end
+from recount3.se import to_anndata
+from recount3.se import transform_counts
 
 _MIRROR = (
-    Path(__file__).parent / "data" / "recount3_mirror" / "recount3"
+    pathlib.Path(__file__).parent / "data" / "recount3_mirror" / "recount3"
 ).resolve()
 # as_uri() rather than "file://" + str(path), which misplaces a Windows
 # drive letter into the URL authority.
@@ -79,7 +77,7 @@ class _MockBiocFrame:
         return self._df.copy()
 
     @classmethod
-    def from_pandas(cls, df: pd.DataFrame) -> "_MockBiocFrame":
+    def from_pandas(cls, df: pd.DataFrame) -> _MockBiocFrame:
         return cls(df)
 
 
@@ -128,7 +126,7 @@ class _MockSE:
     def get_column_names(self) -> list[str] | None:
         return self.col_names
 
-    def set_column_data(self, new_bioc_col_data: _MockBiocFrame) -> "_MockSE":
+    def set_column_data(self, new_bioc_col_data: _MockBiocFrame) -> _MockSE:
         obj = _MockSE.__new__(_MockSE)
         obj._assays = self._assays
         obj._bioc_col_data = new_bioc_col_data
@@ -159,7 +157,7 @@ class _MockRSE(_MockSE):
             raise AttributeError("width requires row_ranges to be set")
         return rr.width
 
-    def set_column_data(self, new_bioc_col_data: _MockBiocFrame) -> "_MockRSE":
+    def set_column_data(self, new_bioc_col_data: _MockBiocFrame) -> _MockRSE:
         obj = _MockRSE.__new__(_MockRSE)
         obj._assays = self._assays
         obj._bioc_col_data = new_bioc_col_data
@@ -232,13 +230,19 @@ def _duplicate_entry_matrices() -> list[Any]:
         (data, np.array([0, 0, 2, 1]), np.array([0, 3, 4])), shape=(3, 2)
     )
     unsorted_csc = sparse.csc_matrix(
-        (np.array([30.0, 10.0, 10.0, 7.0]), np.array([2, 0, 0, 1]),
-         np.array([0, 3, 4])),
+        (
+            np.array([30.0, 10.0, 10.0, 7.0]),
+            np.array([2, 0, 0, 1]),
+            np.array([0, 3, 4]),
+        ),
         shape=(3, 2),
     )
     csr = sparse.csr_matrix(
-        (np.array([10.0, 10.0, 7.0, 30.0]), np.array([0, 0, 1, 0]),
-         np.array([0, 2, 3, 4])),
+        (
+            np.array([10.0, 10.0, 7.0, 30.0]),
+            np.array([0, 0, 1, 0]),
+            np.array([0, 2, 3, 4]),
+        ),
         shape=(3, 2),
     )
     coo = sparse.coo_matrix(
@@ -255,7 +259,12 @@ def _duplicate_entry_matrices() -> list[Any]:
 
 
 _DUPLICATE_IDS = [
-    "sorted_csc", "unsorted_csc", "csr", "coo", "csc_array", "csr_array"
+    "sorted_csc",
+    "unsorted_csc",
+    "csr",
+    "coo",
+    "csc_array",
+    "csr_array",
 ]
 
 
@@ -399,8 +408,9 @@ class TestExpandSraAttributesDf:
         assert list(result.index) == ["custom_idx"]
 
     def test_namespaced_column_auto_detected(self) -> None:
-        """A frame using the Python-namespaced 'sra__sample_attributes'
-        column name is also expanded when the default dotted name is requested.
+        """Expand a namespaced 'sra__sample_attributes' column.
+
+        Requesting the default dotted name also expands the namespaced column.
         """
         df = pd.DataFrame(
             {"sra__sample_attributes": ["age;;30|disease;;Cancer"]}
@@ -411,8 +421,7 @@ class TestExpandSraAttributesDf:
         assert "sra__sample_attributes" in result.columns
 
     def test_explicit_namespaced_request_resolves_to_dotted(self) -> None:
-        """The fallback works both directions: a caller passing the
-        namespaced name finds the dotted column too."""
+        """Find the dotted column when the namespaced name is requested."""
         df = pd.DataFrame({"sra.sample_attributes": ["age;;42"]})
         result = _expand_sra_attributes_df(
             df, sra_attributes_column="sra__sample_attributes"
@@ -592,74 +601,76 @@ class TestCreateRangedSummarizedExperiment:
     def test_default_junction_extensions_for_gene(self) -> None:
         """Gene/exon assemblies do not need RR; default stays ('MM',)."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
-            MockBundle.discover.return_value = bundle
+        with mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle:
+            mock_bundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
                 genomic_unit="gene",
                 organism="human",
             )
-        call_kwargs = MockBundle.discover.call_args.kwargs
+        call_kwargs = mock_bundle.discover.call_args.kwargs
         assert call_kwargs["junction_exts"] == ("MM",)
 
     def test_default_junction_extensions_for_junction(self) -> None:
-        """Junction-level RSEs need the RR sidecar for coordinates; the
-        default must include 'RR' so create_rse works out of the box."""
+        """Include the RR sidecar for junction-level RSE coordinates.
+
+        The default includes 'RR' so create_rse works out of the box.
+        """
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
-            MockBundle.discover.return_value = bundle
+        with mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle:
+            mock_bundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
                 genomic_unit="junction",
                 organism="human",
             )
-        call_kwargs = MockBundle.discover.call_args.kwargs
+        call_kwargs = mock_bundle.discover.call_args.kwargs
         assert call_kwargs["junction_exts"] == ("MM", "RR")
 
     def test_explicit_junction_extensions(self) -> None:
         """Provided junction_extensions are tupled with strip()."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
-            MockBundle.discover.return_value = bundle
+        with mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle:
+            mock_bundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
                 genomic_unit="junction",
                 organism="human",
                 junction_extensions=["MM", " RR "],
             )
-        call_kwargs = MockBundle.discover.call_args.kwargs
+        call_kwargs = mock_bundle.discover.call_args.kwargs
         assert call_kwargs["junction_exts"] == ("MM", "RR")
 
     def test_annotations_default_when_ann_ext_none(self) -> None:
         """Junction unit -> ann_ext=None -> annotations='default'."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
-            MockBundle.discover.return_value = bundle
+        with mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle:
+            mock_bundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
                 genomic_unit="junction",
                 organism="human",
             )
-        call_kwargs = MockBundle.discover.call_args.kwargs
+        call_kwargs = mock_bundle.discover.call_args.kwargs
         assert call_kwargs["annotations"] == "default"
 
     def test_annotations_tuple_when_ann_ext_provided(self) -> None:
         """Gene unit with default human -> ann_ext='G026' -> annotations=('G026',)."""
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
-            MockBundle.discover.return_value = bundle
+        with mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle:
+            mock_bundle.discover.return_value = bundle
             create_ranged_summarized_experiment(
                 project="SRP009615",
                 genomic_unit="gene",
                 organism="human",
             )
-        call_kwargs = MockBundle.discover.call_args.kwargs
+        call_kwargs = mock_bundle.discover.call_args.kwargs
         assert call_kwargs["annotations"] == ("G026",)
 
     def test_all_kwargs_forwarded_to_rse(self) -> None:
         bundle = self._make_bundle_mock()
-        with mock.patch("recount3.bundle.R3ResourceBundle") as MockBundle:
-            MockBundle.discover.return_value = bundle
+        with mock.patch("recount3.bundle.R3ResourceBundle") as mock_bundle:
+            mock_bundle.discover.return_value = bundle
             result = create_ranged_summarized_experiment(
                 project="SRP009615",
                 genomic_unit="gene",
@@ -722,7 +733,9 @@ class TestCreateRseAgainstLocalMirror:
     """End-to-end runs against the mirrored recount3 tree in tests/data."""
 
     @staticmethod
-    def _use_mirror(monkeypatch: pytest.MonkeyPatch, cache_dir: Path) -> None:
+    def _use_mirror(
+        monkeypatch: pytest.MonkeyPatch, cache_dir: pathlib.Path
+    ) -> None:
         monkeypatch.setenv("RECOUNT3_URL", _MIRROR_URL)
         monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(cache_dir))
 
@@ -737,7 +750,7 @@ class TestCreateRseAgainstLocalMirror:
     @pytest.mark.requires_biocpy
     def test_cold_cache_reports_only_the_real_reason(
         self,
-        tmp_path: Path,
+        tmp_path: pathlib.Path,
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -762,7 +775,7 @@ class TestCreateRseAgainstLocalMirror:
     @pytest.mark.requires_biocpy
     def test_warm_cache_reports_exactly_the_same_thing(
         self,
-        tmp_path: Path,
+        tmp_path: pathlib.Path,
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
@@ -788,7 +801,7 @@ class TestCreateRseAgainstLocalMirror:
 
     @pytest.mark.requires_biocpy
     def test_without_fallback_the_error_explains_the_option(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         self._use_mirror(monkeypatch, tmp_path / "cache")
 
@@ -1323,9 +1336,7 @@ class TestComputeTpmValidation:
                 compute_tpm(rse)
 
     def test_sample_count_mismatch_raises_value_error(self) -> None:
-        rse = _make_tpm_rse(
-            _RAW.copy(), [100.0, 200.0], widths=[1000, 2000]
-        )
+        rse = _make_tpm_rse(_RAW.copy(), [100.0, 200.0], widths=[1000, 2000])
         with _patch_tpm_rse_class():
             with pytest.raises(ValueError, match="Mismatch"):
                 compute_tpm(rse)
@@ -1345,9 +1356,7 @@ class TestComputeTpmValues:
     def test_matches_hand_computed_values(self) -> None:
         # Reads = coverage / read length, RPK = reads / kb, TPM = RPK share.
         counts = np.array([[100.0, 0.0, 300.0], [400.0, 500.0, 50.0]])
-        rse = _make_tpm_rse(
-            counts, [100.0, 200.0, 50.0], widths=[1000, 2000]
-        )
+        rse = _make_tpm_rse(counts, [100.0, 200.0, 50.0], widths=[1000, 2000])
         with _patch_tpm_rse_class():
             result = compute_tpm(rse)
 
@@ -1414,9 +1423,7 @@ class TestComputeTpmValues:
 
     def test_negative_read_length_cancels_like_a_positive_one(self) -> None:
         counts = _RAW.copy()
-        rse = _make_tpm_rse(
-            counts, [-100.0, 200.0, 100.0], widths=[1000, 2000]
-        )
+        rse = _make_tpm_rse(counts, [-100.0, 200.0, 100.0], widths=[1000, 2000])
         with _patch_tpm_rse_class():
             result = compute_tpm(rse)
         _assert_tpm_equal(
@@ -1716,8 +1723,13 @@ class TestComputeTpmMissingValues:
             result = compute_tpm(rse)
         _assert_tpm_equal(
             result,
-            np.array([[np.nan, 250_000.0], [250_000.0, 250_000.0],
-                      [750_000.0, 500_000.0]]),
+            np.array(
+                [
+                    [np.nan, 250_000.0],
+                    [250_000.0, 250_000.0],
+                    [750_000.0, 500_000.0],
+                ]
+            ),
         )
 
     def test_infinite_count_is_nan_and_zeroes_its_sample(self) -> None:
@@ -1737,8 +1749,9 @@ class TestComputeTpmMissingValues:
             result = compute_tpm(rse)
         _assert_tpm_equal(
             result,
-            np.array([[np.inf, 250_000.0], [-np.inf, 250_000.0],
-                      [np.nan, 500_000.0]]),
+            np.array(
+                [[np.inf, 250_000.0], [-np.inf, 250_000.0], [np.nan, 500_000.0]]
+            ),
         )
 
     def test_degenerate_inputs_emit_no_warnings(self) -> None:
@@ -1864,7 +1877,9 @@ class TestComputeTpmSparse:
 class _MockColumnFrame:
     """Column data exposing BiocFrame's per-column accessors."""
 
-    def __init__(self, columns: dict[str, Any], flattened: pd.DataFrame) -> None:
+    def __init__(
+        self, columns: dict[str, Any], flattened: pd.DataFrame
+    ) -> None:
         self._columns = columns
         self._flattened = flattened
         self.to_pandas_calls = 0
@@ -2045,7 +2060,9 @@ class TestComputeTpmDenseLayout:
     @pytest.mark.parametrize(
         "dtype", [np.bool_, np.uint16, np.int32, np.float16, np.float32]
     )
-    def test_other_real_dtypes_are_computed_in_float64(self, dtype: Any) -> None:
+    def test_other_real_dtypes_are_computed_in_float64(
+        self, dtype: Any
+    ) -> None:
         counts = np.array([[1, 0, 3], [2, 1, 1]], dtype=dtype)
         rse = _make_tpm_rse(counts, [100.0] * 3, widths=[1000, 3000])
         with _patch_tpm_rse_class():
@@ -2053,7 +2070,9 @@ class TestComputeTpmDenseLayout:
         assert all(d == np.float64 for d in result.dtypes)
         _assert_tpm_equal(
             result,
-            _reference_tpm(counts.astype(np.float64), [1000, 3000], [100.0] * 3),
+            _reference_tpm(
+                counts.astype(np.float64), [1000, 3000], [100.0] * 3
+            ),
         )
 
     def test_object_assay_is_converted_to_float(self) -> None:
@@ -2061,9 +2080,7 @@ class TestComputeTpmDenseLayout:
         rse = _make_tpm_rse(counts, [100.0] * 2, widths=[1000, 1000])
         with _patch_tpm_rse_class():
             result = compute_tpm(rse)
-        _assert_tpm_equal(
-            result, np.array([[1e6 / 3, np.nan], [2e6 / 3, 1e6]])
-        )
+        _assert_tpm_equal(result, np.array([[1e6 / 3, np.nan], [2e6 / 3, 1e6]]))
 
 
 class TestComputeTpmSparseStorage:
@@ -2303,9 +2320,7 @@ class TestComputeTpmWithBiocPy:
 
     def test_uses_range_widths_without_bp_length(self) -> None:
         counts, widths, read_lengths = _random_tpm_case(6)
-        rse = self._experiment(
-            counts, read_lengths, widths=widths.astype(int)
-        )
+        rse = self._experiment(counts, read_lengths, widths=widths.astype(int))
         _assert_tpm_equal(
             compute_tpm(rse), _reference_tpm(counts, widths, read_lengths)
         )
@@ -2805,15 +2820,16 @@ class TestComputeReadCountsSparseAssay:
     def test_an_unsorted_sparse_assay_is_not_modified(self) -> None:
         """Converting to a sparse frame sorts indices on a private copy."""
         matrix = sparse.csc_matrix(
-            (np.array([400.0, 100.0, 500.0]), np.array([1, 0, 1]),
-             np.array([0, 2, 3, 3])),
+            (
+                np.array([400.0, 100.0, 500.0]),
+                np.array([1, 0, 1]),
+                np.array([0, 2, 3, 3]),
+            ),
             shape=(2, 3),
         )
         assert not matrix.has_sorted_indices
         original_indices = matrix.indices.copy()
-        rse = _MockRSE(
-            assays={"raw_counts": matrix}, col_data_df=_META.copy()
-        )
+        rse = _MockRSE(assays={"raw_counts": matrix}, col_data_df=_META.copy())
         with mock.patch.object(
             _utils,
             "get_ranged_summarizedexperiment_class",
@@ -2903,7 +2919,7 @@ class TestToAnndata:
 
     @pytest.mark.requires_anndata
     def test_sanitize_for_hdf5_renames_columns_and_uns_keys(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """A '/' in a QC field name is a path separator to HDF5."""
         anndata = pytest.importorskip("anndata")

@@ -46,15 +46,17 @@ Example::
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import dataclasses
 import operator
-from pathlib import Path
-from types import TracebackType
-from typing import Any, Mapping, TYPE_CHECKING, cast
+import pathlib
+import types
+from typing import Any, cast, TYPE_CHECKING
 
-from numpy import ndarray
+import numpy as np
 
-from recount3 import _utils, errors
+from recount3 import _utils
+from recount3 import errors
 
 if TYPE_CHECKING:  # pragma: no cover
     import pyBigWig  # type: ignore[import-not-found]
@@ -123,7 +125,7 @@ class BigWigFile:
         input.
     """
 
-    path: Path | str
+    path: pathlib.Path | str
     mode: str = "r"
 
     _bw: Any | None = dataclasses.field(default=None, init=False, repr=False)
@@ -151,7 +153,7 @@ class BigWigFile:
             return cast("pyBigWig.pyBigWig", self._bw)
 
         mode = _native_string(self.mode, "mode")
-        path = Path(self.path)
+        path = pathlib.Path(self.path)
         filename = _native_string(str(path), "path")
         writable = "w" in mode
         if not writable and not path.exists():
@@ -209,7 +211,7 @@ class BigWigFile:
         self,
         exc_type: type[BaseException] | None,
         exc: BaseException | None,
-        tb: TracebackType | None,
+        tb: types.TracebackType | None,
     ) -> None:
         """Close the cached handle on normal or exceptional context exit."""
         del exc_type, exc, tb
@@ -265,7 +267,7 @@ class BigWigFile:
         end: int,
         *,
         numpy: bool | None = None,
-    ) -> list[float] | ndarray:
+    ) -> list[float] | np.ndarray:
         """Return per-base values over the half-open interval ``[start, end)``.
 
         Args:
@@ -317,7 +319,7 @@ class BigWigFile:
         start: int | None = None,
         end: int | None = None,
         *,
-        type: str = "mean",  # pylint: disable=redefined-builtin
+        type: str = "mean",
         n_bins: int | None = None,
         exact: bool | None = None,
     ) -> list[float | None]:

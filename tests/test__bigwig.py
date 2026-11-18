@@ -32,7 +32,7 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
+import pathlib
 from typing import Any
 from unittest import mock
 
@@ -44,7 +44,7 @@ from recount3 import _utils
 from recount3 import errors
 from recount3._bigwig import BigWigFile
 
-_DATA_DIR = Path(__file__).parent / "data"
+_DATA_DIR = pathlib.Path(__file__).parent / "data"
 _BW_PATH = (
     _DATA_DIR
     / "recount3_mirror"
@@ -133,7 +133,7 @@ def test_ensure_open_returns_cached_handle() -> None:
 
 
 def test_ensure_open_missing_path_raises_file_not_found(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """FileNotFoundError is raised when the path does not exist on disk."""
     bw = BigWigFile(path=tmp_path / "nonexistent.bw")
@@ -405,7 +405,7 @@ def test_intervals_with_coords_returns_region_tuples() -> None:
 
 
 @pytest.fixture
-def tiny_bw_path(tmp_path: Path) -> Path:
+def tiny_bw_path(tmp_path: pathlib.Path) -> pathlib.Path:
     """A 16-base chromosome with gaps, zeros, and signed coverage."""
     pybigwig = pytest.importorskip("pyBigWig")
     path = tmp_path / "tiny.bw"
@@ -432,7 +432,7 @@ def tiny_bw_path(tmp_path: Path) -> Path:
     ],
 )
 def test_optional_bounds_match_native(
-    tiny_bw_path: Path,
+    tiny_bw_path: pathlib.Path,
     method: str,
     bounds: dict[str, int],
     expected_bounds: tuple[int, int],
@@ -612,7 +612,7 @@ def test_large_value_spans_forwarded_without_allocation(
 
 
 @pytest.mark.requires_pybigwig
-def test_numpy_integer_coordinates_and_bins(tiny_bw_path: Path) -> None:
+def test_numpy_integer_coordinates_and_bins(tiny_bw_path: pathlib.Path) -> None:
     reader = BigWigFile(tiny_bw_path)
     with reader:
         assert reader.values("chr1", np.int64(0), np.uint32(2)) == [1.0, 1.0]
@@ -625,7 +625,7 @@ def test_numpy_integer_coordinates_and_bins(tiny_bw_path: Path) -> None:
 
 
 @pytest.mark.requires_pybigwig
-def test_string_path_and_reopen(tiny_bw_path: Path) -> None:
+def test_string_path_and_reopen(tiny_bw_path: pathlib.Path) -> None:
     reader = BigWigFile(str(tiny_bw_path))
     with reader as first:
         assert reader.chroms("chr1") == 16
@@ -637,7 +637,9 @@ def test_string_path_and_reopen(tiny_bw_path: Path) -> None:
 
 @pytest.mark.requires_pybigwig
 @pytest.mark.parametrize("mode", ["w", "wb"])
-def test_write_mode_can_create_a_new_file(tmp_path: Path, mode: str) -> None:
+def test_write_mode_can_create_a_new_file(
+    tmp_path: pathlib.Path, mode: str
+) -> None:
     path = tmp_path / "created.bw"
     writer = BigWigFile(path, mode=mode)
     assert not path.exists()
@@ -655,7 +657,7 @@ def test_write_mode_can_create_a_new_file(tmp_path: Path, mode: str) -> None:
 )
 @pytest.mark.parametrize("mode", ["w", "wb"])
 def test_read_methods_reject_writers_without_opening(
-    tmp_path: Path, method: str, mode: str
+    tmp_path: pathlib.Path, method: str, mode: str
 ) -> None:
     """A mistaken read must not truncate a file or reach unsafe native code."""
     path = tmp_path / "existing.bw"
@@ -676,7 +678,7 @@ def test_read_methods_reject_writers_without_opening(
     "method", ["chroms", "header", "values", "stats", "intervals"]
 )
 def test_read_methods_reject_an_open_writer(
-    method: str, tmp_path: Path
+    method: str, tmp_path: pathlib.Path
 ) -> None:
     """Cached handles retain their mode even if the next-open mode changes."""
     module, handle = _mock_pybigwig()
@@ -694,7 +696,7 @@ def test_read_methods_reject_an_open_writer(
 
 @pytest.mark.requires_pybigwig
 def test_reading_cached_handle_uses_its_original_mode(
-    tiny_bw_path: Path,
+    tiny_bw_path: pathlib.Path,
 ) -> None:
     reader = BigWigFile(tiny_bw_path)
     with reader:
@@ -703,7 +705,7 @@ def test_reading_cached_handle_uses_its_original_mode(
 
 
 @pytest.mark.requires_pybigwig
-def test_read_guard_resets_on_reopen(tmp_path: Path) -> None:
+def test_read_guard_resets_on_reopen(tmp_path: pathlib.Path) -> None:
     reader = BigWigFile(tmp_path / "reopen.bw", mode="w")
     with reader as native:
         native.addHeader([("chr1", 2)])
@@ -749,7 +751,9 @@ def test_type_check_failure_closes_unowned_handle() -> None:
 
 
 @pytest.mark.requires_pybigwig
-def test_tiny_file_values_gaps_and_exact_statistics(tiny_bw_path: Path) -> None:
+def test_tiny_file_values_gaps_and_exact_statistics(
+    tiny_bw_path: pathlib.Path,
+) -> None:
     """Check every nonempty subregion against an independent dense oracle."""
     signal = [
         1.0,
@@ -795,7 +799,7 @@ def test_tiny_file_values_gaps_and_exact_statistics(tiny_bw_path: Path) -> None:
 
 @pytest.mark.requires_pybigwig
 def test_binned_statistics_preserve_zero_and_missing(
-    tiny_bw_path: Path,
+    tiny_bw_path: pathlib.Path,
 ) -> None:
     reader = BigWigFile(tiny_bw_path)
     with reader:
@@ -821,7 +825,7 @@ def test_binned_statistics_preserve_zero_and_missing(
 
 
 @pytest.mark.requires_pybigwig
-def test_exact_statistics_bypass_zoom_summaries(tmp_path: Path) -> None:
+def test_exact_statistics_bypass_zoom_summaries(tmp_path: pathlib.Path) -> None:
     """Use enough entries for zooms; tiny files cannot exercise exact=True."""
     pybigwig = pytest.importorskip("pyBigWig")
     path = tmp_path / "zoom.bw"
@@ -852,7 +856,7 @@ def test_exact_statistics_bypass_zoom_summaries(tmp_path: Path) -> None:
 
 
 @pytest.mark.requires_pybigwig
-def test_intervals_keep_original_endpoints(tiny_bw_path: Path) -> None:
+def test_intervals_keep_original_endpoints(tiny_bw_path: pathlib.Path) -> None:
     reader = BigWigFile(tiny_bw_path)
     with reader:
         assert reader.intervals("chr1", 1, 9) == (
@@ -864,7 +868,7 @@ def test_intervals_keep_original_endpoints(tiny_bw_path: Path) -> None:
 
 @pytest.mark.requires_pybigwig
 def test_large_coordinates_are_unsigned_without_large_arrays(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A sparse 32-bit chromosome needs only a few hundred bytes on disk."""
     pybigwig = pytest.importorskip("pyBigWig")
@@ -899,7 +903,7 @@ def test_large_coordinates_are_unsigned_without_large_arrays(
 
 @pytest.mark.requires_pybigwig
 def test_missing_regions_and_empty_file(
-    tmp_path: Path, tiny_bw_path: Path
+    tmp_path: pathlib.Path, tiny_bw_path: pathlib.Path
 ) -> None:
     reader = BigWigFile(tiny_bw_path)
     with reader:
@@ -921,7 +925,7 @@ def test_missing_regions_and_empty_file(
 
 
 @pytest.mark.requires_pybigwig
-def test_numpy_values_match_list(tiny_bw_path: Path) -> None:
+def test_numpy_values_match_list(tiny_bw_path: pathlib.Path) -> None:
     pybigwig = pytest.importorskip("pyBigWig")
     if not pybigwig.numpy:
         pytest.skip("pyBigWig was compiled without NumPy support")
@@ -939,7 +943,7 @@ def test_numpy_values_match_list(tiny_bw_path: Path) -> None:
 @pytest.mark.parametrize("method", ["values", "stats", "intervals"])
 @pytest.mark.parametrize("bounds", [(2, 2), (4, 2), (0, 17)])
 def test_invalid_native_bounds_propagate(
-    tiny_bw_path: Path,
+    tiny_bw_path: pathlib.Path,
     method: str,
     bounds: tuple[int, int],
 ) -> None:
@@ -982,7 +986,7 @@ def test_invalid_chromosome_rejected_before_open(
     "suffix, error", [("\0suffix", ValueError), ("\ud800", UnicodeEncodeError)]
 )
 def test_invalid_open_strings_leave_existing_file_untouched(
-    tmp_path: Path, argument: str, suffix: str, error: type[Exception]
+    tmp_path: pathlib.Path, argument: str, suffix: str, error: type[Exception]
 ) -> None:
     """Validate strings before handing a potentially destructive open to C."""
     path = tmp_path / "existing.bw"
@@ -1001,7 +1005,7 @@ def test_invalid_open_strings_leave_existing_file_untouched(
 
 
 @pytest.mark.requires_pybigwig
-def test_unicode_names_and_paths(tmp_path: Path) -> None:
+def test_unicode_names_and_paths(tmp_path: pathlib.Path) -> None:
     """Valid UTF-8 and str subclasses remain supported at the C boundary."""
     pybigwig = pytest.importorskip("pyBigWig")
     path = tmp_path / "covérage.bw"
@@ -1042,7 +1046,7 @@ def test_invalid_statistic_string_rejected_before_open(
 
 
 @pytest.mark.requires_pybigwig
-def test_unknown_statistic_propagates(tiny_bw_path: Path) -> None:
+def test_unknown_statistic_propagates(tiny_bw_path: pathlib.Path) -> None:
     reader = BigWigFile(tiny_bw_path)
     with reader:
         with pytest.raises(RuntimeError, match="Invalid type"):
@@ -1079,7 +1083,7 @@ def test_string_subclasses_cannot_bypass_statistic_validation(
 
 @pytest.mark.parametrize("suffix", ["\0suffix", "\ud800"])
 def test_string_subclasses_cannot_bypass_mode_validation(
-    tmp_path: Path, suffix: str
+    tmp_path: pathlib.Path, suffix: str
 ) -> None:
     path = tmp_path / "existing.bw"
     path.write_bytes(b"original contents")
@@ -1098,7 +1102,7 @@ def test_string_subclasses_cannot_bypass_mode_validation(
 )
 @pytest.mark.parametrize("already_open", [False, True])
 def test_string_subclass_write_mode_cannot_bypass_read_guard(
-    tmp_path: Path, method: str, already_open: bool
+    tmp_path: pathlib.Path, method: str, already_open: bool
 ) -> None:
     path = tmp_path / "existing.bw"
     path.write_bytes(b"original contents")
@@ -1159,7 +1163,7 @@ def test_invalid_mode_types_rejected_before_open(
 
 
 @pytest.mark.requires_pybigwig
-def test_native_string_subclasses(tiny_bw_path: Path) -> None:
+def test_native_string_subclasses(tiny_bw_path: pathlib.Path) -> None:
     """Preserve valid native strings and reject disguised writes intact."""
     reader = BigWigFile(tiny_bw_path, mode=_StringSubclass("r"))
     with reader:
@@ -1187,7 +1191,7 @@ def test_native_string_subclasses(tiny_bw_path: Path) -> None:
 @pytest.mark.parametrize("encoding", ["bedGraph", "variableStep", "fixedStep"])
 @pytest.mark.parametrize("offset", [0, 2**31 - 2])
 def test_queries_across_storage_encodings(
-    tmp_path: Path, encoding: str, offset: int
+    tmp_path: pathlib.Path, encoding: str, offset: int
 ) -> None:
     """Exercise all native block decoders with tiny, sparse signed data."""
     pybigwig = pytest.importorskip("pyBigWig")

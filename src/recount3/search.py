@@ -101,9 +101,9 @@ Typical usage example::
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 import itertools
 import posixpath
-from collections.abc import Iterable
 from typing import Final
 
 import pandas as pd
@@ -232,7 +232,7 @@ def _make_resources(
         try:
             desc = _descriptions.R3ResourceDescription(**params)
             res = resource.R3Resource(desc)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             if strict:
                 raise
             continue
@@ -795,7 +795,7 @@ def available_samples(
     for res in resources:
         try:
             obj = res.load()
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc:
             load_errors.append((res.url, exc))
             continue
 

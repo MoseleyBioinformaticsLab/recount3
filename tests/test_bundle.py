@@ -29,7 +29,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# pylint: disable=redefined-outer-name
 
 from __future__ import annotations
 
@@ -37,65 +36,61 @@ import dataclasses
 import gzip
 import io
 import logging
+import pathlib
 import threading
+from typing import Any
+from unittest.mock import MagicMock
+from unittest.mock import patch
 import urllib.error
 import urllib.parse
 import zipfile
-from pathlib import Path
-from typing import Any
-from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 import scipy.sparse
 
+from recount3._descriptions import R3ResourceDescription
 import recount3._utils as _utils_module
 import recount3.bundle as bmod
-import recount3.resource as resource_module
-import recount3.search as search_module
-from recount3.bundle import (
-    R3ResourceBundle,
-    _align_ranges_to_features,
-    _choose_alignment_key,
-    _coerce_gtf_bp_length,
-    _coerce_gtf_phase_column,
-    _collapse_rows_by_key,
-    _construct_ranged_summarized_experiment,
-    _construct_summarized_experiment,
-    _count_compat_keys,
-    _classify_ranges_failure,
-    _dedupe_ranges_on_feature_id,
-    _ensure_unique_columns,
-    _load_optional_metadata,
-    _make_unique_names,
-    _metadata_origin,
-    _namespace_metadata_columns,
-    _outer_merge_metadata_frames,
-    _parse_gtf_attributes,
-    _maybe_relabel_counts_columns_to_external_id,
-    _peek_gtf_feature_counts,
-    _ranges_from_gtf,
-    _read_gtf_dataframe,
-    _read_rr_table,
-    _select_gtf_resource_for_unit,
-    _standardize_metadata_frame,
-    _strip_ensembl_version,
-    _to_genomic_ranges,
-)
-from recount3._descriptions import R3ResourceDescription
+from recount3.bundle import _align_ranges_to_features
+from recount3.bundle import _choose_alignment_key
+from recount3.bundle import _classify_ranges_failure
+from recount3.bundle import _coerce_gtf_bp_length
+from recount3.bundle import _coerce_gtf_phase_column
+from recount3.bundle import _collapse_rows_by_key
+from recount3.bundle import _construct_ranged_summarized_experiment
+from recount3.bundle import _construct_summarized_experiment
+from recount3.bundle import _count_compat_keys
+from recount3.bundle import _dedupe_ranges_on_feature_id
+from recount3.bundle import _ensure_unique_columns
+from recount3.bundle import _load_optional_metadata
+from recount3.bundle import _make_unique_names
+from recount3.bundle import _maybe_relabel_counts_columns_to_external_id
+from recount3.bundle import _metadata_origin
+from recount3.bundle import _namespace_metadata_columns
+from recount3.bundle import _outer_merge_metadata_frames
+from recount3.bundle import _parse_gtf_attributes
+from recount3.bundle import _peek_gtf_feature_counts
+from recount3.bundle import _ranges_from_gtf
+from recount3.bundle import _read_gtf_dataframe
+from recount3.bundle import _read_rr_table
+from recount3.bundle import _select_gtf_resource_for_unit
+from recount3.bundle import _standardize_metadata_frame
+from recount3.bundle import _strip_ensembl_version
+from recount3.bundle import _to_genomic_ranges
+from recount3.bundle import R3ResourceBundle
 from recount3.config import Config
-from recount3.errors import (
-    CompatibilityError,
-    DownloadError,
-    LoadError,
-    MissingRangesError,
-    RangesCoverageError,
-    RangesError,
-)
+from recount3.errors import CompatibilityError
+from recount3.errors import DownloadError
+from recount3.errors import LoadError
+from recount3.errors import MissingRangesError
+from recount3.errors import RangesCoverageError
+from recount3.errors import RangesError
 from recount3.resource import R3Resource
+import recount3.search as search_module
 
-_TESTS_DIR = Path(__file__).parent
+_TESTS_DIR = pathlib.Path(__file__).parent
 _DATA_DIR = _TESTS_DIR / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
 
@@ -122,9 +117,8 @@ _MIRROR_URL = _MIRROR.resolve().as_uri() + "/"
 
 
 @pytest.fixture()
-def local_config(tmp_path: Path) -> Config:
-    """Return a Config whose cache_dir is tmp_path and base_url points at the
-    local test-data mirror."""
+def local_config(tmp_path: pathlib.Path) -> Config:
+    """Return a Config using tmp_path and the local test-data mirror."""
     return Config(
         base_url=_MIRROR_URL,
         timeout=5,
@@ -581,7 +575,7 @@ class TestReadRrTable:
         pd.testing.assert_frame_equal(result, rr_df)
 
     def test_fallback_to_file_when_load_returns_non_dataframe(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         content = "a\tb\n1\t2\n3\t4\n"
         tsv_path = tmp_path / "test.tsv"
@@ -596,7 +590,7 @@ class TestReadRrTable:
         assert list(result.columns) == ["a", "b"]
         assert len(result) == 2
 
-    def test_fallback_reads_gz_file(self, tmp_path: Path) -> None:
+    def test_fallback_reads_gz_file(self, tmp_path: pathlib.Path) -> None:
         content = b"a\tb\n10\t20\n"
         gz_path = tmp_path / "test.tsv.gz"
         with gzip.open(gz_path, "wb") as f:
@@ -856,7 +850,7 @@ class TestReadGtfDataframe:
         assert expected_cols.issubset(set(df.columns))
         assert set(df["feature"].unique()) == {"gene"}
 
-    def test_reads_plain_gtf(self, tmp_path: Path) -> None:
+    def test_reads_plain_gtf(self, tmp_path: pathlib.Path) -> None:
         gtf_content = (
             "chr1\tref\tgene\t1\t100\t.\t+\t.\t"
             'gene_id "ENSG001"; biotype "pc";\n'
@@ -872,7 +866,7 @@ class TestReadGtfDataframe:
 
     @pytest.mark.parametrize("suffix", [".gtf", ".gtf.gz"])
     def test_normalizes_unstranded_features(
-        self, tmp_path: Path, suffix: str
+        self, tmp_path: pathlib.Path, suffix: str
     ) -> None:
         path = tmp_path / f"annotation{suffix}"
         content = "".join(
@@ -1054,7 +1048,7 @@ class TestPeekGtfFeatureCounts:
         _peek_gtf_feature_counts(res, autoload=False)
         res.ensure_cached.assert_called_once_with(download=False)
 
-    def test_max_lines_limits_scan(self, tmp_path: Path) -> None:
+    def test_max_lines_limits_scan(self, tmp_path: pathlib.Path) -> None:
         lines = [
             'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G%d"\n' % i
             for i in range(20)
@@ -1068,7 +1062,7 @@ class TestPeekGtfFeatureCounts:
         counts = _peek_gtf_feature_counts(res, max_lines=5)
         assert counts["gene"] == 5
 
-    def test_comment_lines_skipped(self, tmp_path: Path) -> None:
+    def test_comment_lines_skipped(self, tmp_path: pathlib.Path) -> None:
         content = '# comment\nchr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
         gz_path = tmp_path / "test.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
@@ -1361,7 +1355,9 @@ class TestSelectGtfResourceForUnit:
         )
         assert result is None
 
-    def test_returns_candidate_containing_feature(self, tmp_path: Path) -> None:
+    def test_returns_candidate_containing_feature(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         gz_path = tmp_path / "genes.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write('chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n')
@@ -1384,7 +1380,9 @@ class TestSelectGtfResourceForUnit:
         )
         assert result is res
 
-    def test_filters_by_annotation_extension(self, tmp_path: Path) -> None:
+    def test_filters_by_annotation_extension(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         gz_path = tmp_path / "genes.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write('chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n')
@@ -1415,7 +1413,9 @@ class TestSelectGtfResourceForUnit:
         )
         assert result is res_right
 
-    def test_returns_best_when_no_feature_found(self, tmp_path: Path) -> None:
+    def test_returns_best_when_no_feature_found(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         gz_path = tmp_path / "exon_only.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write('chr1\tref\texon\t1\t100\t.\t+\t.\texon_id "E1"\n')
@@ -2532,7 +2532,7 @@ class TestToSummarizedExperiment:
 
 class TestToRangedSummarizedExperiment:
     @pytest.fixture()
-    def _synthetic_gtf_gz(self, tmp_path: Path) -> Path:
+    def _synthetic_gtf_gz(self, tmp_path: pathlib.Path) -> pathlib.Path:
         """Write a minimal 3-gene GTF.gz and return its path."""
         gz_path = tmp_path / "genes.gtf.gz"
         content = (
@@ -2544,7 +2544,7 @@ class TestToRangedSummarizedExperiment:
             f.write(content)
         return gz_path
 
-    def _bundle_with_gene_gtf(self, gtf_path: Path) -> R3ResourceBundle:
+    def _bundle_with_gene_gtf(self, gtf_path: pathlib.Path) -> R3ResourceBundle:
         """Bundle with one gene count resource + GTF annotation."""
         feature_ids = ["ENSG001.1", "ENSG002.1", "ENSG003.1"]
         counts_df = pd.DataFrame(
@@ -2578,7 +2578,9 @@ class TestToRangedSummarizedExperiment:
         return R3ResourceBundle(resources=[res_count, res_ann])
 
     @pytest.mark.requires_biocpy
-    def test_gene_with_gtf_annotation(self, _synthetic_gtf_gz: Path) -> None:
+    def test_gene_with_gtf_annotation(
+        self, _synthetic_gtf_gz: pathlib.Path
+    ) -> None:
         b = self._bundle_with_gene_gtf(_synthetic_gtf_gz)
         rse = b.to_ranged_summarized_experiment(
             genomic_unit="gene", autoload=False
@@ -2587,7 +2589,7 @@ class TestToRangedSummarizedExperiment:
 
     @pytest.mark.requires_biocpy
     def test_gene_with_unstranded_gtf_annotation(
-        self, _synthetic_gtf_gz: Path
+        self, _synthetic_gtf_gz: pathlib.Path
     ) -> None:
         with gzip.open(_synthetic_gtf_gz, "rt", encoding="utf-8") as handle:
             content = handle.read()
@@ -2633,7 +2635,7 @@ class TestToRangedSummarizedExperiment:
             )
 
     @pytest.mark.requires_biocpy
-    def test_junction_with_rr_coordinates(self, tmp_path: Path) -> None:
+    def test_junction_with_rr_coordinates(self, tmp_path: pathlib.Path) -> None:
         rr_content = (
             "seqnames\tstarts\tends\tstrand\tjunction_id\n"
             "chr1\t1\t100\t+\tJX001\n"
@@ -2809,7 +2811,9 @@ class TestToRangedSummarizedExperiment:
             )
 
     @pytest.mark.requires_biocpy
-    def test_rr_duplicate_row_names_made_unique(self, tmp_path: Path) -> None:
+    def test_rr_duplicate_row_names_made_unique(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         rr_content = (
             "seqnames\tstarts\tends\tstrand\tjunction_id\n"
             "chr1\t1\t100\t+\tJX_DUP\n"
@@ -2850,7 +2854,7 @@ class TestToRangedSummarizedExperiment:
 
     @pytest.mark.requires_biocpy
     def test_rr_without_strand_column_defaults_to_star(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         rr_content = "seqnames\tstarts\tends\nchr1\t1\t100\nchr1\t200\t300\n"
         rr_df = pd.read_csv(io.StringIO(rr_content), sep="\t")
@@ -2941,7 +2945,7 @@ class TestR3ResourceBundleDownload:
     def test_pathlike_dest_forwarded(self) -> None:
         res = _mock_resource()
         b = R3ResourceBundle(resources=[res])
-        dest = Path("/some/dir")
+        dest = pathlib.Path("/some/dir")
         b.download(dest=dest)
         res.download.assert_called_once_with(
             path=dest, cache_mode="enable", overwrite=False
@@ -2950,7 +2954,7 @@ class TestR3ResourceBundleDownload:
     def test_pathlike_dest_forwarded_in_parallel(self) -> None:
         resources = [_mock_resource() for _ in range(3)]
         b = R3ResourceBundle(resources=resources)
-        dest = Path("/some/dir")
+        dest = pathlib.Path("/some/dir")
         b.download(dest=dest, max_workers=4)
         for res in resources:
             res.download.assert_called_once_with(
@@ -2995,7 +2999,7 @@ class TestR3ResourceBundleDownload:
         b.download(max_workers=4)
 
     def test_parallel_cached_transfers_overlap_and_fill_one_zip(
-        self, local_config: Config, tmp_path: Path
+        self, local_config: Config, tmp_path: pathlib.Path
     ) -> None:
         """Distinct cached transfers overlap and produce a complete ZIP.
 
@@ -3020,7 +3024,7 @@ class TestR3ResourceBundleDownload:
             for index in range(4)
         ]
 
-        def transfer(url: str, path: Path, **_: Any) -> None:
+        def transfer(url: str, path: pathlib.Path, **_: Any) -> None:
             barrier.wait()
             path.write_bytes(url.encode())
 
@@ -3136,7 +3140,8 @@ class TestRangesFromGtfAdditional:
 
 
 class TestPeekGtfShortLines:
-    def test_line_with_two_fields_skipped(self, tmp_path: Path) -> None:
+
+    def test_line_with_two_fields_skipped(self, tmp_path: pathlib.Path) -> None:
         gz_path = tmp_path / "short.gtf.gz"
         content = (
             "chr1\tref\n" 'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "G1"\n'
@@ -3151,7 +3156,8 @@ class TestPeekGtfShortLines:
 
 
 class TestSelectGtfResourceForUnitAdditional:
-    def test_exon_unit_scoring(self, tmp_path: Path) -> None:
+
+    def test_exon_unit_scoring(self, tmp_path: pathlib.Path) -> None:
         gz_path = tmp_path / "exons.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
             f.write('chr1\tref\texon\t1\t100\t.\t+\t.\texon_id "E1"\n')
@@ -3173,7 +3179,7 @@ class TestSelectGtfResourceForUnitAdditional:
         assert result is res
 
     def test_resource_url_without_gtf_still_selected(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         gz_path = tmp_path / "genes.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
@@ -3195,7 +3201,9 @@ class TestSelectGtfResourceForUnitAdditional:
         )
         assert result is res
 
-    def test_genomic_unit_matches_adds_score(self, tmp_path: Path) -> None:
+    def test_genomic_unit_matches_adds_score(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """Cover 766->770 True branch (s += 200)."""
         gz_path = tmp_path / "genes.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
@@ -3340,7 +3348,9 @@ class TestNormalizeSampleMetadataExternalIdFillback:
 
 class TestToRangedSEAutoload:
     @pytest.mark.requires_biocpy
-    def test_autoload_true_reuses_cached_gtf(self, tmp_path: Path) -> None:
+    def test_autoload_true_reuses_cached_gtf(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         gz_path = tmp_path / "genes.gtf.gz"
         content = (
             'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001"; gene_name "MYC"\n'
@@ -3387,7 +3397,7 @@ class TestToRangedSEAutoload:
 
     @pytest.mark.requires_biocpy
     def test_autoload_becomes_the_resources_download_policy(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """autoload reaches the annotation, which is what the bug missed.
 
@@ -3422,7 +3432,7 @@ class TestToRangedSEAutoload:
         res_ann.url = "http://example.com/ann/gene.gtf.gz"
         res_ann._cached_path.return_value = gz_path
 
-        def fake_ensure_cached(*, download: bool) -> Path:
+        def fake_ensure_cached(*, download: bool) -> pathlib.Path:
             assert download is True
             gz_path.parent.mkdir(parents=True, exist_ok=True)
             with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
@@ -3439,7 +3449,9 @@ class TestToRangedSEAutoload:
         assert rse is not None
 
     @pytest.mark.requires_biocpy
-    def test_enrich_cols_joined_to_row_data(self, tmp_path: Path) -> None:
+    def test_enrich_cols_joined_to_row_data(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         gz_path = tmp_path / "genes_with_name.gtf.gz"
         content = 'chr1\tref\tgene\t1\t100\t.\t+\t.\tgene_id "ENSG001"; gene_name "MYC"\n'
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
@@ -3640,7 +3652,10 @@ class TestRealGtfFixtureIntegration:
 
 
 class TestReadRrTableExceptionPaths:
-    def test_fallback_to_file_when_load_raises(self, tmp_path: Path) -> None:
+
+    def test_fallback_to_file_when_load_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         content = "col_a\tcol_b\n10\t20\n"
         tsv_path = tmp_path / "rr.tsv"
         tsv_path.write_text(content)
@@ -3665,7 +3680,10 @@ class TestReadRrTableExceptionPaths:
 
 
 class TestSelectGtfResourcePeekException:
-    def test_peek_exception_is_logged_and_skipped(self, tmp_path: Path) -> None:
+
+    def test_peek_exception_is_logged_and_skipped(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """When _peek_gtf_feature_counts raises, log a warning and continue."""
         gz_path = tmp_path / "genes.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as f:
@@ -3822,7 +3840,7 @@ class TestAddBigwigUrls:
 
 def _annotation_resource(
     *,
-    cached_path: Path,
+    cached_path: pathlib.Path,
     url_path: str,
     url: str,
     genomic_unit: Any = None,
@@ -3847,7 +3865,7 @@ def _annotation_resource(
     return res
 
 
-def _write_gtf(path: Path, *, feature: str = "gene") -> Path:
+def _write_gtf(path: pathlib.Path, *, feature: str = "gene") -> pathlib.Path:
     """Write a one-row uncompressed GTF naming ``feature`` and return its path."""
     path.write_text(
         f'chr1\tref\t{feature}\t1\t100\t.\t+\t.\t{feature}_id "F1"\n',
@@ -3949,7 +3967,10 @@ class TestAlignRangesToFeaturesWithDuplicates:
 
 
 class TestSelectGtfResourceForUnitRanking:
-    def test_two_exact_unit_matches_are_ambiguous(self, tmp_path: Path) -> None:
+
+    def test_two_exact_unit_matches_are_ambiguous(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         path = _write_gtf(tmp_path / "genes.gtf")
         resources = [
             _annotation_resource(
@@ -3969,7 +3990,7 @@ class TestSelectGtfResourceForUnitRanking:
             )
 
     def test_case_insensitive_unit_outranks_an_unlabelled_candidate(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """``"Gene"`` misses the exact match but still scores highest."""
         labelled = _annotation_resource(
@@ -3993,7 +4014,7 @@ class TestSelectGtfResourceForUnitRanking:
         assert "Selected annotation resource for gene" in caplog.text
 
     def test_exon_named_gtf_scores_on_name_and_extension(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         res = _annotation_resource(
             cached_path=_write_gtf(tmp_path / "e.gtf", feature="exon"),
@@ -4008,7 +4029,7 @@ class TestSelectGtfResourceForUnitRanking:
         assert result is res
 
     def test_uncached_candidate_is_skipped_when_autoload_is_off(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         res = _annotation_resource(
             cached_path=tmp_path / "absent.gz",
@@ -4030,7 +4051,7 @@ class TestSelectGtfResourceForUnitRanking:
         assert "autoload is disabled" in caplog.text
 
     def test_unreadable_candidate_is_logged_and_skipped(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         corrupt = tmp_path / "bad.gtf.gz"
         corrupt.write_text("this is not gzip", encoding="utf-8")
@@ -4294,7 +4315,7 @@ class TestJunctionRanges:
             bundle._junction_ranges(mm1.get_loaded(), autoload=False)
 
     def test_uncached_rr_sidecar_is_read_from_disk(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         rr_path = tmp_path / "jxn.RR.tsv"
         rr_path.write_text(
@@ -4692,7 +4713,10 @@ class TestStackCountMatricesFeatureCompat:
 
 @pytest.mark.requires_biocpy
 class TestToRangedSummarizedExperimentResourceUrls:
-    def test_annotation_url_is_recorded_only_once(self, tmp_path: Path) -> None:
+
+    def test_annotation_url_is_recorded_only_once(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """An annotation already listed in the metadata is not re-appended."""
         gz_path = tmp_path / "genes.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as handle:
@@ -4910,8 +4934,9 @@ class TestPrepareExperimentAssembly:
 
 @pytest.mark.requires_biocpy
 class TestToRangedSummarizedExperimentRangeReuse:
+
     def test_a_repeated_build_reuses_the_cached_alignment(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         gz_path = tmp_path / "genes.gtf.gz"
         with gzip.open(gz_path, "wt", encoding="utf-8") as handle:

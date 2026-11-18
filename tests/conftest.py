@@ -137,7 +137,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     del session  # Unused; the check depends only on the import location.
     if os.environ.get("RECOUNT3_TEST_INSTALLED") != "1":
         return
-    import recount3  # pylint: disable=import-outside-toplevel
+    import recount3
 
     location = pathlib.Path(recount3.__file__).resolve()
     if location.is_relative_to(_REPO_ROOT):
@@ -158,7 +158,7 @@ def recount3_subprocess_env() -> dict[str, str]:
     passed on through ``PYTHONPATH``; when they run against an installed
     package, the child already imports that package and nothing is added.
     """
-    import recount3  # pylint: disable=import-outside-toplevel
+    import recount3
 
     env = os.environ.copy()
     if pathlib.Path(recount3.__file__).resolve().parent.parent == _SRC_DIR:

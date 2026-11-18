@@ -31,9 +31,9 @@
 
 from __future__ import annotations
 
-import recount3.errors
-
 import pytest
+
+import recount3.errors
 
 
 def _all_error_types() -> tuple[type[BaseException], ...]:

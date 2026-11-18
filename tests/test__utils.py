@@ -36,25 +36,25 @@ import errno
 import gc
 import io
 import os
+import pathlib
 import ssl
 import types
+from typing import Any
+from unittest import mock
 import urllib.error
 import weakref
 import zipfile
-from pathlib import Path
-from typing import Any
-from unittest import mock
 
 import pandas as pd
 import pytest
 
-import recount3._utils as _utils
 from recount3 import errors
+import recount3._utils as _utils
 
 
 def _any_parquet_engine() -> bool:
     """Return True when pandas can resolve any Parquet engine here."""
-    import importlib.util  # pylint: disable=import-outside-toplevel
+    import importlib.util
 
     return any(
         importlib.util.find_spec(name) is not None
@@ -62,7 +62,7 @@ def _any_parquet_engine() -> bool:
     )
 
 
-_DATA_DIR = Path(__file__).parent / "data"
+_DATA_DIR = pathlib.Path(__file__).parent / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
 
 _GTF_GZ = (
@@ -117,7 +117,7 @@ def test_weakreflock_context_manager_on_exception() -> None:
     lock._lock.release()
 
 
-def test_zip_lock_for_path_creates_lock(tmp_path: Path) -> None:
+def test_zip_lock_for_path_creates_lock(tmp_path: pathlib.Path) -> None:
     """A new ZIP path gets its own _WeakRefLock."""
     zip_path = tmp_path / "archive.zip"
     lock = _utils._zip_lock_for_path(zip_path)
@@ -127,7 +127,7 @@ def test_zip_lock_for_path_creates_lock(tmp_path: Path) -> None:
     )
 
 
-def test_zip_lock_for_path_reuses_lock(tmp_path: Path) -> None:
+def test_zip_lock_for_path_reuses_lock(tmp_path: pathlib.Path) -> None:
     """The same ZIP path always returns the identical lock object."""
     zip_path = tmp_path / "archive.zip"
     lock_a = _utils._zip_lock_for_path(zip_path)
@@ -135,7 +135,7 @@ def test_zip_lock_for_path_reuses_lock(tmp_path: Path) -> None:
     assert lock_a is lock_b
 
 
-def test_zip_lock_for_path_different_paths(tmp_path: Path) -> None:
+def test_zip_lock_for_path_different_paths(tmp_path: pathlib.Path) -> None:
     """Different ZIP paths produce independent lock objects."""
     lock_a = _utils._zip_lock_for_path(tmp_path / "a.zip")
     lock_b = _utils._zip_lock_for_path(tmp_path / "b.zip")
@@ -143,7 +143,7 @@ def test_zip_lock_for_path_different_paths(tmp_path: Path) -> None:
 
 
 def test_path_lock_for_path_shares_one_lock_per_canonical_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Aliases of one destination must resolve to the very same lock.
 
@@ -158,7 +158,7 @@ def test_path_lock_for_path_shares_one_lock_per_canonical_path(
 
     lock = _utils._path_lock_for_path(target / "file")
 
-    assert _utils._path_lock_for_path(Path("target/file")) is lock
+    assert _utils._path_lock_for_path(pathlib.Path("target/file")) is lock
     assert _utils._path_lock_for_path(alias / "file") is lock
 
 
@@ -201,7 +201,7 @@ def test_strip_extended_prefix_leaves_unprefixed_paths_alone() -> None:
 
 
 def test_path_lock_for_path_shares_one_lock_across_windows_spellings(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
     """Two spellings of one resolved destination take the same lock.
 
@@ -216,7 +216,7 @@ def test_path_lock_for_path_shares_one_lock_across_windows_spellings(
             r"C:\cache\BiocFileCache.sqlite",
         ]
     )
-    monkeypatch.setattr(Path, "resolve", lambda self: next(spellings))
+    monkeypatch.setattr(pathlib.Path, "resolve", lambda self: next(spellings))
 
     first = _utils._path_lock_for_path(payload)
     second = _utils._path_lock_for_path(payload)
@@ -225,7 +225,7 @@ def test_path_lock_for_path_shares_one_lock_across_windows_spellings(
 
 
 def test_path_lock_for_path_does_not_accumulate_unused_locks(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """The registry holds locks weakly, so idle destinations are collected."""
     lock = _utils._path_lock_for_path(tmp_path / "file")
@@ -289,13 +289,13 @@ def test_cache_key_for_url_different_urls_same_basename() -> None:
     assert key_b.endswith("__file.gz")
 
 
-def test_cache_path_returns_path_under_root(tmp_path: Path) -> None:
+def test_cache_path_returns_path_under_root(tmp_path: pathlib.Path) -> None:
     """Returned Path lives directly under the given cache root."""
     p = _utils._cache_path(_SAMPLE_URL, tmp_path)
     assert p.parent == tmp_path
 
 
-def test_cache_path_creates_cache_root(tmp_path: Path) -> None:
+def test_cache_path_creates_cache_root(tmp_path: pathlib.Path) -> None:
     """cache_root is created when it does not yet exist."""
     root = tmp_path / "new" / "cache"
     assert not root.exists()
@@ -303,28 +303,28 @@ def test_cache_path_creates_cache_root(tmp_path: Path) -> None:
     assert root.is_dir()
 
 
-def test_cache_path_accepts_string_root(tmp_path: Path) -> None:
+def test_cache_path_accepts_string_root(tmp_path: pathlib.Path) -> None:
     """cache_root may be passed as a str."""
     p = _utils._cache_path(_SAMPLE_URL, str(tmp_path))
-    assert isinstance(p, Path)
+    assert isinstance(p, pathlib.Path)
     assert p.parent == tmp_path
 
 
-def test_ensure_dir_creates_nested_directories(tmp_path: Path) -> None:
+def test_ensure_dir_creates_nested_directories(tmp_path: pathlib.Path) -> None:
     """_ensure_dir creates a deeply nested directory tree."""
     target = tmp_path / "a" / "b" / "c"
     _utils._ensure_dir(target)
     assert target.is_dir()
 
 
-def test_ensure_dir_idempotent_on_existing_dir(tmp_path: Path) -> None:
+def test_ensure_dir_idempotent_on_existing_dir(tmp_path: pathlib.Path) -> None:
     """_ensure_dir does not raise when the directory already exists."""
     _utils._ensure_dir(tmp_path)
     _utils._ensure_dir(tmp_path)  # Second call – must not raise.
 
 
 def test_ensure_dir_raises_when_file_occupies_path(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """_ensure_dir raises NotADirectoryError when a file is at path."""
     file_path = tmp_path / "regular_file"
@@ -333,7 +333,7 @@ def test_ensure_dir_raises_when_file_occupies_path(
         _utils._ensure_dir(file_path)
 
 
-def test_atomic_replace_replaces_content(tmp_path: Path) -> None:
+def test_atomic_replace_replaces_content(tmp_path: pathlib.Path) -> None:
     """_atomic_replace atomically moves src_tmp over final_path."""
     src = tmp_path / "tmp_file"
     dst = tmp_path / "final_file"
@@ -344,7 +344,9 @@ def test_atomic_replace_replaces_content(tmp_path: Path) -> None:
     assert not src.exists()
 
 
-def test_atomic_replace_creates_parent_directory(tmp_path: Path) -> None:
+def test_atomic_replace_creates_parent_directory(
+    tmp_path: pathlib.Path,
+) -> None:
     """_atomic_replace creates the parent directory if it is absent."""
     src = tmp_path / "src"
     src.write_bytes(b"data")
@@ -353,7 +355,7 @@ def test_atomic_replace_creates_parent_directory(tmp_path: Path) -> None:
     assert dst.read_bytes() == b"data"
 
 
-def test_hardlink_or_copy_hardlink_success(tmp_path: Path) -> None:
+def test_hardlink_or_copy_hardlink_success(tmp_path: pathlib.Path) -> None:
     """_hardlink_or_copy creates a hardlink on the same filesystem."""
     dst = tmp_path / "dst.gtf.gz"
     _utils._hardlink_or_copy(_GTF_GZ, dst)
@@ -362,7 +364,7 @@ def test_hardlink_or_copy_hardlink_success(tmp_path: Path) -> None:
 
 
 def test_hardlink_or_copy_cross_device_fallback(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """EXDEV from os.link triggers shutil.copy2 fallback."""
@@ -381,7 +383,7 @@ def test_hardlink_or_copy_cross_device_fallback(
     [errno.EPERM, errno.EACCES, errno.EMLINK],
 )
 def test_hardlink_or_copy_permission_errors_fall_back_to_copy(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     err_no: int,
 ) -> None:
@@ -397,7 +399,7 @@ def test_hardlink_or_copy_permission_errors_fall_back_to_copy(
 
 
 def test_hardlink_or_copy_unexpected_oserror_propagates(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An unhandled OSError from os.link propagates to the caller."""
@@ -411,7 +413,7 @@ def test_hardlink_or_copy_unexpected_oserror_propagates(
 
 
 def test_hardlink_or_copy_tmp_cleaned_up_on_replace_failure(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Temp file is removed when _atomic_replace fails."""
@@ -431,7 +433,7 @@ def test_hardlink_or_copy_tmp_cleaned_up_on_replace_failure(
 
 
 def test_hardlink_or_copy_unlink_oserror_in_finally_swallowed(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OSError during tmp cleanup in finally is silently swallowed."""
@@ -446,14 +448,14 @@ def test_hardlink_or_copy_unlink_oserror_in_finally_swallowed(
         mock.Mock(side_effect=OSError("replace failed")),
     )
 
-    original_unlink = Path.unlink
+    original_unlink = pathlib.Path.unlink
 
-    def _raise_for_tmp(self: Path, missing_ok: bool = False) -> None:
+    def _raise_for_tmp(self: pathlib.Path, missing_ok: bool = False) -> None:
         if ".tmp" in self.name:
             raise OSError("cannot unlink tmp")
         original_unlink(self, missing_ok=missing_ok)
 
-    monkeypatch.setattr(Path, "unlink", _raise_for_tmp)
+    monkeypatch.setattr(pathlib.Path, "unlink", _raise_for_tmp)
 
     with pytest.raises(OSError, match="replace failed"):
         _utils._hardlink_or_copy(_GTF_GZ, tmp_path / "dst")
@@ -658,7 +660,7 @@ def test_stream_copy_empty_source_returns_zero() -> None:
     assert dst.getvalue() == b""
 
 
-def test_stream_copy_single_chunk(tmp_path: Path) -> None:
+def test_stream_copy_single_chunk(tmp_path: pathlib.Path) -> None:
     """_stream_copy copies data smaller than one chunk correctly."""
     data = _GTF_GZ.read_bytes()
     src = io.BytesIO(data)
@@ -668,7 +670,7 @@ def test_stream_copy_single_chunk(tmp_path: Path) -> None:
     assert dst.getvalue() == data
 
 
-def test_stream_copy_multiple_chunks(tmp_path: Path) -> None:
+def test_stream_copy_multiple_chunks(tmp_path: pathlib.Path) -> None:
     """_stream_copy reassembles data spread over many small chunks."""
     data = _EXON_GZ.read_bytes()
     src = io.BytesIO(data)
@@ -687,7 +689,7 @@ def test_stream_copy_returns_total_byte_count() -> None:
     )
 
 
-def test_download_to_file_success(tmp_path: Path) -> None:
+def test_download_to_file_success(tmp_path: pathlib.Path) -> None:
     """download_to_file writes URL content to the output path."""
     content = _GTF_GZ.read_bytes()
     out = tmp_path / "output.gtf.gz"
@@ -710,7 +712,7 @@ def test_download_to_file_success(tmp_path: Path) -> None:
 
 
 def test_download_to_file_raises_download_error_on_network_failure(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A network error is wrapped and re-raised as DownloadError."""
     with mock.patch(
@@ -730,7 +732,7 @@ def test_download_to_file_raises_download_error_on_network_failure(
 
 
 def test_download_to_file_cleans_up_tmp_on_replace_failure(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Temp file is deleted when _atomic_replace fails mid-download."""
@@ -762,7 +764,7 @@ def test_download_to_file_cleans_up_tmp_on_replace_failure(
 
 
 def test_download_to_file_tmp_not_created_when_http_open_fails(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """If http_open fails, no temp file is created."""
     out = tmp_path / "output.gtf.gz"
@@ -786,7 +788,7 @@ def test_download_to_file_tmp_not_created_when_http_open_fails(
 
 
 def test_download_to_file_tmp_unlink_error_swallowed(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OSError during tmp unlink in finally is silently ignored."""
@@ -799,14 +801,16 @@ def test_download_to_file_tmp_unlink_error_swallowed(
         mock.Mock(side_effect=OSError("replace fail")),
     )
 
-    original_unlink = Path.unlink
+    original_unlink = pathlib.Path.unlink
 
-    def _raise_for_downloading(self: Path, missing_ok: bool = False) -> None:
+    def _raise_for_downloading(
+        self: pathlib.Path, missing_ok: bool = False
+    ) -> None:
         if ".downloading" in self.name:
             raise OSError("unlink refused")
         original_unlink(self, missing_ok=missing_ok)
 
-    monkeypatch.setattr(Path, "unlink", _raise_for_downloading)
+    monkeypatch.setattr(pathlib.Path, "unlink", _raise_for_downloading)
 
     with mock.patch(
         "recount3._utils.http_open",
@@ -825,7 +829,7 @@ def test_download_to_file_tmp_unlink_error_swallowed(
 
 
 def test_write_or_replace_in_zip_creates_new_zip(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Writing to a nonexistent ZIP creates the archive."""
     zip_path = tmp_path / "archive.zip"
@@ -838,7 +842,7 @@ def test_write_or_replace_in_zip_creates_new_zip(
 
 
 def test_write_or_replace_in_zip_appends_new_member(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A new member is appended to an existing ZIP."""
     zip_path = tmp_path / "archive.zip"
@@ -855,7 +859,7 @@ def test_write_or_replace_in_zip_appends_new_member(
 
 
 def test_write_or_replace_in_zip_noop_when_exists_no_overwrite(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """overwrite=False is a no-op when the member already exists."""
     zip_path = tmp_path / "archive.zip"
@@ -872,7 +876,7 @@ def test_write_or_replace_in_zip_noop_when_exists_no_overwrite(
 
 
 def test_write_or_replace_in_zip_overwrites_existing_member(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """overwrite=True replaces the existing member without duplicates."""
     zip_path = tmp_path / "archive.zip"
@@ -890,7 +894,7 @@ def test_write_or_replace_in_zip_overwrites_existing_member(
 
 
 def test_write_or_replace_in_zip_invalid_zip_raises_download_error(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A non-ZIP file at zip_path raises DownloadError."""
     zip_path = tmp_path / "bad.zip"
@@ -902,7 +906,7 @@ def test_write_or_replace_in_zip_invalid_zip_raises_download_error(
 
 
 def test_write_or_replace_in_zip_preserves_other_members_on_overwrite(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Overwriting one member leaves all other members intact."""
     zip_path = tmp_path / "archive.zip"
@@ -921,7 +925,7 @@ def test_write_or_replace_in_zip_preserves_other_members_on_overwrite(
 
 
 def test_write_or_replace_in_zip_tmpzip_cleaned_up_on_replace_fail(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Temp ZIP is removed even when _atomic_replace fails."""
@@ -945,7 +949,7 @@ def test_write_or_replace_in_zip_tmpzip_cleaned_up_on_replace_fail(
 
 
 def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OSError from tmp-ZIP unlink in finally is silently ignored."""
@@ -960,14 +964,14 @@ def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
         mock.Mock(side_effect=OSError("replace fail")),
     )
 
-    original_unlink = Path.unlink
+    original_unlink = pathlib.Path.unlink
 
-    def _raise_for_tmpzip(self: Path, missing_ok: bool = False) -> None:
+    def _raise_for_tmpzip(self: pathlib.Path, missing_ok: bool = False) -> None:
         if ".tmpzip" in self.name:
             raise OSError("unlink refused")
         original_unlink(self, missing_ok=missing_ok)
 
-    monkeypatch.setattr(Path, "unlink", _raise_for_tmpzip)
+    monkeypatch.setattr(pathlib.Path, "unlink", _raise_for_tmpzip)
 
     with pytest.raises(OSError, match="replace fail"):
         _utils._write_or_replace_in_zip(
@@ -975,7 +979,7 @@ def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
         )
 
 
-def test_download_stream_to_zip_creates_zip(tmp_path: Path) -> None:
+def test_download_stream_to_zip_creates_zip(tmp_path: pathlib.Path) -> None:
     """download_stream_to_zip creates a new ZIP from a download."""
     zip_path = tmp_path / "out.zip"
     content = _GTF_GZ.read_bytes()
@@ -1001,7 +1005,7 @@ def test_download_stream_to_zip_creates_zip(tmp_path: Path) -> None:
 
 
 def test_download_stream_to_zip_early_return_when_member_present(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """overwrite=False skips download when member already in ZIP."""
     zip_path = tmp_path / "out.zip"
@@ -1039,7 +1043,7 @@ def test_download_stream_to_zip_early_return_when_member_present(
 
 
 def test_download_stream_to_zip_overwrite_replaces_member(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """overwrite=True replaces an existing member."""
     zip_path = tmp_path / "out.zip"
@@ -1082,7 +1086,7 @@ def test_download_stream_to_zip_overwrite_replaces_member(
 
 
 def test_download_stream_to_zip_no_overwrite_absent_member(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """overwrite=False downloads a member that is not yet in the ZIP."""
     zip_path = tmp_path / "out.zip"
@@ -1126,7 +1130,7 @@ def test_download_stream_to_zip_no_overwrite_absent_member(
 
 
 def test_download_stream_to_zip_tmp_cleaned_up_on_failure(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Temp download file is removed when the download fails."""
     with mock.patch(
@@ -1150,7 +1154,7 @@ def test_download_stream_to_zip_tmp_cleaned_up_on_failure(
 
 
 def test_download_stream_to_zip_no_tmp_when_failure_before_creation(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Cleanup is a no-op when the download fails before the temp file exists."""
     zip_path = tmp_path / "out.zip"
@@ -1176,21 +1180,21 @@ def test_download_stream_to_zip_no_tmp_when_failure_before_creation(
 
 
 def test_download_stream_to_zip_tmp_unlink_error_swallowed(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """OSError when deleting the tmp download file is swallowed."""
     zip_path = tmp_path / "out.zip"
     content = _GTF_GZ.read_bytes()
 
-    original_unlink = Path.unlink
+    original_unlink = pathlib.Path.unlink
 
-    def _raise_for_r3dl(self: Path, missing_ok: bool = False) -> None:
+    def _raise_for_r3dl(self: pathlib.Path, missing_ok: bool = False) -> None:
         if ".r3_dl_" in self.name:
             raise OSError("cannot unlink r3 tmp")
         original_unlink(self, missing_ok=missing_ok)
 
-    monkeypatch.setattr(Path, "unlink", _raise_for_r3dl)
+    monkeypatch.setattr(pathlib.Path, "unlink", _raise_for_r3dl)
 
     with mock.patch(
         "recount3._utils.http_open",
@@ -1213,7 +1217,7 @@ def test_download_stream_to_zip_tmp_unlink_error_swallowed(
 
 
 def test_download_stream_to_zip_tmp_already_removed_on_success(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Cleanup is a no-op when the temp file is gone after successful write."""
     zip_path = tmp_path / "out.zip"
@@ -1221,7 +1225,7 @@ def test_download_stream_to_zip_tmp_already_removed_on_success(
     real_write = _utils._write_or_replace_in_zip
 
     def _write_then_remove_source(
-        zp: Path, source: Path, arc: str, ow: bool
+        zp: pathlib.Path, source: pathlib.Path, arc: str, ow: bool
     ) -> None:
         real_write(zp, source, arc, ow)
         source.unlink()
@@ -1252,7 +1256,7 @@ def test_download_stream_to_zip_tmp_already_removed_on_success(
 
 
 def test_download_stream_to_zip_invalid_zip_on_disk_raises(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """An invalid ZIP on disk surfaces a DownloadError."""
     zip_path = tmp_path / "out.zip"
@@ -1277,7 +1281,7 @@ def test_download_stream_to_zip_invalid_zip_on_disk_raises(
             )
 
 
-def test_write_cached_file_to_zip_creates_zip(tmp_path: Path) -> None:
+def test_write_cached_file_to_zip_creates_zip(tmp_path: pathlib.Path) -> None:
     """write_cached_file_to_zip creates a new ZIP from a real file."""
     zip_path = tmp_path / "out.zip"
     _utils.write_cached_file_to_zip(
@@ -1289,7 +1293,7 @@ def test_write_cached_file_to_zip_creates_zip(tmp_path: Path) -> None:
 
 
 def test_write_cached_file_to_zip_delegates_to_write_or_replace(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """write_cached_file_to_zip is a thin wrapper over _write_or_replace."""
     zip_path = tmp_path / "out.zip"
@@ -1597,10 +1601,10 @@ def test_format_optional_dep_failure_shows_exc_and_guidance() -> None:
 
 def test_import_optional_module_returns_real_module() -> None:
     """A genuinely installed module is returned."""
-    import pandas
+    import pandas as pd
 
     mod = _utils.import_optional_module("pandas")
-    assert mod is pandas
+    assert mod is pd
 
 
 def test_import_optional_module_not_found_raises_import_error() -> None:
@@ -1626,12 +1630,10 @@ def test_import_optional_module_load_failure_raises_import_error(
 
 def test_get_module_attribute_returns_existing_attribute() -> None:
     """An existing attribute is returned directly."""
-    import pandas
+    import pandas as pd
 
-    result = _utils._get_module_attribute(
-        pandas, "DataFrame", module_name="pandas"
-    )
-    assert result is pandas.DataFrame
+    result = _utils._get_module_attribute(pd, "DataFrame", module_name="pandas")
+    assert result is pd.DataFrame
 
 
 def test_get_module_attribute_missing_raises_import_error() -> None:
@@ -1830,7 +1832,7 @@ def test_ensure_parquet_engine_returns_resolved_engine_name() -> None:
 def test_ensure_parquet_engine_honours_fastparquet_selection() -> None:
     """A fastparquet-only installation is a supported installation."""
 
-    class FastParquetImpl:  # pylint: disable=too-few-public-methods
+    class FastParquetImpl:
         pass
 
     with mock.patch(
@@ -1842,7 +1844,7 @@ def test_ensure_parquet_engine_honours_fastparquet_selection() -> None:
 def test_ensure_parquet_engine_unknown_impl_reports_auto() -> None:
     """An engine pandas gained later is accepted, just not named."""
 
-    class _SomeFutureImpl:  # pylint: disable=too-few-public-methods
+    class _SomeFutureImpl:
         pass
 
     with mock.patch(
@@ -1966,7 +1968,7 @@ def test_densify_sparse_columns_returns_dense_frame_unchanged() -> None:
     assert _utils.densify_sparse_columns(frame) is frame
 
 
-class _FakeAnnData:  # pylint: disable=too-few-public-methods
+class _FakeAnnData:
     """Minimal stand-in exposing the obs/var frames the helpers touch."""
 
     def __init__(self, obs: pd.DataFrame, var: pd.DataFrame) -> None:
@@ -2086,7 +2088,7 @@ def test_anndata_frames_returns_both_frames_in_order() -> None:
 def test_anndata_frames_skips_absent_and_non_frame_attributes() -> None:
     """A partially formed object yields only the frame-shaped attributes."""
 
-    class _NoVar:  # pylint: disable=too-few-public-methods
+    class _NoVar:
         obs = pd.DataFrame({"a": [1]})
 
     assert [name for name, _ in _utils._anndata_frames(_NoVar())] == ["obs"]
@@ -2122,16 +2124,20 @@ def test_ensure_parquet_engine_tolerates_missing_pandas_internals() -> None:
 _REGISTRY_URL = "https://example.org/a.gz"
 
 
-def _add_relative_record(root: Path, url: str, source: Path) -> Path:
+def _add_relative_record(
+    root: pathlib.Path, url: str, source: pathlib.Path
+) -> pathlib.Path:
     """Register ``source`` the way an R session would and return its payload."""
     module = pytest.importorskip("pybiocfilecache")
     with module.BiocFileCache(root) as cache:
         record = cache.add(rname=url, fpath=source, rtype="relative")
-        return (Path(cache.config.cache_dir) / record["rpath"]).resolve()
+        return (
+            pathlib.Path(cache.config.cache_dir) / record["rpath"]
+        ).resolve()
 
 
 def test_biocfilecache_path_reuses_a_registered_relative_entry(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """An R-created record keeps its own destination instead of a hashed one."""
     root = tmp_path / "cache"
@@ -2143,7 +2149,7 @@ def test_biocfilecache_path_reuses_a_registered_relative_entry(
 
 
 def test_biocfilecache_path_falls_back_to_the_native_destination(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """An unregistered URL resolves to the hashed name inside the cache root."""
     pytest.importorskip("pybiocfilecache")
@@ -2156,7 +2162,7 @@ def test_biocfilecache_path_falls_back_to_the_native_destination(
 
 
 def test_biocfilecache_path_rejects_duplicate_entries_for_one_url(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Ambiguous R-created duplicate names cannot silently return wrong data."""
     module = pytest.importorskip("pybiocfilecache")
@@ -2175,7 +2181,7 @@ def test_biocfilecache_path_rejects_duplicate_entries_for_one_url(
 
 
 def test_register_biocfilecache_keeps_web_validators_on_a_cache_hit(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A hit transfers nothing, so R's HTTP validators stay valid."""
     module = pytest.importorskip("pybiocfilecache")
@@ -2203,7 +2209,7 @@ def test_register_biocfilecache_keeps_web_validators_on_a_cache_hit(
 
 
 def test_register_biocfilecache_clears_web_validators_after_a_transfer(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """An unconditional transfer collects no validators, so stale ones go.
 
@@ -2236,7 +2242,7 @@ def test_register_biocfilecache_clears_web_validators_after_a_transfer(
 
 
 def test_register_biocfilecache_never_reuses_a_rid_after_removal(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Row ids follow the primary key, so a deletion cannot alias an old one."""
     pytest.importorskip("pybiocfilecache")
@@ -2260,7 +2266,7 @@ def test_register_biocfilecache_never_reuses_a_rid_after_removal(
 
 
 def test_biocfilecache_paths_reports_payloads_deleted_outside_the_cache(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A registered row survives its payload so the file can be repaired."""
     pytest.importorskip("pybiocfilecache")
@@ -2274,7 +2280,7 @@ def test_biocfilecache_paths_reports_payloads_deleted_outside_the_cache(
 
 
 def test_biocfilecache_paths_without_a_database_is_empty(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Listing an untouched cache must not create a database to answer."""
     pytest.importorskip("pybiocfilecache")
@@ -2286,7 +2292,7 @@ def test_biocfilecache_paths_without_a_database_is_empty(
 
 
 def test_remove_biocfilecache_files_drops_rows_and_native_payloads(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Selected rows and unregistered files go; unselected rows stay."""
     pytest.importorskip("pybiocfilecache")

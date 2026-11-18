@@ -63,30 +63,29 @@ Attributes:
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Mapping
 import contextlib
 import datetime
 import errno
+import functools
 import hashlib
 import http.client
+import importlib
 import logging
 import os
+import pathlib
 import re
 import shutil
-import socket
 import ssl
 import threading
 import time
+import types
+from typing import Any, BinaryIO, cast, TYPE_CHECKING
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
-import functools
-import importlib
-import types
 import weakref
-from collections.abc import Iterable, Iterator, Mapping
-from pathlib import Path
-from typing import BinaryIO, Any, cast, TYPE_CHECKING
+import zipfile
 
 import pandas as pd
 
@@ -124,9 +123,9 @@ class _WeakRefLock:
 
 
 def _strip_extended_prefix(text: str) -> str:
-    """Return a resolved path without a Windows extended-length prefix.
+    r"""Return a resolved path without a Windows extended-length prefix.
 
-    :meth:`pathlib.Path.resolve` keeps the ``\\\\?\\`` prefix whenever it
+    :meth:`pathlib.Path.resolve` keeps the ``\\?\`` prefix whenever it
     cannot confirm that the plain spelling names the same file, which is
     the case while another thread holds that file open. One destination
     then has two spellings, and callers reaching it by different spellings
@@ -148,7 +147,7 @@ def _strip_extended_prefix(text: str) -> str:
     return text
 
 
-def _path_lock_for_path(path: Path) -> _WeakRefLock:
+def _path_lock_for_path(path: pathlib.Path) -> _WeakRefLock:
     """Return a weakly retained lock for a canonical filesystem destination.
 
     The key is normalized so that spellings Windows treats as one file share
@@ -170,13 +169,13 @@ def _path_lock_for_path(path: Path) -> _WeakRefLock:
         return lock
 
 
-def _zip_lock_for_path(zip_path: Path) -> _WeakRefLock:
+def _zip_lock_for_path(zip_path: pathlib.Path) -> _WeakRefLock:
     """Return the process-local lock protecting writes to this archive."""
     return _path_lock_for_path(zip_path)
 
 
 @contextlib.contextmanager
-def _biocfilecache(root: Path):
+def _biocfilecache(root: pathlib.Path):
     """Open the optional shared R/Python registry under a process-local lock.
 
     Network transfers must take place outside this context. Separate processes
@@ -199,7 +198,7 @@ def _biocfilecache_rows(cache, url: str | None = None) -> list[dict]:
         return [row.to_dict() for row in query.all()]
 
 
-def _biocfilecache_path(url: str, root: Path) -> Path:
+def _biocfilecache_path(url: str, root: pathlib.Path) -> pathlib.Path:
     """Resolve an R- or Python-registered URL, or its native cache destination.
 
     Relative database paths are resolved against the cache root, including R's
@@ -216,7 +215,11 @@ def _biocfilecache_path(url: str, root: Path) -> Path:
 
 
 def _register_biocfilecache(
-    root: Path, url: str, path: Path, *, transferred: bool = False
+    root: pathlib.Path,
+    url: str,
+    path: pathlib.Path,
+    *,
+    transferred: bool = False,
 ) -> None:
     """Register a complete payload while preserving R resource paths/types.
 
@@ -258,7 +261,7 @@ def _register_biocfilecache(
             )
 
 
-def _biocfilecache_paths(root: Path) -> list[Path]:
+def _biocfilecache_paths(root: pathlib.Path) -> list[pathlib.Path]:
     """List registered paths, including payloads removed outside the cache."""
     if not (root / "BiocFileCache.sqlite").exists():
         return []
@@ -269,7 +272,7 @@ def _biocfilecache_paths(root: Path) -> list[Path]:
         ]
 
 
-def _cache_owned(path: Path, root: Path) -> bool:
+def _cache_owned(path: pathlib.Path, root: pathlib.Path) -> bool:
     """Report whether the cache owns this payload and may delete it.
 
     R registers external files with ``action="asis"`` and leaves them in place
@@ -280,7 +283,9 @@ def _cache_owned(path: Path, root: Path) -> bool:
     return path == root or root in path.parents
 
 
-def _remove_biocfilecache_files(root: Path, paths: list[Path]) -> None:
+def _remove_biocfilecache_files(
+    root: pathlib.Path, paths: list[pathlib.Path]
+) -> None:
     """Remove selected payloads and registry rows while the cache is idle.
 
     Relative R paths are resolved against the cache root before unlinking.
@@ -304,7 +309,7 @@ def _remove_biocfilecache_files(root: Path, paths: list[Path]) -> None:
                     path.unlink(missing_ok=True)
 
 
-def _cache_internal(path: Path, root: Path) -> bool:
+def _cache_internal(path: pathlib.Path, root: pathlib.Path) -> bool:
     """Identify SQLite databases, journals, and R's database lock file."""
     return path.parent.resolve() == root.resolve() and (
         path.name == "BiocFileCache.sqlite"
@@ -345,10 +350,10 @@ def _cache_key_for_url(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
     key = parsed.path.lstrip("/")
     digest = _sha256(url)[:16]  # First 16 chars for reasonable uniqueness
-    return f"{digest}__{Path(key).name}"
+    return f"{digest}__{pathlib.Path(key).name}"
 
 
-def _cache_path(url: str, cache_root: str | Path) -> Path:
+def _cache_path(url: str, cache_root: str | pathlib.Path) -> pathlib.Path:
     """Return full filesystem path for cached URL content.
 
     Args:
@@ -362,10 +367,10 @@ def _cache_path(url: str, cache_root: str | Path) -> Path:
         NotADirectoryError: If cache_root exists but is not a directory.
     """
     _ensure_dir(cache_root)
-    return Path(cache_root) / _cache_key_for_url(url)
+    return pathlib.Path(cache_root) / _cache_key_for_url(url)
 
 
-def _ensure_dir(path: str | Path) -> None:
+def _ensure_dir(path: str | pathlib.Path) -> None:
     """Ensure directory exists, creating parents as needed.
 
     Args:
@@ -376,14 +381,14 @@ def _ensure_dir(path: str | Path) -> None:
         OSError: If directory creation fails due to permissions or other system
           error.
     """
-    p = Path(path)
+    p = pathlib.Path(path)
     try:
         p.mkdir(parents=True, exist_ok=True)
     except FileExistsError as exc:
         raise NotADirectoryError(f"Exists but is not a directory: {p}") from exc
 
 
-def _hardlink_or_copy(src: Path, dst: Path) -> None:
+def _hardlink_or_copy(src: pathlib.Path, dst: pathlib.Path) -> None:
     """Materialize file by hardlink, falling back to copy on errors.
 
     Attempts to create a hardlink for efficiency. Falls back to copy operation
@@ -425,7 +430,7 @@ def _hardlink_or_copy(src: Path, dst: Path) -> None:
                 pass
 
 
-def _atomic_replace(src_tmp: Path, final_path: Path) -> None:
+def _atomic_replace(src_tmp: pathlib.Path, final_path: pathlib.Path) -> None:
     """Atomically replace final path with temporary file.
 
     Uses filesystem atomic replace operation to ensure the destination
@@ -532,7 +537,6 @@ def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
             return func()
         except (
             urllib.error.URLError,
-            socket.timeout,
             TimeoutError,
             ConnectionError,
             http.client.HTTPException,
@@ -568,7 +572,7 @@ def _stream_copy(src_fh, dst_fh, *, chunk_size: int) -> int:
 
 def download_to_file(
     url: str,
-    out_path: Path,
+    out_path: pathlib.Path,
     *,
     chunk_size: int,
     timeout: float,
@@ -633,8 +637,8 @@ def download_to_file(
 
 
 def _write_or_replace_in_zip(
-    zip_path: Path,
-    source_path: Path,
+    zip_path: pathlib.Path,
+    source_path: pathlib.Path,
     arcname: str,
     overwrite: bool,
 ) -> None:
@@ -742,7 +746,7 @@ def _write_or_replace_in_zip(
 
 def download_stream_to_zip(
     url: str,
-    zip_path: Path,
+    zip_path: pathlib.Path,
     arcname: str,
     *,
     chunk_size: int,
@@ -827,8 +831,8 @@ def download_stream_to_zip(
 
 
 def write_cached_file_to_zip(
-    cached_file: Path,
-    zip_path: Path,
+    cached_file: pathlib.Path,
+    zip_path: pathlib.Path,
     arcname: str,
     *,
     overwrite: bool,
@@ -1174,7 +1178,7 @@ def _format_optional_dependency_import_failure(
     )
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def import_optional_module(module_name: str) -> types.ModuleType:
     """Import and cache an optional dependency.
 
@@ -1195,7 +1199,7 @@ def import_optional_module(module_name: str) -> types.ModuleType:
         raise ImportError(
             _format_optional_dependency_import_error(module_name),
         ) from exc
-    except Exception as exc:  # pylint: disable=broad-except
+    except Exception as exc:
         raise ImportError(
             _format_optional_dependency_import_failure(module_name, exc),
         ) from exc
@@ -1229,7 +1233,7 @@ def _get_module_attribute(
         ) from exc
 
 
-def get_biocframe_class() -> type["biocframe.BiocFrame"]:
+def get_biocframe_class() -> type[biocframe.BiocFrame]:
     """Return the BiocPy "biocframe.BiocFrame" class.
 
     Returns:
@@ -1249,7 +1253,7 @@ def get_biocframe_class() -> type["biocframe.BiocFrame"]:
     )
 
 
-def get_genomicranges_class() -> type["genomicranges.GenomicRanges"]:
+def get_genomicranges_class() -> type[genomicranges.GenomicRanges]:
     """Return the BiocPy "genomicranges.GenomicRanges" class.
 
     Returns:
@@ -1270,7 +1274,7 @@ def get_genomicranges_class() -> type["genomicranges.GenomicRanges"]:
 
 
 def get_summarizedexperiment_class() -> (
-    type["summarizedexperiment.SummarizedExperiment"]
+    type[summarizedexperiment.SummarizedExperiment]
 ):
     """Return the BiocPy "summarizedexperiment.SummarizedExperiment" class.
 
@@ -1292,7 +1296,7 @@ def get_summarizedexperiment_class() -> (
 
 
 def get_ranged_summarizedexperiment_class() -> (
-    type["summarizedexperiment.RangedSummarizedExperiment"]
+    type[summarizedexperiment.RangedSummarizedExperiment]
 ):
     """Return the BiocPy RangedSummarizedExperiment class.
 
@@ -1699,7 +1703,6 @@ def ensure_parquet_engine() -> str:
         ValueError: If ``io.parquet.engine`` is set to an unknown engine.
     """
     try:
-        # pylint: disable-next=import-outside-toplevel
         from pandas.io.parquet import get_engine
     except ImportError:
         return "auto"

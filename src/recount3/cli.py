@@ -44,17 +44,18 @@ The end-user command reference and shell recipes live in ``docs/cli.rst``.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable, Iterator, Mapping
 import concurrent.futures
 import dataclasses
-from datetime import datetime
+import datetime
 import json
 import logging
 import os
+import pathlib
 import pickle
-from pathlib import Path
 import sys
 import types
-from typing import Any, Iterable, Iterator, Mapping
+from typing import Any
 
 from recount3 import _utils
 from recount3 import bundle as r3_bundle
@@ -817,7 +818,9 @@ def _build_config_from_env_and_flags(
     )
 
     base_url = args.base_url or base.base_url
-    cache_dir = Path(args.cache_dir) if args.cache_dir else base.cache_dir
+    cache_dir = (
+        pathlib.Path(args.cache_dir) if args.cache_dir else base.cache_dir
+    )
     timeout = args.timeout if args.timeout is not None else base.timeout
     retries = args.retries if args.retries is not None else base.max_retries
     insecure_ssl = bool(args.insecure_ssl) or base.insecure_ssl
@@ -1002,7 +1005,7 @@ def _resource_from_dict(
 
 
 def _write_jsonl(
-    resources: Iterable[resource.R3Resource], output_path: Path | None
+    resources: Iterable[resource.R3Resource], output_path: pathlib.Path | None
 ) -> None:
     """Write one JSON object per line describing each resource.
 
@@ -1039,7 +1042,7 @@ def _write_jsonl(
 
 
 def _write_tsv(
-    resources: Iterable[resource.R3Resource], output_path: Path | None
+    resources: Iterable[resource.R3Resource], output_path: pathlib.Path | None
 ) -> None:
     """Write a TSV manifest with a stable column ordering.
 
@@ -1117,7 +1120,7 @@ def _iter_manifest(
     if path_or_dash == "-":
         stream = sys.stdin
     else:
-        p = Path(path_or_dash)
+        p = pathlib.Path(path_or_dash)
         with p.open("r", encoding="utf-8") as infile:
             for line in infile:
                 line = line.strip()
@@ -1155,7 +1158,7 @@ def _cmd_ids(args: argparse.Namespace, cfg: r3_config.Config) -> int:
 
     def _emit(items: list[str], path: str | None, label: str) -> None:
         if path:
-            p = Path(path)
+            p = pathlib.Path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             with p.open("w", encoding="utf-8") as fh:
                 fh.write("\n".join(items))
@@ -1339,14 +1342,14 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
 
     configured = [dataclasses.replace(r, config=cfg) for r in found]
 
-    out_path: Path | None
+    out_path: pathlib.Path | None
     if args.output:
-        out_path = Path(args.output)
+        out_path = pathlib.Path(args.output)
     elif args.outdir:
         ext = "jsonl" if args.format == "jsonl" else "tsv"
-        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         fname = f"{args.mode}-{ts}.{ext}"
-        out_path = Path(args.outdir) / fname
+        out_path = pathlib.Path(args.outdir) / fname
     else:
         out_path = None
 
@@ -1365,7 +1368,7 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
 def _download_one(
     res: resource.R3Resource,
     cfg: r3_config.Config,
-    dest: Path,
+    dest: pathlib.Path,
     cache_mode: r3_types.CacheMode,
     overwrite: bool,
 ) -> dict[str, Any]:
@@ -1386,10 +1389,10 @@ def _download_one(
 
     is_zip = dest.suffix.lower() == ".zip"
     will_skip = False
-    dest_file: Path | None = None
+    dest_file: pathlib.Path | None = None
     if not is_zip:
         # Same naming rule as resource.download(): basename of url_path().
-        dest_file = dest / Path(res.description.url_path()).name
+        dest_file = dest / pathlib.Path(res.description.url_path()).name
         if dest_file.exists() and not overwrite:
             will_skip = True
 
@@ -1409,7 +1412,7 @@ def _download_one(
             )
             status = "ok"
         return {"url": res.url, "status": status, "dest": out_path}
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         return {
             "url": res.url,
             "status": "error",
@@ -1449,7 +1452,7 @@ def _cmd_download(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         logging.warning("No resources to download.")
         return 0
 
-    dest = Path(args.dest)
+    dest = pathlib.Path(args.dest)
     cache_mode: r3_types.CacheMode = args.cache  # type: ignore[assignment]
     overwrite: bool = bool(args.overwrite)
 
@@ -1514,7 +1517,7 @@ def _cmd_bundle_stack_counts(
     Returns:
       Process exit code (0 for success, non-zero for failure).
     """
-    out = Path(args.out)
+    out = pathlib.Path(args.out)
     to_parquet = out.suffix.lower() == ".parquet"
 
     if to_parquet:
@@ -1581,7 +1584,7 @@ def _cmd_bundle_stack_counts(
         else:
             sep = "," if out.suffix.lower() == ".csv" else "\t"
             df.to_csv(out, sep=sep)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         logging.error("Failed to write output (reason: %r): %s", exc, out)
         return 2
 
@@ -1604,7 +1607,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         0 - success,
         2 - fatal error (missing dependency, build failure, or write failure).
     """
-    out = Path(args.out)
+    out = pathlib.Path(args.out)
     to_h5ad = out.suffix.lower() == ".h5ad"
 
     if to_h5ad:
@@ -1629,7 +1632,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     except ImportError as exc:
         logging.error("Missing optional dependency: %s", exc)
         return 2
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         logging.error("Failed to build SE (reason: %r).", exc)
         return 2
 
@@ -1676,7 +1679,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         else:
             with open(out, "wb") as fh:
                 pickle.dump(se, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         logging.error("Failed to write output (reason: %r): %s", exc, out)
         return 2
 
@@ -1699,7 +1702,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         0 - success,
         2 - fatal error (missing dependency, build failure, or write failure).
     """
-    out = Path(args.out)
+    out = pathlib.Path(args.out)
     to_h5ad = out.suffix.lower() == ".h5ad"
 
     if to_h5ad:
@@ -1725,7 +1728,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     except ImportError as exc:
         logging.error("Missing optional dependency: %s", exc)
         return 2
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         logging.error("Failed to build RSE (reason: %r).", exc)
         return 2
 
@@ -1772,7 +1775,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         else:
             with open(out, "wb") as fh:
                 pickle.dump(rse, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
+    except Exception as exc:
         logging.error("Failed to write output (reason: %r): %s", exc, out)
         return 2
 
@@ -1800,7 +1803,7 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     )
     resources = [dataclasses.replace(r, config=cfg) for r in resources[:limit]]
 
-    dest = Path(args.dest)
+    dest = pathlib.Path(args.dest)
     dest.mkdir(parents=True, exist_ok=True)
 
     for res in resources:

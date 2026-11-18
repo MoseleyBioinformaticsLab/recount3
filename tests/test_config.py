@@ -32,25 +32,23 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import pathlib
 
 import pytest
 
 from recount3._utils import _remove_biocfilecache_files
-from recount3.config import (
-    Config,
-    _DEFAULT_CHUNK_SIZE,
-    default_config,
-    recount3_cache,
-    recount3_cache_files,
-    recount3_cache_rm,
-)
+from recount3.config import _DEFAULT_CHUNK_SIZE
+from recount3.config import Config
+from recount3.config import default_config
+from recount3.config import recount3_cache
+from recount3.config import recount3_cache_files
+from recount3.config import recount3_cache_rm
 
 _BASE_URL = "https://example.org/recount3/"
 _REGISTRY_URL = "https://example.org/a.gz"
 
 
-def _minimal_cfg(tmp_path: Path) -> Config:
+def _minimal_cfg(tmp_path: pathlib.Path) -> Config:
     """Return a minimal :class:`Config` with a temporary cache directory."""
     return Config(
         base_url=_BASE_URL,
@@ -63,7 +61,7 @@ def _minimal_cfg(tmp_path: Path) -> Config:
     )
 
 
-def _registry_cfg(tmp_path: Path) -> Config:
+def _registry_cfg(tmp_path: pathlib.Path) -> Config:
     """Return a minimal :class:`Config` using the optional registry backend."""
     return Config(
         base_url=_BASE_URL,
@@ -77,7 +75,7 @@ def _registry_cfg(tmp_path: Path) -> Config:
     )
 
 
-def _register_payload(cfg: Config, url: str, name: str) -> Path:
+def _register_payload(cfg: Config, url: str, name: str) -> pathlib.Path:
     """Write a payload into the cache and register it the way recount3 does."""
     module = pytest.importorskip("pybiocfilecache")
     cfg.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -99,7 +97,7 @@ _DATABASE_NAMES = (
 class TestConfig:
     """Unit tests for the :class:`Config` frozen dataclass."""
 
-    def test_construction_with_all_fields(self, tmp_path: Path) -> None:
+    def test_construction_with_all_fields(self, tmp_path: pathlib.Path) -> None:
         cfg = Config(
             base_url=_BASE_URL,
             timeout=60,
@@ -119,7 +117,7 @@ class TestConfig:
         assert cfg.cache_disabled is True
         assert cfg.chunk_size == 512
 
-    def test_chunk_size_default(self, tmp_path: Path) -> None:
+    def test_chunk_size_default(self, tmp_path: pathlib.Path) -> None:
         """chunk_size should default to _DEFAULT_CHUNK_SIZE (1 MiB)."""
         cfg = Config(
             base_url=_BASE_URL,
@@ -133,19 +131,19 @@ class TestConfig:
         assert cfg.chunk_size == _DEFAULT_CHUNK_SIZE
         assert _DEFAULT_CHUNK_SIZE == 1024 * 1024
 
-    def test_frozen_raises_on_mutation(self, tmp_path: Path) -> None:
+    def test_frozen_raises_on_mutation(self, tmp_path: pathlib.Path) -> None:
         """Mutating a frozen dataclass field must raise FrozenInstanceError."""
         cfg = _minimal_cfg(tmp_path)
         with pytest.raises(Exception):
             cfg.timeout = 999  # type: ignore[misc]
 
-    def test_equality(self, tmp_path: Path) -> None:
+    def test_equality(self, tmp_path: pathlib.Path) -> None:
         """Two Config objects with the same field values must compare equal."""
         cfg_a = _minimal_cfg(tmp_path)
         cfg_b = _minimal_cfg(tmp_path)
         assert cfg_a == cfg_b
 
-    def test_inequality(self, tmp_path: Path) -> None:
+    def test_inequality(self, tmp_path: pathlib.Path) -> None:
         """Two Config objects that differ in any field must compare unequal."""
         cfg_a = _minimal_cfg(tmp_path)
         cfg_b = Config(
@@ -159,25 +157,27 @@ class TestConfig:
         )
         assert cfg_a != cfg_b
 
-    def test_hashable(self, tmp_path: Path) -> None:
+    def test_hashable(self, tmp_path: pathlib.Path) -> None:
         """Frozen dataclasses are hashable; Config must be usable as a dict key."""
         cfg = _minimal_cfg(tmp_path)
         mapping = {cfg: "value"}
         assert mapping[cfg] == "value"
 
-    def test_repr_contains_field_values(self, tmp_path: Path) -> None:
+    def test_repr_contains_field_values(self, tmp_path: pathlib.Path) -> None:
         """repr() should mention the class name and at least one field value."""
         cfg = _minimal_cfg(tmp_path)
         r = repr(cfg)
         assert "Config" in r
         assert str(cfg.timeout) in r
 
-    def test_cache_backend_defaults_to_filesystem(self, tmp_path: Path) -> None:
+    def test_cache_backend_defaults_to_filesystem(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """Omitting the backend keeps the dependency-free filesystem cache."""
         assert _minimal_cfg(tmp_path).cache_backend == "filesystem"
 
     def test_unknown_cache_backend_raises_value_error(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """An unsupported backend is rejected before any I/O happens."""
         with pytest.raises(ValueError, match="Unknown cache backend"):
@@ -192,7 +192,7 @@ class TestConfig:
                 cache_backend="invalid",
             )
 
-    def test_slots_no_dict(self, tmp_path: Path) -> None:
+    def test_slots_no_dict(self, tmp_path: pathlib.Path) -> None:
         """A slotted dataclass must not have __dict__."""
         cfg = _minimal_cfg(tmp_path)
         assert not hasattr(cfg, "__dict__")
@@ -224,7 +224,9 @@ class TestDefaultConfig:
         )
         monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
         monkeypatch.setattr("recount3.config.sys.platform", platform)
-        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        monkeypatch.setattr(
+            pathlib.Path, "home", classmethod(lambda cls: tmp_path)
+        )
         cfg = default_config()
         assert cfg.cache_dir == tmp_path / suffix
         assert not cfg.cache_dir.exists()
@@ -246,9 +248,9 @@ class TestDefaultConfig:
         monkeypatch.setenv("RECOUNT3_CACHE_BACKEND", "invalid")
         monkeypatch.setenv("R_USER_CACHE_DIR", "/shared")
         cfg = default_config(cache_backend="pybiocfilecache")
-        assert cfg.cache_dir == Path("/shared/R/recount3")
+        assert cfg.cache_dir == pathlib.Path("/shared/R/recount3")
         native = default_config(cache_backend="filesystem")
-        assert native.cache_dir == Path.home() / ".cache/recount3/files"
+        assert native.cache_dir == pathlib.Path.home() / ".cache/recount3/files"
 
     def test_url_absent_uses_builtin_default(
         self, monkeypatch: pytest.MonkeyPatch
@@ -289,12 +291,15 @@ class TestDefaultConfig:
         monkeypatch.delenv("RECOUNT3_CACHE_DIR", raising=False)
         cfg = default_config()
         expected = (
-            Path(os.path.expanduser("~")) / ".cache" / "recount3" / "files"
+            pathlib.Path(os.path.expanduser("~"))
+            / ".cache"
+            / "recount3"
+            / "files"
         )
         assert cfg.cache_dir == expected
 
     def test_cache_dir_present(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
         """When RECOUNT3_CACHE_DIR is set, that path is used."""
         monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(tmp_path / "my_cache"))
@@ -427,7 +432,7 @@ class TestDefaultConfig:
         assert isinstance(cfg.chunk_size, int)
 
     def test_all_env_vars_set(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
         """Setting every env var should produce a fully customised Config."""
         monkeypatch.setenv("RECOUNT3_URL", "https://custom.example.com/r3")
@@ -477,8 +482,9 @@ class TestDefaultConfig:
 
 
 class TestRecount3Cache:
+
     def test_with_explicit_config_returns_cache_dir(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _minimal_cfg(tmp_path)
         result = recount3_cache(config=cfg)
@@ -486,7 +492,7 @@ class TestRecount3Cache:
         assert result.is_dir()
 
     def test_with_no_config_uses_default(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
         """Passing config=None falls back to default_config()."""
         monkeypatch.setenv(
@@ -496,7 +502,7 @@ class TestRecount3Cache:
         assert result == tmp_path / "default_cache"
         assert result.is_dir()
 
-    def test_creates_cache_dir_if_missing(self, tmp_path: Path) -> None:
+    def test_creates_cache_dir_if_missing(self, tmp_path: pathlib.Path) -> None:
         """The cache directory is created if it does not exist."""
         cache = tmp_path / "brand_new_cache"
         assert not cache.exists()
@@ -512,7 +518,9 @@ class TestRecount3Cache:
         recount3_cache(config=cfg)
         assert cache.is_dir()
 
-    def test_idempotent_if_cache_dir_exists(self, tmp_path: Path) -> None:
+    def test_idempotent_if_cache_dir_exists(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """Calling recount3_cache when the dir already exists must not raise."""
         cfg = _minimal_cfg(tmp_path)
         cfg.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -523,7 +531,9 @@ class TestRecount3Cache:
 class TestRecount3CacheFiles:
     """Tests for :func:`recount3_cache_files`."""
 
-    def test_nonexistent_cache_dir_returns_empty(self, tmp_path: Path) -> None:
+    def test_nonexistent_cache_dir_returns_empty(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """When the cache directory does not exist, an empty list is returned."""
         cfg = Config(
             base_url=_BASE_URL,
@@ -538,7 +548,7 @@ class TestRecount3CacheFiles:
         assert result == []
 
     def test_cache_path_is_file_not_dir_returns_empty(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """When cache_dir is a regular file (not a directory), return []."""
         file_path = tmp_path / "i_am_a_file"
@@ -555,7 +565,9 @@ class TestRecount3CacheFiles:
         result = recount3_cache_files(config=cfg)
         assert result == []
 
-    def test_empty_cache_dir_returns_empty(self, tmp_path: Path) -> None:
+    def test_empty_cache_dir_returns_empty(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """An existing but empty cache directory returns an empty list."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -571,7 +583,9 @@ class TestRecount3CacheFiles:
         result = recount3_cache_files(config=cfg)
         assert result == []
 
-    def test_returns_files_in_sorted_order(self, tmp_path: Path) -> None:
+    def test_returns_files_in_sorted_order(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """Files are returned in sorted order regardless of insertion order."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -591,7 +605,9 @@ class TestRecount3CacheFiles:
         assert result == sorted(result, key=str)
         assert len(result) == 3
 
-    def test_subdirectory_files_are_included(self, tmp_path: Path) -> None:
+    def test_subdirectory_files_are_included(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """rglob is used so files in subdirectories are also returned."""
         cache = tmp_path / "cache"
         sub = cache / "sub" / "deep"
@@ -610,7 +626,7 @@ class TestRecount3CacheFiles:
         assert len(result) == 1
         assert result[0].name == "nested.txt"
 
-    def test_directories_are_not_returned(self, tmp_path: Path) -> None:
+    def test_directories_are_not_returned(self, tmp_path: pathlib.Path) -> None:
         """Directories matched by rglob are excluded; only files are returned."""
         cache = tmp_path / "cache"
         sub = cache / "subdir"
@@ -627,7 +643,9 @@ class TestRecount3CacheFiles:
         result = recount3_cache_files(config=cfg)
         assert result == []
 
-    def test_pattern_filters_matching_files(self, tmp_path: Path) -> None:
+    def test_pattern_filters_matching_files(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """When pattern is provided, only matching files are returned."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -647,7 +665,9 @@ class TestRecount3CacheFiles:
         assert len(result) == 1
         assert result[0].name == "data.tsv.gz"
 
-    def test_pattern_none_returns_all_files(self, tmp_path: Path) -> None:
+    def test_pattern_none_returns_all_files(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """When pattern=None, all files are returned (glob_pattern defaults to '*')."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -665,7 +685,9 @@ class TestRecount3CacheFiles:
         result = recount3_cache_files(config=cfg, pattern=None)
         assert len(result) == 2
 
-    def test_pattern_no_match_returns_empty(self, tmp_path: Path) -> None:
+    def test_pattern_no_match_returns_empty(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """A pattern that matches nothing returns an empty list."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -683,7 +705,7 @@ class TestRecount3CacheFiles:
         assert result == []
 
     def test_with_no_config_uses_default_config(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
         """config=None must fall back to default_config()."""
         cache = tmp_path / "dc_cache"
@@ -693,7 +715,7 @@ class TestRecount3CacheFiles:
         result = recount3_cache_files(config=None)
         assert len(result) == 1
 
-    def test_returns_list_of_path_objects(self, tmp_path: Path) -> None:
+    def test_returns_list_of_path_objects(self, tmp_path: pathlib.Path) -> None:
         """Returned entries are :class:`pathlib.Path` instances."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -708,9 +730,11 @@ class TestRecount3CacheFiles:
             cache_disabled=False,
         )
         result = recount3_cache_files(config=cfg)
-        assert all(isinstance(p, Path) for p in result)
+        assert all(isinstance(p, pathlib.Path) for p in result)
 
-    def test_database_internals_are_not_listed(self, tmp_path: Path) -> None:
+    def test_database_internals_are_not_listed(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """SQLite databases, journals, and R's lock file are not payloads."""
         cfg = _minimal_cfg(tmp_path)
         cfg.cache_dir.mkdir(parents=True)
@@ -720,7 +744,7 @@ class TestRecount3CacheFiles:
         assert recount3_cache_files(cfg) == []
 
     def test_optional_backend_lists_registered_and_native_payloads(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """Registered rows and plain files in the cache are both reported."""
         cfg = _registry_cfg(tmp_path)
@@ -733,7 +757,7 @@ class TestRecount3CacheFiles:
         )
 
     def test_optional_backend_deduplicates_registered_native_payloads(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """A payload that is both on disk and registered is listed once."""
         cfg = _registry_cfg(tmp_path)
@@ -742,7 +766,7 @@ class TestRecount3CacheFiles:
         assert recount3_cache_files(cfg) == [registered]
 
     def test_optional_backend_applies_the_pattern_to_registered_rows(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """The glob filters registered paths just as it filters native ones."""
         cfg = _registry_cfg(tmp_path)
@@ -752,7 +776,7 @@ class TestRecount3CacheFiles:
         assert recount3_cache_files(cfg, pattern="*.absent") == []
 
     def test_optional_backend_lists_payloads_deleted_outside_the_cache(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """A row outlives its payload so the file can be repaired in place."""
         cfg = _registry_cfg(tmp_path)
@@ -762,7 +786,7 @@ class TestRecount3CacheFiles:
         assert recount3_cache_files(cfg) == [registered]
 
     def test_optional_backend_empty_cache_creates_no_database(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """Inspecting an empty cache must not create a BiocFileCache database."""
         pytest.importorskip("pybiocfilecache")
@@ -776,7 +800,9 @@ class TestRecount3CacheFiles:
 class TestRecount3CacheRm:
     """Tests for :func:`recount3_cache_rm`."""
 
-    def test_nonexistent_cache_dir_returns_empty(self, tmp_path: Path) -> None:
+    def test_nonexistent_cache_dir_returns_empty(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """When the cache directory does not exist, return []."""
         cfg = Config(
             base_url=_BASE_URL,
@@ -791,7 +817,7 @@ class TestRecount3CacheRm:
         assert result == []
 
     def test_cache_path_is_file_not_dir_returns_empty(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """When cache_dir is a file (not a directory), return []."""
         file_path = tmp_path / "i_am_a_file"
@@ -808,7 +834,9 @@ class TestRecount3CacheRm:
         result = recount3_cache_rm(config=cfg)
         assert result == []
 
-    def test_empty_cache_dir_returns_empty(self, tmp_path: Path) -> None:
+    def test_empty_cache_dir_returns_empty(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """An empty cache directory returns [] and raises no errors."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -824,7 +852,9 @@ class TestRecount3CacheRm:
         result = recount3_cache_rm(config=cfg)
         assert result == []
 
-    def test_predicate_none_removes_all_files(self, tmp_path: Path) -> None:
+    def test_predicate_none_removes_all_files(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """With predicate=None every file in the cache is removed."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -846,7 +876,7 @@ class TestRecount3CacheRm:
         assert not f1.exists()
         assert not f2.exists()
 
-    def test_predicate_selects_subset(self, tmp_path: Path) -> None:
+    def test_predicate_selects_subset(self, tmp_path: pathlib.Path) -> None:
         """Only files for which the predicate returns True are removed."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -873,7 +903,7 @@ class TestRecount3CacheRm:
         assert keep.exists()
 
     def test_predicate_returns_false_for_all_keeps_everything(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """When the predicate always returns False, no files are removed."""
         cache = tmp_path / "cache"
@@ -893,7 +923,9 @@ class TestRecount3CacheRm:
         assert removed == []
         assert f.exists()
 
-    def test_dry_run_does_not_delete_files(self, tmp_path: Path) -> None:
+    def test_dry_run_does_not_delete_files(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """dry_run=True reports candidates but leaves all files on disk."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -915,7 +947,7 @@ class TestRecount3CacheRm:
         assert f1.exists()
         assert f2.exists()
 
-    def test_dry_run_with_predicate(self, tmp_path: Path) -> None:
+    def test_dry_run_with_predicate(self, tmp_path: pathlib.Path) -> None:
         """dry_run + predicate reports the subset that would be removed."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -941,7 +973,9 @@ class TestRecount3CacheRm:
         assert candidates[0].name == "gone.gz"
         assert would_remove.exists()
 
-    def test_removes_files_in_subdirectories(self, tmp_path: Path) -> None:
+    def test_removes_files_in_subdirectories(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """Files nested inside subdirectories are also candidates for removal."""
         cache = tmp_path / "cache"
         sub = cache / "org" / "proj"
@@ -961,7 +995,7 @@ class TestRecount3CacheRm:
         assert len(removed) == 1
         assert not deep_file.exists()
 
-    def test_directories_are_not_removed(self, tmp_path: Path) -> None:
+    def test_directories_are_not_removed(self, tmp_path: pathlib.Path) -> None:
         """Only files are removed; directories are left in place."""
         cache = tmp_path / "cache"
         subdir = cache / "subdir"
@@ -981,7 +1015,7 @@ class TestRecount3CacheRm:
         assert subdir.is_dir()
         assert not f.exists()
 
-    def test_returned_list_is_sorted(self, tmp_path: Path) -> None:
+    def test_returned_list_is_sorted(self, tmp_path: pathlib.Path) -> None:
         """The returned list is sorted regardless of filesystem order."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -1000,7 +1034,7 @@ class TestRecount3CacheRm:
         assert removed == sorted(removed, key=str)
 
     def test_with_no_config_uses_default_config(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
     ) -> None:
         """config=None must fall back to default_config()."""
         cache = tmp_path / "dc_rm_cache"
@@ -1012,7 +1046,7 @@ class TestRecount3CacheRm:
         assert len(removed) == 1
         assert not f.exists()
 
-    def test_returns_list_of_path_objects(self, tmp_path: Path) -> None:
+    def test_returns_list_of_path_objects(self, tmp_path: pathlib.Path) -> None:
         """Returned items are :class:`pathlib.Path` instances."""
         cache = tmp_path / "cache"
         cache.mkdir()
@@ -1027,9 +1061,11 @@ class TestRecount3CacheRm:
             cache_disabled=False,
         )
         removed = recount3_cache_rm(config=cfg)
-        assert all(isinstance(p, Path) for p in removed)
+        assert all(isinstance(p, pathlib.Path) for p in removed)
 
-    def test_database_internals_are_preserved(self, tmp_path: Path) -> None:
+    def test_database_internals_are_preserved(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         """Cache cleanup never treats SQLite databases or R lock files as data."""
         cfg = _minimal_cfg(tmp_path)
         cfg.cache_dir.mkdir(parents=True)
@@ -1042,7 +1078,7 @@ class TestRecount3CacheRm:
         )
 
     def test_optional_backend_dry_run_keeps_the_registry_intact(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """A dry run reports the registered payload without touching it."""
         module = pytest.importorskip("pybiocfilecache")
@@ -1056,7 +1092,7 @@ class TestRecount3CacheRm:
             assert len(registry) == 1
 
     def test_optional_backend_removes_payloads_and_registry_rows(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """Removal empties the registry but keeps the database itself."""
         module = pytest.importorskip("pybiocfilecache")
@@ -1072,7 +1108,7 @@ class TestRecount3CacheRm:
         assert (cfg.cache_dir / "BiocFileCache.sqlite").exists()
 
     def test_optional_backend_predicate_spares_unselected_rows(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """An unregistered file can be removed while registered rows remain."""
         cfg = _registry_cfg(tmp_path)
@@ -1089,7 +1125,7 @@ class TestRecount3CacheRm:
         assert recount3_cache_files(cfg) == [registered]
 
     def test_optional_backend_empty_cache_dry_run_creates_no_database(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """Inspecting an empty cache must not create a BiocFileCache database."""
         pytest.importorskip("pybiocfilecache")
@@ -1100,7 +1136,7 @@ class TestRecount3CacheRm:
         assert list(cfg.cache_dir.iterdir()) == []
 
     def test_optional_backend_keeps_external_asis_payloads_on_disk(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """R registers external files ``asis`` and never deletes them."""
         module = pytest.importorskip("pybiocfilecache")
@@ -1125,7 +1161,7 @@ class TestRecount3CacheRm:
             assert len(registry) == 0
 
     def test_optional_backend_removes_owned_payloads_beside_external_rows(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """An owned payload is deleted even when an external row is selected."""
         module = pytest.importorskip("pybiocfilecache")
@@ -1149,7 +1185,7 @@ class TestRecount3CacheRm:
         assert external.exists()
 
     def test_optional_backend_keeps_external_native_candidates_on_disk(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """An unregistered path outside the cache is never unlinked."""
         pytest.importorskip("pybiocfilecache")

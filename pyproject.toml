@@ -111,7 +111,7 @@ dev = [
   "pytest-cov>=7,<8",
   "pytest-mock>=3.12,<4",
   "pytest-xdist>=3,<4",
-  "pylint>=3.2,<4",
+  "ruff>=0.17.5,<0.18",
   "build>=1.2",
   "twine>=5",
 ]
@@ -122,6 +122,151 @@ all = [
 
 [tool.black]
 line-length = 80
+
+[tool.ruff]
+required-version = ">=0.17.5,<0.18"
+target-version = "py310"
+line-length = 80
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "A002",     # builtin-argument-shadowing
+  "ANN001",   # missing-type-function-argument
+  "ANN002",   # missing-type-args
+  "ANN202",   # missing-return-type-private-function
+  "ANN204",   # missing-return-type-special-method
+  "ANN401",   # any-type
+  "ARG001",   # unused-function-argument
+  "B023",     # function-uses-loop-variable
+  "B905",     # zip-without-explicit-strict
+  "BLE001",   # blind-except
+  "C401",     # unnecessary-generator-set
+  "C408",     # unnecessary-collection-call
+  "C901",     # complex-structure
+  "COM812",   # missing-trailing-comma
+  "DTZ005",   # call-datetime-now-without-tzinfo
+  "E501",     # line-too-long
+  "E712",     # true-false-comparison
+  "EM101",    # raw-string-in-exception
+  "EM102",    # f-string-in-exception
+  "ERA001",   # commented-out-code
+  "FBT001",   # boolean-type-hint-positional-argument
+  "FBT002",   # boolean-default-value-positional-argument
+  "FBT003",   # boolean-positional-value-in-call
+  "FURB110",  # if-exp-instead-of-or-operator
+  "ISC001",   # single-line-implicit-string-concatenation
+  "LOG015",   # root-logger-call
+  "PD011",    # pandas-use-of-dot-values
+  "PD015",    # pandas-use-of-pd-merge
+  "PD101",    # pandas-nunique-constant-series-check
+  "PERF203",  # try-except-in-loop
+  "PERF401",  # manual-list-comprehension
+  "PERF403",  # manual-dict-comprehension
+  "PGH003",   # blanket-type-ignore
+  "PIE810",   # multiple-starts-ends-with
+  "PLC0415",  # import-outside-top-level
+  "PLR0911",  # too-many-return-statements
+  "PLR0912",  # too-many-branches
+  "PLR0913",  # too-many-arguments
+  "PLR0915",  # too-many-statements
+  "PLR0917",  # too-many-positional-arguments
+  "PLR2004",  # magic-value-comparison
+  "PLW2901",  # redefined-loop-name
+  "PTH105",   # os-replace
+  "PTH123",   # builtin-open
+  "PYI034",   # non-self-return-type
+  "RET503",   # implicit-return
+  "RET504",   # unnecessary-assign
+  "RUF005",   # collection-literal-concatenation
+  "RUF012",   # mutable-class-default
+  "RUF022",   # unsorted-dunder-all
+  "S110",     # try-except-pass
+  "S112",     # try-except-continue
+  "S310",     # suspicious-url-open-usage
+  "SIM102",   # collapsible-if
+  "SIM105",   # suppressible-exception
+  "SIM117",   # multiple-with-statements
+  "SLF001",   # private-member-access
+  "TC002",    # typing-only-third-party-import
+  "TC003",    # typing-only-standard-library-import
+  "TC006",    # runtime-cast-value
+  "TRY003",   # raise-vanilla-args
+  "TRY004",   # type-check-without-type-error
+  "TRY300",   # try-consider-else
+  "TRY301",   # raise-within-try
+  "TRY400",   # error-instead-of-exception
+  "UP045",    # non-pep604-annotation-optional
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "ANN201",   # missing-return-type-public-function
+  "ARG002",   # unused-method-argument
+  "ARG005",   # unused-lambda-argument
+  "B017",     # assert-raises-exception
+  "C416",     # unnecessary-comprehension
+  "D100",     # undocumented-public-module
+  "D101",     # undocumented-public-class
+  "D102",     # undocumented-public-method
+  "D103",     # undocumented-public-function
+  "D403",     # first-word-uncapitalized
+  "E402",     # module-import-not-at-top-of-file
+  "E741",     # ambiguous-variable-name
+  "F841",     # unused-variable
+  "FURB171",  # single-item-membership-test
+  "INP001",   # implicit-namespace-package
+  "ISC004",   # implicit-string-concatenation-in-collection-literal
+  "PD008",    # pandas-use-of-dot-at
+  "PLR0402",  # manual-from-import
+  "PLW1510",  # subprocess-run-without-check
+  "PT001",    # pytest-fixture-incorrect-parentheses-style
+  "PT006",    # pytest-parametrize-names-wrong-type
+  "PT007",    # pytest-parametrize-values-wrong-type
+  "PT011",    # pytest-raises-too-broad
+  "PT017",    # pytest-assert-in-except
+  "PT018",    # pytest-composite-assertion
+  "PT019",    # pytest-fixture-param-without-value
+  "PTH111",   # os-path-expanduser
+  "RUF001",   # ambiguous-unicode-character-string
+  "RUF003",   # ambiguous-unicode-character-comment
+  "RUF015",   # unnecessary-iterable-allocation-for-first-element
+  "RUF043",   # pytest-raises-ambiguous-pattern
+  "RUF059",   # unused-unpacked-variable
+  "S101",     # assert
+  "S108",     # hardcoded-temp-file
+  "S324",     # hashlib-insecure-hash-function
+  "S603",     # subprocess-without-shell-equals-true
+  "SIM300",   # yoda-conditions
+  "SLOT000",  # no-slots-in-str-subclass
+  "UP031",    # printf-string-formatting
+  "UP034",    # extraneous-parentheses
+]
+# Sphinx follows its own conventions.
+"docs/**" = [
+  "A001",     # builtin-variable-shadowing
+  "CPY001",   # missing-copyright-notice
+  "D100",     # undocumented-public-module
+  "D103",     # undocumented-public-function
+  "INP001",   # implicit-namespace-package
+  "PTH100",   # os-path-abspath
+  "Q000",     # bad-quotes-inline-string
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+force-single-line = true
+single-line-exclusions = ["typing", "typing_extensions", "collections.abc"]
+order-by-type = false
+
+[tool.ruff.lint.flake8-import-conventions]
+# Use established scientific aliases; keep datetime spelled out.
+aliases = {numpy = "np", pandas = "pd"}
+# Enforce module imports for these common sources of direct member imports.
+banned-from = ["pathlib", "datetime", "dataclasses", "numpy", "pandas", "types"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -29,49 +29,47 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# pylint: disable=redefined-outer-name
 
 from __future__ import annotations
 
+from concurrent import futures
 import contextlib
 import dataclasses
 import gzip
 import hashlib
 import inspect
 import io
+import pathlib
 import shutil
 import threading
-import warnings
-from concurrent import futures
-from pathlib import Path
 from unittest import mock
+import warnings
 
 import pandas as pd
 import pytest
 import scipy.io
 import scipy.sparse
 
-import recount3._utils as _utils_module
-import recount3.resource as res_module
 from recount3._bigwig import BigWigFile
 from recount3._descriptions import R3ResourceDescription
-from recount3._utils import (
-    _cache_path,
-    _derive_junction_sidecar_url,
-    _path_lock_for_path,
-    import_optional_module,
-)
-from recount3.config import Config, recount3_cache_files, recount3_cache_rm
-from recount3.errors import DownloadError, LoadError
-from recount3.resource import (
-    R3Resource,
-    _detect_mmread_kwargs,
-    _ensure_cached_url,
-    _read_id_rail_ids,
-    _read_mm_matrix,
-)
+import recount3._utils as _utils_module
+from recount3._utils import _cache_path
+from recount3._utils import _derive_junction_sidecar_url
+from recount3._utils import _path_lock_for_path
+from recount3._utils import import_optional_module
+from recount3.config import Config
+from recount3.config import recount3_cache_files
+from recount3.config import recount3_cache_rm
+from recount3.errors import DownloadError
+from recount3.errors import LoadError
+import recount3.resource as res_module
+from recount3.resource import _detect_mmread_kwargs
+from recount3.resource import _ensure_cached_url
+from recount3.resource import _read_id_rail_ids
+from recount3.resource import _read_mm_matrix
+from recount3.resource import R3Resource
 
-_DATA_DIR = Path(__file__).parent / "data"
+_DATA_DIR = pathlib.Path(__file__).parent / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
 
 _GENE_GZ = (
@@ -141,7 +139,7 @@ _CACHE_URL = "https://example.org/a.gz"
 
 
 @pytest.fixture()
-def cfg(tmp_path: Path) -> Config:
+def cfg(tmp_path: pathlib.Path) -> Config:
     """Minimal Config pointing at a temporary cache directory."""
     return Config(
         base_url="https://example.org/recount3/",
@@ -161,7 +159,7 @@ def _make(resource_type: str, cfg: Config, **kw: object) -> R3Resource:
     return R3Resource(description=desc, config=cfg)
 
 
-def _seed(resource: R3Resource, src: Path) -> Path:
+def _seed(resource: R3Resource, src: pathlib.Path) -> pathlib.Path:
     """Copy src to the cache location expected for resource."""
     dest = resource._cached_path()
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -169,7 +167,7 @@ def _seed(resource: R3Resource, src: Path) -> Path:
     return dest
 
 
-def _fake_cfg(tmp_path: Path) -> Config:
+def _fake_cfg(tmp_path: pathlib.Path) -> Config:
     """Minimal Config for default_config() mock targets."""
     return Config(
         base_url="https://fallback.org/recount3/",
@@ -213,7 +211,8 @@ def test_ensure_cached_url_inner_lock_check_hit(cfg: Config) -> None:
 
     # Simulate another thread creating the file between outer and inner checks.
     class _SeedOnEnter:
-        def __enter__(self) -> "_SeedOnEnter":
+
+        def __enter__(self) -> _SeedOnEnter:
             cache_p.touch()
             return self
 
@@ -263,7 +262,7 @@ def test_read_id_rail_ids_rail_id_column() -> None:
 
 
 def test_read_id_rail_ids_no_rail_id_uses_first_column(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """Uses the first column when no 'rail_id' header is present."""
     p = tmp_path / "noid.tsv.gz"
@@ -275,7 +274,7 @@ def test_read_id_rail_ids_no_rail_id_uses_first_column(
 
 
 def test_read_id_rail_ids_canonicalizes_widened_numeric_column(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """A blank row must not turn the other rail IDs into "123488.0".
 
@@ -289,7 +288,9 @@ def test_read_id_rail_ids_canonicalizes_widened_numeric_column(
     assert _read_id_rail_ids(p) == ["123488", "<NA>", "123474"]
 
 
-def test_read_id_rail_ids_empty_dataframe_raises(tmp_path: Path) -> None:
+def test_read_id_rail_ids_empty_dataframe_raises(
+    tmp_path: pathlib.Path,
+) -> None:
     """Raises LoadError when the parsed DataFrame is empty."""
     p = tmp_path / "empty.tsv.gz"
     with gzip.open(p, "wt") as fh:
@@ -299,7 +300,7 @@ def test_read_id_rail_ids_empty_dataframe_raises(tmp_path: Path) -> None:
 
 
 def test_read_id_rail_ids_empty_list_raises_load_error(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """LoadError when rail_ids list is empty despite a non-empty DataFrame.
 
@@ -332,7 +333,9 @@ def test_read_id_rail_ids_empty_list_raises_load_error(
             _read_id_rail_ids(p)
 
 
-def test_read_id_rail_ids_python_engine_fallback(tmp_path: Path) -> None:
+def test_read_id_rail_ids_python_engine_fallback(
+    tmp_path: pathlib.Path,
+) -> None:
     """Python engine is used as fallback when C engine raises."""
     p = tmp_path / "data.tsv.gz"
     df_src = pd.DataFrame({"rail_id": ["999"]})
@@ -368,7 +371,7 @@ def test_read_mm_matrix_gz_file() -> None:
     assert mat.ndim == 2
 
 
-def test_read_mm_matrix_plain_file(tmp_path: Path) -> None:
+def test_read_mm_matrix_plain_file(tmp_path: pathlib.Path) -> None:
     """Reads a plain (non-compressed) MatrixMarket file."""
     # scipy.io.mmwrite appends .mtx when the name has no .mtx suffix;
     # use .mtx directly so the written file matches the path we read.
@@ -387,7 +390,9 @@ def test_read_mm_matrix_emits_no_deprecation_warning() -> None:
     assert isinstance(mat, scipy.sparse.csr_array)
 
 
-def test_read_mm_matrix_without_spmatrix_support(tmp_path: Path) -> None:
+def test_read_mm_matrix_without_spmatrix_support(
+    tmp_path: pathlib.Path,
+) -> None:
     """Older SciPy releases lack ``spmatrix=`` and must still be supported."""
     mm_file = tmp_path / "legacy.mtx"
     scipy.io.mmwrite(str(mm_file), scipy.sparse.eye(3, format="coo"))
@@ -414,7 +419,9 @@ def test_detect_mmread_kwargs_handles_unintrospectable_mmread() -> None:
         assert _detect_mmread_kwargs() == {}
 
 
-def test_read_mm_matrix_bad_file_raises_load_error(tmp_path: Path) -> None:
+def test_read_mm_matrix_bad_file_raises_load_error(
+    tmp_path: pathlib.Path,
+) -> None:
     """LoadError is raised when the file cannot be parsed."""
     bad = tmp_path / "bad.MM.gz"
     with gzip.open(bad, "wb") as fh:
@@ -423,7 +430,9 @@ def test_read_mm_matrix_bad_file_raises_load_error(tmp_path: Path) -> None:
         _read_mm_matrix(bad)
 
 
-def test_read_mm_matrix_non_2d_raises_load_error(tmp_path: Path) -> None:
+def test_read_mm_matrix_non_2d_raises_load_error(
+    tmp_path: pathlib.Path,
+) -> None:
     """LoadError when parsed object reports ndim != 2."""
 
     class _FakeMat:
@@ -461,7 +470,7 @@ def test_post_init_preserves_explicit_url(cfg: Config) -> None:
 
 
 def test_post_init_config_none_calls_default_config(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """default_config() is called when config=None in __post_init__."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
@@ -497,7 +506,7 @@ def test_cache_root_uses_config(cfg: Config) -> None:
     assert res._cache_root() == cfg.cache_dir
 
 
-def test_cache_root_calls_default_config(tmp_path: Path) -> None:
+def test_cache_root_calls_default_config(tmp_path: pathlib.Path) -> None:
     """_cache_root() calls default_config() when config=None."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
     fc = _fake_cfg(tmp_path)
@@ -590,7 +599,7 @@ class TestEnsureCached:
         )
 
     def test_returns_the_cached_file_without_downloading(
-        self, cfg: Config, tmp_path: Path
+        self, cfg: Config, tmp_path: pathlib.Path
     ) -> None:
         res = self._resource(cfg)
         src = tmp_path / "seed.gz"
@@ -605,7 +614,9 @@ class TestEnsureCached:
         res = self._resource(cfg)
         assert not res._cached_path().exists()
 
-        def fake_download(url: str, out_path: Path, **_kw: object) -> None:
+        def fake_download(
+            url: str, out_path: pathlib.Path, **_kw: object
+        ) -> None:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(b"fetched")
 
@@ -626,20 +637,22 @@ class TestEnsureCached:
         dl.assert_not_called()
 
     def test_a_resource_with_no_usable_path_still_tries_to_download(
-        self, cfg: Config, tmp_path: Path
+        self, cfg: Config, tmp_path: pathlib.Path
     ) -> None:
         """The only case where `_cached_path()` itself can fail."""
         res = self._resource(cfg)
         real_path = res._cached_path()
         calls = {"n": 0}
 
-        def flaky_cached_path(_self: R3Resource) -> Path:
+        def flaky_cached_path(_self: R3Resource) -> pathlib.Path:
             calls["n"] += 1
             if calls["n"] == 1:
                 raise RuntimeError("malformed resource")
             return real_path
 
-        def fake_download(url: str, out_path: Path, **_kw: object) -> None:
+        def fake_download(
+            url: str, out_path: pathlib.Path, **_kw: object
+        ) -> None:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_bytes(b"fetched")
 
@@ -671,11 +684,11 @@ def test_ensure_cached_enable_calls_ensure_cached_url(
     res = _make("data_sources", cfg, organism="human")
     with mock.patch(
         "recount3.resource._ensure_cached_url",
-        return_value=Path("/fake"),
+        return_value=pathlib.Path("/fake"),
     ) as mock_ecu:
         result = res._ensure_cached(mode="enable", chunk_size=512)
     mock_ecu.assert_called_once()
-    assert result == Path("/fake")
+    assert result == pathlib.Path("/fake")
 
 
 def test_ensure_cached_update_calls_download_to_file(
@@ -700,7 +713,7 @@ def test_ensure_cached_unknown_mode_raises(cfg: Config) -> None:
 
 
 def test_ensure_cached_config_none_calls_default_config(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """_ensure_cached calls default_config() when config=None."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
@@ -724,7 +737,7 @@ def test_download_invalid_cache_mode_raises(cfg: Config) -> None:
 
 
 def test_download_cache_disabled_forces_disable_mode(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """When cfg.cache_disabled=True, cache_mode is overridden to 'disable'."""
     disabled_cfg = Config(
@@ -746,7 +759,7 @@ def test_download_cache_disabled_forces_disable_mode(
 
 
 def test_download_config_none_calls_default_config(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """download() calls default_config() when config=None."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
@@ -770,7 +783,7 @@ def test_download_path_none_enable_returns_none(cfg: Config) -> None:
     """path=None with cache_mode='enable' returns None."""
     res = _make("data_sources", cfg, organism="human")
     with mock.patch.object(
-        R3Resource, "_ensure_cached", return_value=Path("/fake")
+        R3Resource, "_ensure_cached", return_value=pathlib.Path("/fake")
     ):
         result = res.download(path=None, cache_mode="enable")
     assert result is None
@@ -780,14 +793,14 @@ def test_download_path_none_update_returns_none(cfg: Config) -> None:
     """path=None with cache_mode='update' returns None."""
     res = _make("data_sources", cfg, organism="human")
     with mock.patch.object(
-        R3Resource, "_ensure_cached", return_value=Path("/fake")
+        R3Resource, "_ensure_cached", return_value=pathlib.Path("/fake")
     ):
         result = res.download(path=None, cache_mode="update")
     assert result is None
 
 
 def test_download_unsupported_extension_raises(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Path with non-directory, non-.zip extension raises ValueError."""
     res = _make("data_sources", cfg, organism="human")
@@ -796,7 +809,7 @@ def test_download_unsupported_extension_raises(
 
 
 def test_download_chunk_size_explicit_value_used(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Explicit chunk_size is forwarded; config default is not used."""
     res = _make("data_sources", cfg, organism="human")
@@ -812,7 +825,7 @@ def test_download_chunk_size_explicit_value_used(
 
 
 def test_download_chunk_size_defaults_to_config(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """When chunk_size=None, cfg.chunk_size is forwarded."""
     res = _make("data_sources", cfg, organism="human")
@@ -833,7 +846,7 @@ def test_download_chunk_size_defaults_to_config(
 
 
 def test_download_to_zip_disable_streams_directly(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """ZIP + disable: calls download_stream_to_zip without caching."""
     res = _make("data_sources", cfg, organism="human")
@@ -845,7 +858,7 @@ def test_download_to_zip_disable_streams_directly(
 
 
 def test_download_to_zip_enable_caches_then_writes(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """ZIP + enable: caches the file, then calls write_cached_file_to_zip."""
     res = _make("data_sources", cfg, organism="human")
@@ -866,7 +879,7 @@ def test_download_to_zip_enable_caches_then_writes(
 
 
 def test_download_to_zip_update_caches_then_writes(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """ZIP + update: forced cache refresh, then write_cached_file_to_zip."""
     res = _make("data_sources", cfg, organism="human")
@@ -890,7 +903,7 @@ def test_download_to_zip_update_caches_then_writes(
 
 
 def test_download_to_dir_disable_calls_download_to_file(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Directory + disable: streams directly via download_to_file."""
     res = _make("data_sources", cfg, organism="human")
@@ -905,7 +918,7 @@ def test_download_to_dir_disable_calls_download_to_file(
 
 
 def test_download_to_dir_enable_hardlinks_from_cache(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Directory + enable: hardlinks cached file, sets filepath."""
     res = _make("data_sources", cfg, organism="human")
@@ -924,7 +937,7 @@ def test_download_to_dir_enable_hardlinks_from_cache(
 
 
 def test_download_to_dir_dest_exists_no_overwrite_returns_early(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Destination exists + overwrite=False: skips hardlink, returns path."""
     res = _make("data_sources", cfg, organism="human")
@@ -946,7 +959,7 @@ def test_download_to_dir_dest_exists_no_overwrite_returns_early(
 
 
 def test_download_to_dir_dest_exists_overwrite_relinks(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Destination exists + overwrite=True: hardlinks anyway."""
     res = _make("data_sources", cfg, organism="human")
@@ -967,7 +980,7 @@ def test_download_to_dir_dest_exists_overwrite_relinks(
 
 
 def test_download_to_dir_with_suffix_uses_is_dir(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """A path that is a directory but has a suffix is treated as a directory."""
     # Exercises the path_p.is_dir() branch in: suffix == "" or is_dir()
@@ -989,7 +1002,9 @@ def test_download_to_dir_with_suffix_uses_is_dir(
 # ===========================================================================
 
 
-def test_download_to_dir_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
+def test_download_to_dir_accepts_pathlike(
+    cfg: Config, tmp_path: pathlib.Path
+) -> None:
     """A bare Path directory works like the equivalent str."""
     res = _make("data_sources", cfg, organism="human")
     dest_dir = tmp_path / "out"
@@ -1006,7 +1021,9 @@ def test_download_to_dir_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
     assert isinstance(res.filepath, str)
 
 
-def test_download_to_zip_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
+def test_download_to_zip_accepts_pathlike(
+    cfg: Config, tmp_path: pathlib.Path
+) -> None:
     """A bare Path .zip destination works like the equivalent str."""
     res = _make("data_sources", cfg, organism="human")
     zip_path = tmp_path / "out.zip"
@@ -1024,7 +1041,7 @@ def test_download_to_zip_accepts_pathlike(cfg: Config, tmp_path: Path) -> None:
 
 
 def test_download_accepts_pathlike_from_the_packages_own_output(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """A Path produced by the package feeds back in without conversion."""
     res = _make("data_sources", cfg, organism="human")
@@ -1034,7 +1051,7 @@ def test_download_accepts_pathlike_from_the_packages_own_output(
     dest_dir.mkdir()
     with mock.patch.object(R3Resource, "_ensure_cached", return_value=cached):
         # ensure_cached() returns a Path; its parent is a Path too.
-        assert isinstance(res.ensure_cached(), Path)
+        assert isinstance(res.ensure_cached(), pathlib.Path)
         with mock.patch("recount3._utils._hardlink_or_copy"):
             result = res.download(dest_dir, cache_mode="enable")
     assert result == str(dest_dir / "homes_index")
@@ -1043,9 +1060,11 @@ def test_download_accepts_pathlike_from_the_packages_own_output(
 def test_filepath_pathlike_is_normalized_to_str(cfg: Config) -> None:
     """A Path passed to the constructor is stored as a str."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
-    res = R3Resource(description=desc, config=cfg, filepath=Path("/a/b.gz"))
+    res = R3Resource(
+        description=desc, config=cfg, filepath=pathlib.Path("/a/b.gz")
+    )
     assert isinstance(res.filepath, str)
-    assert res.filepath == str(Path("/a/b.gz"))
+    assert res.filepath == str(pathlib.Path("/a/b.gz"))
     assert "PosixPath(" not in repr(res)
     assert "WindowsPath(" not in repr(res)
 
@@ -1053,9 +1072,11 @@ def test_filepath_pathlike_is_normalized_to_str(cfg: Config) -> None:
 def test_filepath_pathlike_and_str_compare_equal(cfg: Config) -> None:
     """Two resources naming the same file are equal regardless of spelling."""
     desc = R3ResourceDescription(resource_type="data_sources", organism="human")
-    as_path = R3Resource(description=desc, config=cfg, filepath=Path("/a/b.gz"))
+    as_path = R3Resource(
+        description=desc, config=cfg, filepath=pathlib.Path("/a/b.gz")
+    )
     as_str = R3Resource(
-        description=desc, config=cfg, filepath=str(Path("/a/b.gz"))
+        description=desc, config=cfg, filepath=str(pathlib.Path("/a/b.gz"))
     )
     assert as_path == as_str
 
@@ -1191,7 +1212,7 @@ def test_load_gene_counts_file_not_found_raises(cfg: Config) -> None:
 
 
 def test_load_gene_counts_python_engine_fallback(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Python engine is used as fallback when C engine raises."""
     p = tmp_path / "fallback.tsv.gz"
@@ -1226,7 +1247,7 @@ def test_load_gene_counts_python_engine_fallback(
 
 
 def test_load_exon_counts_uses_exon_id_index(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """exon_id is used as the index column when gene_id is absent."""
     p = tmp_path / "exon.tsv.gz"
@@ -1247,7 +1268,9 @@ def test_load_exon_counts_uses_exon_id_index(
     assert result.index.name == "exon_id"  # type: ignore
 
 
-def test_load_counts_uses_feature_id_index(cfg: Config, tmp_path: Path) -> None:
+def test_load_counts_uses_feature_id_index(
+    cfg: Config, tmp_path: pathlib.Path
+) -> None:
     """feature_id is used as index when gene_id and exon_id are absent."""
     p = tmp_path / "feat.tsv.gz"
     df_src = pd.DataFrame({"feature_id": ["f1", "f2"], "SRR001": [5, 15]})
@@ -1268,7 +1291,7 @@ def test_load_counts_uses_feature_id_index(cfg: Config, tmp_path: Path) -> None:
 
 
 def test_load_counts_uses_first_column_as_fallback_index(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """First column is used as index when no known name is found."""
     p = tmp_path / "other.tsv.gz"
@@ -1290,7 +1313,7 @@ def test_load_counts_uses_first_column_as_fallback_index(
 
 
 def test_load_counts_empty_matrix_raises_load_error(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """LoadError when parsed counts file is completely empty (no rows)."""
     p = tmp_path / "empty.tsv.gz"
@@ -1311,7 +1334,7 @@ def test_load_counts_empty_matrix_raises_load_error(
 
 
 def test_load_counts_single_column_raises_load_error(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """LoadError when parsed counts file has exactly one column."""
     p = tmp_path / "onecol.tsv.gz"
@@ -1390,7 +1413,7 @@ def test_load_junctions_mm_bad_sidecar_url_raises_load_error(
 
 
 def test_load_junctions_mm_column_mismatch_raises_load_error(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """LoadError when MM column count does not match ID rail_id count."""
     res = _make_jxn(cfg, "MM")
@@ -1428,7 +1451,7 @@ def test_load_junctions_mm_undefined_shape_raises_load_error(
 
 
 def test_load_junctions_mm_config_none_calls_default_config(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """load() for MM junctions calls default_config() when config=None."""
     fc = _fake_cfg(tmp_path)
@@ -1473,7 +1496,7 @@ def test_load_junctions_rr_returns_dataframe(cfg: Config) -> None:
 
 
 def test_load_junctions_unsupported_extension_raises(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """LoadError for an unrecognised junction_extension string."""
     p = tmp_path / "data.gz"
@@ -1515,7 +1538,7 @@ def test_load_generic_md_gz_returns_dataframe(cfg: Config) -> None:
 
 
 def test_load_generic_tsv_gz_returns_dataframe(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """load() for a .tsv.gz URL uses read_table via the generic path."""
     p = tmp_path / "data.tsv.gz"
@@ -1535,7 +1558,7 @@ def test_load_generic_tsv_gz_returns_dataframe(
 
 
 def test_load_generic_tsv_returns_dataframe(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """load() for a plain .tsv URL uses read_table via the generic path."""
     p = tmp_path / "data.tsv"
@@ -1552,7 +1575,7 @@ def test_load_generic_tsv_returns_dataframe(
 
 
 def test_load_generic_unsupported_extension_raises(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """LoadError for a cached file whose name has an unsupported extension."""
     p = tmp_path / "data.xyz"
@@ -1732,7 +1755,9 @@ def test_build_url_with_explicit_config(cfg: Config) -> None:
     assert url.endswith("sra.base_sums.SRP009615_SRR387777.ALL.bw")
 
 
-def test_build_url_uses_default_config_when_omitted(tmp_path: Path) -> None:
+def test_build_url_uses_default_config_when_omitted(
+    tmp_path: pathlib.Path,
+) -> None:
     """Falls back to default_config() when no config is given."""
     fallback = _fake_cfg(tmp_path)
     with mock.patch("recount3.config.default_config", return_value=fallback):
@@ -1784,7 +1809,9 @@ def test_from_mapping_ignores_derived_url_and_arcname_keys(cfg: Config) -> None:
     assert res.url == cfg.base_url + res.description.url_path()
 
 
-def test_from_mapping_defaults_config_when_omitted(tmp_path: Path) -> None:
+def test_from_mapping_defaults_config_when_omitted(
+    tmp_path: pathlib.Path,
+) -> None:
     """With no config, the url derives from default_config()'s base_url."""
     fallback = _fake_cfg(tmp_path)
     with mock.patch("recount3.config.default_config", return_value=fallback):
@@ -1796,7 +1823,7 @@ def test_from_mapping_defaults_config_when_omitted(tmp_path: Path) -> None:
 
 
 def test_read_metadata_table_maps_r_logicals_to_boolean(
-    tmp_path: Path,
+    tmp_path: pathlib.Path,
 ) -> None:
     """R writes logicals as TRUE/FALSE/T/F; they must round-trip as booleans.
 
@@ -1824,7 +1851,7 @@ def test_read_metadata_table_maps_r_logicals_to_boolean(
 
 def _fetch(
     cfg: Config, url: str = _CACHE_URL, *, refresh: bool = False
-) -> Path:
+) -> pathlib.Path:
     """Drive :func:`_ensure_cached_url` with a chunk size small enough to loop."""
     return _ensure_cached_url(
         url=url,
@@ -1865,7 +1892,7 @@ def test_ensure_cached_url_lets_distinct_destinations_overlap(
     cfg = dataclasses.replace(cfg, cache_backend=backend)
     barrier = threading.Barrier(4, timeout=5)
 
-    def transfer(url: str, path: Path, **_: object) -> None:
+    def transfer(url: str, path: pathlib.Path, **_: object) -> None:
         barrier.wait()
         path.write_bytes(url.encode())
 
@@ -1905,13 +1932,13 @@ def test_ensure_cached_url_same_destination_waits_and_recovers(
     real_lock = _path_lock_for_path
 
     @contextlib.contextmanager
-    def observed_lock(path: Path):
+    def observed_lock(path: pathlib.Path):
         if entered.is_set():
             waiting.set()
         with real_lock(path):
             yield
 
-    def transfer(url: str, path: Path, **_: object) -> None:
+    def transfer(url: str, path: pathlib.Path, **_: object) -> None:
         calls.append(url)
         if len(calls) == 1:
             entered.set()
@@ -1989,7 +2016,7 @@ def test_ensure_cached_url_adopts_a_native_payload_into_the_registry(
 
     with module.BiocFileCache(cfg.cache_dir) as registry:
         record = registry.get(rname=_CACHE_URL)
-    assert Path(record["rpath"]) == path
+    assert pathlib.Path(record["rpath"]) == path
     assert record["etag"]
 
 
@@ -2088,7 +2115,7 @@ def test_ensure_cached_url_repairs_a_failed_refresh_on_the_next_hit(
 
 
 def test_resource_reuses_and_repairs_an_r_created_relative_entry(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """R-style relative entries are reused and atomically repaired in place."""
     module = pytest.importorskip("pybiocfilecache")
@@ -2098,7 +2125,7 @@ def test_resource_reuses_and_repairs_an_r_created_relative_entry(
     source.write_bytes(b"R bytes")
     with module.BiocFileCache(cfg.cache_dir) as cache:
         row = cache.add(rname=res.url, fpath=source, rtype="relative")
-        registered = Path(row["rpath"])
+        registered = pathlib.Path(row["rpath"])
 
     assert res._cached_path() == registered
     with mock.patch.object(_utils_module, "download_to_file") as download:
@@ -2118,7 +2145,7 @@ def test_resource_reuses_and_repairs_an_r_created_relative_entry(
 
 
 def test_download_to_a_new_directory_creates_the_parent(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """Cached directory downloads work with a new destination hierarchy."""
     res = _counts_resource(cfg)
@@ -2126,11 +2153,11 @@ def test_download_to_a_new_directory_creates_the_parent(
 
     result = res.download(str(tmp_path / "new" / "nested"))
 
-    assert Path(result).read_bytes() == b"cached"
+    assert pathlib.Path(result).read_bytes() == b"cached"
 
 
 def test_optional_backend_reports_the_extra_and_disable_bypasses_it(
-    cfg: Config, tmp_path: Path
+    cfg: Config, tmp_path: pathlib.Path
 ) -> None:
     """The extra is requested lazily and is unnecessary for direct downloads."""
     cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")

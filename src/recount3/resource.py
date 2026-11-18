@@ -89,16 +89,15 @@ Note:
 
 from __future__ import annotations
 
-import dataclasses
+from collections.abc import Mapping
 import csv
+import dataclasses
 import errno
 import gzip
 import inspect
-import urllib.parse
-from collections.abc import Mapping
-from dataclasses import dataclass
-from pathlib import Path
+import pathlib
 from typing import Any
+import urllib.parse
 
 import pandas as pd
 import scipy.io
@@ -137,7 +136,7 @@ def _detect_mmread_kwargs() -> dict[str, Any]:
 _MMREAD_KWARGS = _detect_mmread_kwargs()
 
 
-def _read_metadata_table(path: Path) -> pd.DataFrame:
+def _read_metadata_table(path: pathlib.Path) -> pd.DataFrame:
     """Read a metadata TSV while preserving literal text and inferring types.
 
     Quotation marks are literal characters, and only ``NA`` is an unconditional
@@ -190,11 +189,11 @@ def _read_metadata_table(path: Path) -> pd.DataFrame:
 def _ensure_cached_url(
     *,
     url: str,
-    cache_root: Path,
+    cache_root: pathlib.Path,
     cfg: r3_config.Config,
     chunk_size: int,
     refresh: bool = False,
-) -> Path:
+) -> pathlib.Path:
     """Ensure a given URL is downloaded and cached locally.
 
     The destination lock covers the existence check, atomic download, and
@@ -239,7 +238,7 @@ def _ensure_cached_url(
     return cache_path
 
 
-def _read_id_rail_ids(id_path: Path) -> list[str]:
+def _read_id_rail_ids(id_path: pathlib.Path) -> list[str]:
     """Read a junction ``.ID`` or ``.ID.gz`` file and return rail IDs in order.
 
     The file is a tab-separated table with a header row. The function looks for
@@ -266,7 +265,7 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
             engine="c",
             low_memory=False,
         )
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:
         df = pd.read_csv(
             id_path,
             compression="infer",
@@ -297,7 +296,7 @@ def _read_id_rail_ids(id_path: Path) -> list[str]:
     return rail_ids
 
 
-def _read_mm_matrix(mm_path: Path) -> scipy.sparse.csr_array:
+def _read_mm_matrix(mm_path: pathlib.Path) -> scipy.sparse.csr_array:
     """Read a MatrixMarket file into a SciPy CSR sparse array.
 
     The parsed object is always normalised to a :class:`scipy.sparse.csr_array`
@@ -374,7 +373,7 @@ def build_url(
     return urllib.parse.urljoin(cfg.base_url, desc.url_path())
 
 
-@dataclass(slots=True)
+@dataclasses.dataclass(slots=True)
 class R3Resource:
     """Manage one recount3 file: URL, cache, materialization, loading.
 
@@ -466,7 +465,7 @@ class R3Resource:
         """Deterministic ZIP arcname derived from the URL path."""
         return self.description.url_path().lstrip("/")
 
-    def _cache_root(self) -> Path:
+    def _cache_root(self) -> pathlib.Path:
         """Resolve the root directory path used for local file caching.
 
         Returns:
@@ -474,9 +473,9 @@ class R3Resource:
             globally cached, determined entirely by the active configuration.
         """
         cfg = self.config or r3_config.default_config()
-        return Path(cfg.cache_dir)
+        return pathlib.Path(cfg.cache_dir)
 
-    def _cached_path(self) -> Path:
+    def _cached_path(self) -> pathlib.Path:
         """Compute the local cache file path for this specific resource.
 
         Returns:
@@ -493,7 +492,7 @@ class R3Resource:
 
     def _ensure_cached(
         self, *, mode: r3_types.CacheMode, chunk_size: int
-    ) -> Path:
+    ) -> pathlib.Path:
         """Ensure the resource data is available in the local cache.
 
         Args:
@@ -527,7 +526,7 @@ class R3Resource:
             refresh=mode == "update",
         )
 
-    def ensure_cached(self, *, download: bool = True) -> Path:
+    def ensure_cached(self, *, download: bool = True) -> pathlib.Path:
         """Return the local path of this resource, fetching it if absent.
 
         :meth:`_cached_path` resolves a registered BiocFileCache path or the
@@ -563,11 +562,11 @@ class R3Resource:
 
                 path = res.ensure_cached(download=False)
         """
-        path: Path | None
+        path: pathlib.Path | None
         try:
             path = self._cached_path()
             cached = path.exists()
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             path = None
             cached = False
 
@@ -654,7 +653,7 @@ class R3Resource:
             self._ensure_cached(mode=cache_mode, chunk_size=cs)
             return None
 
-        path_p = Path(path)
+        path_p = pathlib.Path(path)
         is_zip = path_p.suffix.lower() == ".zip"
         is_dir = path_p.suffix == "" or path_p.is_dir()
         if not (is_zip or is_dir):
@@ -685,7 +684,7 @@ class R3Resource:
             return None
 
         # Case 3: directory materialization
-        dest_filename = Path(self.description.url_path()).name
+        dest_filename = pathlib.Path(self.description.url_path()).name
         dest_path = path_p / dest_filename
         if cache_mode == "disable":
             _utils.download_to_file(
@@ -776,7 +775,7 @@ class R3Resource:
                     engine="c",
                     low_memory=False,
                 )
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:
                 df = pd.read_csv(
                     cached,
                     compression="infer",

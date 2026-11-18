@@ -36,7 +36,7 @@ import dataclasses
 import io
 import json
 import logging
-from pathlib import Path
+import pathlib
 from typing import Any
 from unittest import mock
 
@@ -46,41 +46,37 @@ import pytest
 import scipy.sparse
 
 from recount3._descriptions import R3ResourceDescription
-from recount3.config import Config, default_config
-from recount3.errors import (
-    CompatibilityError,
-    ConfigurationError,
-    LoadError,
-    Recount3Error,
-)
+from recount3.cli import _build_config_from_env_and_flags
+from recount3.cli import _build_parser
+from recount3.cli import _cmd_bundle_rse
+from recount3.cli import _cmd_bundle_se
+from recount3.cli import _cmd_bundle_stack_counts
+from recount3.cli import _cmd_download
+from recount3.cli import _cmd_ids
+from recount3.cli import _cmd_search
+from recount3.cli import _cmd_smoke_test
+from recount3.cli import _dispatch
+from recount3.cli import _init_logging
+from recount3.cli import _iter_manifest
+from recount3.cli import _parse_filters
+from recount3.cli import _reject_unknown_filters
+from recount3.cli import _resource_from_dict
+from recount3.cli import _SEARCH_MODE_FILTERS
+from recount3.cli import _write_jsonl
+from recount3.cli import _write_tsv
+from recount3.cli import main
+from recount3.config import Config
+from recount3.config import default_config
+from recount3.errors import CompatibilityError
+from recount3.errors import ConfigurationError
+from recount3.errors import LoadError
+from recount3.errors import Recount3Error
 from recount3.resource import R3Resource
-
-from recount3.cli import (
-    _build_config_from_env_and_flags,
-    _build_parser,
-    _cmd_bundle_rse,
-    _cmd_bundle_se,
-    _cmd_bundle_stack_counts,
-    _cmd_download,
-    _cmd_ids,
-    _cmd_search,
-    _cmd_smoke_test,
-    _dispatch,
-    _init_logging,
-    _iter_manifest,
-    _parse_filters,
-    _reject_unknown_filters,
-    _SEARCH_MODE_FILTERS,
-    _resource_from_dict,
-    _write_jsonl,
-    _write_tsv,
-    main,
-)
 
 _BASE_URL = "http://duffel.rail.bio/recount3/"
 
 
-def _make_cfg(tmp_path: Path) -> Config:
+def _make_cfg(tmp_path: pathlib.Path) -> Config:
     return Config(
         base_url=_BASE_URL,
         timeout=30,
@@ -294,7 +290,7 @@ class TestBuildConfigFromEnvAndFlags:
         expected = (
             tmp_path / "shared/R/recount3"
             if backend == "pybiocfilecache"
-            else Path.home() / ".cache/recount3/files"
+            else pathlib.Path.home() / ".cache/recount3/files"
         )
         if directory_source != "default":
             monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(tmp_path / "env"))
@@ -321,7 +317,7 @@ class TestBuildConfigFromEnvAndFlags:
         cfg = _build_config_from_env_and_flags(args)
         assert cfg.base_url == "http://custom.example.org/r3/"
 
-    def test_cache_dir_overrides_env(self, tmp_path: Path) -> None:
+    def test_cache_dir_overrides_env(self, tmp_path: pathlib.Path) -> None:
         args = _make_namespace(cache_dir=str(tmp_path))
         cfg = _build_config_from_env_and_flags(args)
         assert cfg.cache_dir == tmp_path.expanduser().resolve()
@@ -403,7 +399,9 @@ class TestBuildConfigFromEnvAndFlags:
 
     def test_invalid_cache_dir_raises_configuration_error(self) -> None:
         args = _make_namespace(cache_dir="/some/path")
-        with mock.patch.object(Path, "resolve", side_effect=OSError("broken")):
+        with mock.patch.object(
+            pathlib.Path, "resolve", side_effect=OSError("broken")
+        ):
             with pytest.raises(ConfigurationError, match="Invalid cache"):
                 _build_config_from_env_and_flags(args)
 
@@ -541,14 +539,12 @@ class TestRejectUnknownFilters:
         parser = _build_parser()
         subparsers = [
             action
-            for action in parser._actions  # pylint: disable=protected-access
+            for action in parser._actions
             if isinstance(action, argparse._SubParsersAction)
         ][0]
         search = subparsers.choices["search"]
         mode_action = [
-            action
-            for action in search._actions  # pylint: disable=protected-access
-            if action.dest == "mode"
+            action for action in search._actions if action.dest == "mode"
         ][0]
 
         assert set(mode_action.choices) == set(_SEARCH_MODE_FILTERS)
@@ -559,7 +555,8 @@ class TestRejectUnknownFilters:
 
 
 class TestResourceFromDict:
-    def test_creates_resource(self, tmp_path: Path) -> None:
+
+    def test_creates_resource(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         d = {
             "resource_type": "annotations",
@@ -571,7 +568,7 @@ class TestResourceFromDict:
         assert isinstance(res, R3Resource)
         assert res.config is cfg
 
-    def test_strips_url_and_arcname(self, tmp_path: Path) -> None:
+    def test_strips_url_and_arcname(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         d = {
             "resource_type": "annotations",
@@ -585,7 +582,7 @@ class TestResourceFromDict:
         assert isinstance(res, R3Resource)
         assert res.url != "http://should-be-stripped.example/"
 
-    def test_invalid_resource_type_raises(self, tmp_path: Path) -> None:
+    def test_invalid_resource_type_raises(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         d = {"resource_type": "nonexistent_type"}
         with pytest.raises((ValueError, KeyError)):
@@ -593,8 +590,9 @@ class TestResourceFromDict:
 
 
 class TestWriteJsonl:
+
     def test_writes_to_stdout_when_out_none(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
@@ -605,7 +603,7 @@ class TestWriteJsonl:
         assert "url" in obj
         assert "arcname" in obj
 
-    def test_writes_to_file_when_out_set(self, tmp_path: Path) -> None:
+    def test_writes_to_file_when_out_set(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         out = tmp_path / "subdir" / "out.jsonl"
@@ -615,7 +613,7 @@ class TestWriteJsonl:
         assert obj["resource_type"] == "annotations"
 
     def test_dataclass_description_asdict_used(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
@@ -626,7 +624,7 @@ class TestWriteJsonl:
         assert obj["organism"] == "human"
 
     def test_non_dataclass_description_yields_empty_body(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         non_dc_res = mock.MagicMock()
         non_dc_res.description = object()
@@ -641,7 +639,7 @@ class TestWriteJsonl:
         assert obj["url"] == "http://example.org/file.gz"
         assert "organism" not in obj
 
-    def test_multiple_resources(self, tmp_path: Path) -> None:
+    def test_multiple_resources(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res1 = _make_annotation_resource(cfg)
         res2 = _make_metadata_resource(cfg)
@@ -652,8 +650,9 @@ class TestWriteJsonl:
 
 
 class TestWriteTsv:
+
     def test_writes_to_stdout_when_out_none(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
@@ -663,7 +662,7 @@ class TestWriteTsv:
         assert len(lines) == 2
         assert "resource_type" in lines[0]
 
-    def test_writes_to_file(self, tmp_path: Path) -> None:
+    def test_writes_to_file(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         out = tmp_path / "sub" / "out.tsv"
@@ -674,7 +673,7 @@ class TestWriteTsv:
         assert "human" in text
 
     def test_non_dataclass_description_empty_row(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         non_dc_res = mock.MagicMock()
         non_dc_res.description = object()
@@ -691,7 +690,7 @@ class TestWriteTsv:
         assert "http://example.org/file.gz" in data_row
 
     def test_missing_fields_become_empty_string(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
@@ -702,7 +701,8 @@ class TestWriteTsv:
 
 
 class TestIterManifest:
-    def test_reads_from_file(self, tmp_path: Path) -> None:
+
+    def test_reads_from_file(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         line = json.dumps(
@@ -719,7 +719,7 @@ class TestIterManifest:
         assert len(resources) == 1
         assert isinstance(resources[0], R3Resource)
 
-    def test_skips_blank_lines_in_file(self, tmp_path: Path) -> None:
+    def test_skips_blank_lines_in_file(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         line = json.dumps(
             {
@@ -734,7 +734,7 @@ class TestIterManifest:
         resources = list(_iter_manifest(str(manifest), cfg))
         assert len(resources) == 1
 
-    def test_reads_from_stdin(self, tmp_path: Path) -> None:
+    def test_reads_from_stdin(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         line = json.dumps(
             {
@@ -749,7 +749,7 @@ class TestIterManifest:
             resources = list(_iter_manifest("-", cfg))
         assert len(resources) == 1
 
-    def test_skips_blank_lines_in_stdin(self, tmp_path: Path) -> None:
+    def test_skips_blank_lines_in_stdin(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         line = json.dumps(
             {
@@ -764,7 +764,9 @@ class TestIterManifest:
             resources = list(_iter_manifest("-", cfg))
         assert len(resources) == 1
 
-    def test_strips_url_arcname_from_manifest(self, tmp_path: Path) -> None:
+    def test_strips_url_arcname_from_manifest(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         line = json.dumps(
             {
@@ -790,7 +792,7 @@ class TestCmdIds:
         return argparse.Namespace(**defaults)
 
     def test_writes_to_stdout_when_no_out(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         args = self._make_args()
@@ -804,7 +806,7 @@ class TestCmdIds:
         assert "SRR001" in captured.out
         assert "SRP001" in captured.out
 
-    def test_writes_samples_to_file(self, tmp_path: Path) -> None:
+    def test_writes_samples_to_file(self, tmp_path: pathlib.Path) -> None:
         samples_file = tmp_path / "samples.txt"
         args = self._make_args(samples_out=str(samples_file))
         cfg = _make_cfg(tmp_path)
@@ -816,7 +818,7 @@ class TestCmdIds:
         assert code == 0
         assert samples_file.read_text() == "SRR001"
 
-    def test_writes_projects_to_file(self, tmp_path: Path) -> None:
+    def test_writes_projects_to_file(self, tmp_path: pathlib.Path) -> None:
         projects_file = tmp_path / "projects.txt"
         args = self._make_args(projects_out=str(projects_file))
         cfg = _make_cfg(tmp_path)
@@ -828,7 +830,9 @@ class TestCmdIds:
         assert code == 0
         assert projects_file.read_text() == "SRP001"
 
-    def test_organism_filter_passed_through(self, tmp_path: Path) -> None:
+    def test_organism_filter_passed_through(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = self._make_args(organism="human")
         with mock.patch(
@@ -838,7 +842,7 @@ class TestCmdIds:
             _cmd_ids(args, cfg)
         m.assert_called_once_with(organism="human")
 
-    def test_writes_both_to_files(self, tmp_path: Path) -> None:
+    def test_writes_both_to_files(self, tmp_path: pathlib.Path) -> None:
         samples_file = tmp_path / "s.txt"
         projects_file = tmp_path / "p.txt"
         args = self._make_args(
@@ -871,7 +875,7 @@ class TestCmdSearchRejectsUnreadFilters:
     """_cmd_search must refuse selectors before it emits a manifest."""
 
     def test_python_keyword_names_do_not_reach_search_project_all(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """Previously these were dropped and the full default set emitted."""
         cfg = _make_cfg(tmp_path)
@@ -894,8 +898,9 @@ class TestCmdSearchRejectsUnreadFilters:
 
 
 class TestCmdSearchAnnotations:
+
     def test_annotations_mode_success(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
@@ -916,7 +921,9 @@ class TestCmdSearchAnnotations:
         obj = json.loads(captured.out.strip())
         assert obj["resource_type"] == "annotations"
 
-    def test_annotations_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_annotations_missing_filter_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(
             mode="annotations",
@@ -930,8 +937,9 @@ class TestCmdSearchAnnotations:
 
 
 class TestCmdSearchGeneExon:
+
     def test_gene_exon_mode_with_default_annotation_extension(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -962,7 +970,7 @@ class TestCmdSearchGeneExon:
         assert kwargs["annotation_extension"] == ("G026",)
 
     def test_gene_exon_mode_with_explicit_annotation_extension(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -993,7 +1001,9 @@ class TestCmdSearchGeneExon:
         _, kwargs = m.call_args
         assert kwargs["annotation_extension"] == "G029"
 
-    def test_gene_exon_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_gene_exon_missing_filter_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(
             mode="gene-exon",
@@ -1004,8 +1014,9 @@ class TestCmdSearchGeneExon:
 
 
 class TestCmdSearchJunctions:
+
     def test_junctions_mode_defaults(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -1032,7 +1043,7 @@ class TestCmdSearchJunctions:
         assert kwargs["junction_extension"] == "MM"
 
     def test_junctions_mode_with_explicit_type_and_extension(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -1063,7 +1074,9 @@ class TestCmdSearchJunctions:
         _, kwargs = m.call_args
         assert kwargs["junction_extension"] == "RR"
 
-    def test_junctions_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_junctions_missing_filter_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="junctions", filters=["organism=human"])
         with pytest.raises(ValueError, match="Missing required filters"):
@@ -1071,8 +1084,9 @@ class TestCmdSearchJunctions:
 
 
 class TestCmdSearchMetadata:
+
     def test_metadata_mode_success(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_metadata_resource()
@@ -1091,7 +1105,9 @@ class TestCmdSearchMetadata:
             code = _cmd_search(args, cfg)
         assert code == 0
 
-    def test_metadata_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_metadata_missing_filter_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="metadata", filters=["organism=human"])
         with pytest.raises(ValueError, match="Missing required filters"):
@@ -1099,8 +1115,9 @@ class TestCmdSearchMetadata:
 
 
 class TestCmdSearchBigwig:
+
     def test_bigwig_mode_success(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -1126,7 +1143,7 @@ class TestCmdSearchBigwig:
             code = _cmd_search(args, cfg)
         assert code == 0
 
-    def test_bigwig_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_bigwig_missing_filter_raises(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="bigwig", filters=["organism=human"])
         with pytest.raises(ValueError, match="Missing required filters"):
@@ -1134,8 +1151,9 @@ class TestCmdSearchBigwig:
 
 
 class TestCmdSearchSources:
+
     def test_sources_mode_success(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -1149,7 +1167,9 @@ class TestCmdSearchSources:
             code = _cmd_search(args, cfg)
         assert code == 0
 
-    def test_sources_missing_organism_raises(self, tmp_path: Path) -> None:
+    def test_sources_missing_organism_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="sources", filters=[])
         with pytest.raises(ValueError, match="Missing required filters"):
@@ -1157,8 +1177,9 @@ class TestCmdSearchSources:
 
 
 class TestCmdSearchSourceMeta:
+
     def test_source_meta_success(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         desc = R3ResourceDescription(
@@ -1178,7 +1199,9 @@ class TestCmdSearchSourceMeta:
             code = _cmd_search(args, cfg)
         assert code == 0
 
-    def test_source_meta_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_source_meta_missing_filter_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="source-meta", filters=["organism=human"])
         with pytest.raises(ValueError, match="Missing required filters"):
@@ -1201,7 +1224,7 @@ class TestCmdSearchProject:
 
     def _run(
         self,
-        tmp_path: Path,
+        tmp_path: pathlib.Path,
         args: argparse.Namespace,
         found: list[R3Resource] | None = None,
     ) -> tuple[int, Any]:
@@ -1214,12 +1237,14 @@ class TestCmdSearchProject:
             code = _cmd_search(args, cfg)
         return code, m
 
-    def test_project_mode_minimal_success(self, tmp_path: Path) -> None:
+    def test_project_mode_minimal_success(self, tmp_path: pathlib.Path) -> None:
         args = self._project_args()
         code, m = self._run(tmp_path, args)
         assert code == 0
 
-    def test_project_missing_filter_raises(self, tmp_path: Path) -> None:
+    def test_project_missing_filter_raises(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="project", filters=["organism=human"])
         with mock.patch(
@@ -1228,7 +1253,7 @@ class TestCmdSearchProject:
             with pytest.raises(ValueError, match="Missing required filters"):
                 _cmd_search(args, cfg)
 
-    def test_as_bool_true_values(self, tmp_path: Path) -> None:
+    def test_as_bool_true_values(self, tmp_path: pathlib.Path) -> None:
         for val in ("1", "true", "t", "yes", "y", "on"):
             args = self._project_args([f"include_bigwig={val}"])
             code, m = self._run(tmp_path, args)
@@ -1238,7 +1263,7 @@ class TestCmdSearchProject:
                 kwargs["include_bigwig"] is True
             ), f"Expected True for {val!r}"
 
-    def test_as_bool_false_values(self, tmp_path: Path) -> None:
+    def test_as_bool_false_values(self, tmp_path: pathlib.Path) -> None:
         for val in ("0", "false", "no", "whatever"):
             args = self._project_args([f"include_bigwig={val}"])
             code, m = self._run(tmp_path, args)
@@ -1248,7 +1273,7 @@ class TestCmdSearchProject:
                 kwargs["include_bigwig"] is False
             ), f"Expected False for {val!r}"
 
-    def test_as_bool_none_uses_default(self, tmp_path: Path) -> None:
+    def test_as_bool_none_uses_default(self, tmp_path: pathlib.Path) -> None:
         args = self._project_args()
         code, m = self._run(tmp_path, args)
         assert code == 0
@@ -1256,35 +1281,39 @@ class TestCmdSearchProject:
         assert kwargs["include_bigwig"] is False
 
     def test_as_bool_include_metadata_default_true(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         args = self._project_args()
         code, m = self._run(tmp_path, args)
         _, kwargs = m.call_args
         assert kwargs["include_metadata"] is True
 
-    def test_csv_or_default_none_returns_default(self, tmp_path: Path) -> None:
+    def test_csv_or_default_none_returns_default(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         args = self._project_args()
         code, m = self._run(tmp_path, args)
         _, kwargs = m.call_args
         assert kwargs["genomic_units"] == ("gene", "exon")
 
     def test_csv_or_default_empty_string_returns_default(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         args = self._project_args(["genomic_unit="])
         code, m = self._run(tmp_path, args)
         _, kwargs = m.call_args
         assert kwargs["genomic_units"] == ("gene", "exon")
 
-    def test_csv_or_default_comma_separated(self, tmp_path: Path) -> None:
+    def test_csv_or_default_comma_separated(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         args = self._project_args(["junction_extension=MM,RR"])
         code, m = self._run(tmp_path, args)
         _, kwargs = m.call_args
         assert kwargs["junction_extension"] == ("MM", "RR")
 
     def test_annotation_filter_used_when_no_extension(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         args = self._project_args(["annotation=G026"])
         code, m = self._run(tmp_path, args)
@@ -1292,7 +1321,7 @@ class TestCmdSearchProject:
         assert kwargs["annotations"] == "G026"
 
     def test_annotation_extension_overrides_annotation(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         args = self._project_args(
             ["annotation=default", "annotation_extension=G029,G030"]
@@ -1301,7 +1330,7 @@ class TestCmdSearchProject:
         _, kwargs = m.call_args
         assert kwargs["annotations"] == ("G029", "G030")
 
-    def test_junction_type_default(self, tmp_path: Path) -> None:
+    def test_junction_type_default(self, tmp_path: pathlib.Path) -> None:
         args = self._project_args()
         code, m = self._run(tmp_path, args)
         _, kwargs = m.call_args
@@ -1309,7 +1338,10 @@ class TestCmdSearchProject:
 
 
 class TestCmdSearchUnknownMode:
-    def test_unknown_mode_raises_value_error(self, tmp_path: Path) -> None:
+
+    def test_unknown_mode_raises_value_error(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = _make_search_args(mode="bogus", filters=[])
         with pytest.raises(ValueError, match="Unknown search mode"):
@@ -1317,7 +1349,8 @@ class TestCmdSearchUnknownMode:
 
 
 class TestCmdSearchOutputDestination:
-    def test_output_flag_writes_to_file(self, tmp_path: Path) -> None:
+
+    def test_output_flag_writes_to_file(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
         out_file = tmp_path / "out.jsonl"
@@ -1337,7 +1370,9 @@ class TestCmdSearchOutputDestination:
         assert code == 0
         assert out_file.exists()
 
-    def test_outdir_creates_timestamped_file(self, tmp_path: Path) -> None:
+    def test_outdir_creates_timestamped_file(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
         outdir = tmp_path / "outdir"
@@ -1361,7 +1396,7 @@ class TestCmdSearchOutputDestination:
         assert files[0].suffix == ".jsonl"
 
     def test_tsv_format(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
@@ -1382,7 +1417,7 @@ class TestCmdSearchOutputDestination:
         captured = capsys.readouterr()
         assert "resource_type" in captured.out  # TSV header
 
-    def test_outdir_tsv_creates_tsv_file(self, tmp_path: Path) -> None:
+    def test_outdir_tsv_creates_tsv_file(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
         outdir = tmp_path / "outdir"
@@ -1405,7 +1440,7 @@ class TestCmdSearchOutputDestination:
         assert files[0].suffix == ".tsv"
 
     def test_stdout_logging_when_out_path_none(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
@@ -1423,7 +1458,9 @@ class TestCmdSearchOutputDestination:
             with caplog.at_level(logging.INFO, logger="recount3"):
                 _cmd_search(args, cfg)
 
-    def test_file_logging_when_out_path_set(self, tmp_path: Path) -> None:
+    def test_file_logging_when_out_path_set(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource()
         out_file = tmp_path / "out.jsonl"
@@ -1447,7 +1484,10 @@ from recount3.cli import _download_one
 
 
 class TestDownloadOne:
-    def test_zip_dest_downloads_and_returns_ok(self, tmp_path: Path) -> None:
+
+    def test_zip_dest_downloads_and_returns_ok(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dest = tmp_path / "out.zip"
@@ -1456,12 +1496,14 @@ class TestDownloadOne:
         assert evt["status"] == "ok"
         m.assert_called_once()
 
-    def test_dir_dest_file_not_exists_downloads(self, tmp_path: Path) -> None:
+    def test_dir_dest_file_not_exists_downloads(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dest = tmp_path / "downloads"
         dest.mkdir()
-        expected_file = dest / Path(res.description.url_path()).name
+        expected_file = dest / pathlib.Path(res.description.url_path()).name
         assert not expected_file.exists()
         with mock.patch.object(
             R3Resource, "download", return_value=str(expected_file)
@@ -1470,13 +1512,13 @@ class TestDownloadOne:
         assert evt["status"] == "ok"
 
     def test_dir_dest_file_exists_no_overwrite_cache_enabled_skips(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dest = tmp_path / "downloads"
         dest.mkdir()
-        dest_file = dest / Path(res.description.url_path()).name
+        dest_file = dest / pathlib.Path(res.description.url_path()).name
         dest_file.touch()
         with mock.patch.object(R3Resource, "download", return_value=None) as m:
             evt = _download_one(res, cfg, dest, "enable", False)
@@ -1484,20 +1526,22 @@ class TestDownloadOne:
         m.assert_called_once_with(path=None, cache_mode="enable")
 
     def test_dir_dest_file_exists_no_overwrite_cache_disable_skips_no_download(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dest = tmp_path / "downloads"
         dest.mkdir()
-        dest_file = dest / Path(res.description.url_path()).name
+        dest_file = dest / pathlib.Path(res.description.url_path()).name
         dest_file.touch()
         with mock.patch.object(R3Resource, "download", return_value=None) as m:
             evt = _download_one(res, cfg, dest, "disable", False)
         assert evt["status"] == "skipped"
         m.assert_not_called()
 
-    def test_exception_returns_error_status(self, tmp_path: Path) -> None:
+    def test_exception_returns_error_status(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dest = tmp_path / "downloads"
@@ -1510,12 +1554,12 @@ class TestDownloadOne:
         assert "error" in evt
         assert "OSError" in evt["error"]
 
-    def test_overwrite_true_does_not_skip(self, tmp_path: Path) -> None:
+    def test_overwrite_true_does_not_skip(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dest = tmp_path / "downloads"
         dest.mkdir()
-        dest_file = dest / Path(res.description.url_path()).name
+        dest_file = dest / pathlib.Path(res.description.url_path()).name
         dest_file.touch()
         with mock.patch.object(
             R3Resource, "download", return_value=str(dest_file)
@@ -1538,7 +1582,7 @@ class TestCmdDownload:
         return argparse.Namespace(**defaults)
 
     def test_inline_valid_json_single_resource(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         inline_obj = {
@@ -1562,14 +1606,14 @@ class TestCmdDownload:
         evt = json.loads(captured.out.strip())
         assert evt["status"] == "ok"
 
-    def test_inline_bad_json_returns_1(self, tmp_path: Path) -> None:
+    def test_inline_bad_json_returns_1(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         args = self._make_args(inline="not valid json!!!")
         code = _cmd_download(args, cfg)
         assert code == 1
 
     def test_manifest_reads_resources(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
@@ -1582,14 +1626,16 @@ class TestCmdDownload:
             code = _cmd_download(args, cfg)
         assert code == 0
 
-    def test_no_resources_returns_0_with_warning(self, tmp_path: Path) -> None:
+    def test_no_resources_returns_0_with_warning(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         args = self._make_args(manifest="m.jsonl", dest=str(tmp_path))
         with mock.patch("recount3.cli._iter_manifest", return_value=[]):
             code = _cmd_download(args, cfg)
         assert code == 0
 
-    def test_zip_dest_creates_parent(self, tmp_path: Path) -> None:
+    def test_zip_dest_creates_parent(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         zip_dest = tmp_path / "subdir" / "out.zip"
@@ -1603,10 +1649,12 @@ class TestCmdDownload:
         assert code == 0
         assert (tmp_path / "subdir").is_dir()
 
-    def test_directory_dest_is_created(self, tmp_path: Path) -> None:
-        """A non-existent directory --dest should be created before
-        per-resource writes run; otherwise every write races on
-        FileNotFoundError (see resource.py case-3 materialization)."""
+    def test_directory_dest_is_created(self, tmp_path: pathlib.Path) -> None:
+        """Create a non-existent --dest directory before writing resources.
+
+        This prevents FileNotFoundError during per-resource writes
+        (see resource.py case-3 materialization).
+        """
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
         dir_dest = tmp_path / "fresh" / "downloads"
@@ -1622,7 +1670,7 @@ class TestCmdDownload:
         assert dir_dest.is_dir()
 
     def test_all_errors_returns_2(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res = _make_annotation_resource(cfg)
@@ -1641,7 +1689,7 @@ class TestCmdDownload:
         assert code == 2
 
     def test_partial_errors_returns_3(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         res1 = _make_annotation_resource(cfg)
@@ -1680,7 +1728,7 @@ class TestCmdBundleStackCounts:
         defaults.update(kw)
         return argparse.Namespace(**defaults)
 
-    def test_success_parquet(self, tmp_path: Path) -> None:
+    def test_success_parquet(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
         args = self._make_args(str(out))
@@ -1703,7 +1751,7 @@ class TestCmdBundleStackCounts:
         mock_df.to_parquet.assert_called_once_with(out)
 
     def test_sparse_parquet_requires_explicit_densify(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
@@ -1736,7 +1784,7 @@ class TestCmdBundleStackCounts:
         assert "--densify" in caplog.text
 
     def test_sparse_parquet_densifies_when_requested(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
@@ -1771,7 +1819,7 @@ class TestCmdBundleStackCounts:
         mock_densify.assert_called_once_with(sparse_df)
         dense_df.to_parquet.assert_called_once_with(out)
 
-    def test_success_tsv(self, tmp_path: Path) -> None:
+    def test_success_tsv(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
         args = self._make_args(str(out))
@@ -1789,7 +1837,9 @@ class TestCmdBundleStackCounts:
         assert code == 0
         mock_df.to_csv.assert_called_once_with(out, sep="\t")
 
-    def test_success_csv_uses_comma_separator(self, tmp_path: Path) -> None:
+    def test_success_csv_uses_comma_separator(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.csv"
         args = self._make_args(str(out))
@@ -1807,7 +1857,9 @@ class TestCmdBundleStackCounts:
         assert code == 0
         mock_df.to_csv.assert_called_once_with(out, sep=",")
 
-    def test_compatibility_error_returns_2(self, tmp_path: Path) -> None:
+    def test_compatibility_error_returns_2(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
         args = self._make_args(str(out))
@@ -1825,7 +1877,7 @@ class TestCmdBundleStackCounts:
             code = _cmd_bundle_stack_counts(args, cfg)
         assert code == 2
 
-    def test_load_error_returns_2(self, tmp_path: Path) -> None:
+    def test_load_error_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
         args = self._make_args(str(out))
@@ -1841,7 +1893,7 @@ class TestCmdBundleStackCounts:
             code = _cmd_bundle_stack_counts(args, cfg)
         assert code == 2
 
-    def test_value_error_returns_2(self, tmp_path: Path) -> None:
+    def test_value_error_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
         args = self._make_args(str(out))
@@ -1857,7 +1909,7 @@ class TestCmdBundleStackCounts:
             code = _cmd_bundle_stack_counts(args, cfg)
         assert code == 2
 
-    def test_import_error_returns_2(self, tmp_path: Path) -> None:
+    def test_import_error_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
         args = self._make_args(str(out))
@@ -1879,7 +1931,7 @@ class TestCmdBundleStackCounts:
         assert code == 2
         mock_bundle.stack_count_matrices.assert_called_once()
 
-    def test_write_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_write_exception_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
         args = self._make_args(str(out))
@@ -1954,7 +2006,7 @@ class TestCmdBundleStackCounts:
         ],
     )
     def test_parquet_round_trip(
-        self, tmp_path: Path, unit: str, feature_ids: list[str]
+        self, tmp_path: pathlib.Path, unit: str, feature_ids: list[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / f"{unit}_counts.parquet"
@@ -1974,7 +2026,7 @@ class TestCmdBundleStackCounts:
 
     @pytest.mark.requires_parquet
     def test_parquet_round_trip_preserves_sample_lookup(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "counts.parquet"
@@ -1988,7 +2040,7 @@ class TestCmdBundleStackCounts:
         assert back["SRR387777"].sum() == 15
 
     def test_missing_parquet_engine_returns_2_before_any_download(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.parquet"
@@ -2015,7 +2067,7 @@ class TestCmdBundleStackCounts:
         assert 'pip install "recount3[parquet]"' in caplog.text
 
     def test_text_output_does_not_require_a_parquet_engine(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.tsv"
@@ -2043,7 +2095,7 @@ class TestCmdBundleStackCounts:
 
     @pytest.mark.requires_parquet
     def test_sparse_junctions_to_parquet_without_densify_returns_2(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "junctions.parquet"
@@ -2059,7 +2111,7 @@ class TestCmdBundleStackCounts:
 
     @pytest.mark.requires_parquet
     def test_sparse_junctions_to_parquet_with_densify_round_trips(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "junctions.parquet"
@@ -2082,7 +2134,7 @@ class TestCmdBundleStackCounts:
         )
 
     def test_sparse_junctions_to_tsv_needs_no_densify(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "junctions.tsv"
@@ -2109,7 +2161,7 @@ def _make_experiment(
     extra_column_data: dict[str, list[Any]] | None = None,
 ) -> Any:
     """Build a real SummarizedExperiment for AnnData round-trip tests."""
-    import summarizedexperiment  # pylint: disable=import-outside-toplevel
+    import summarizedexperiment
 
     row_data: dict[str, list[Any]] = {"feature_id": list(feature_ids)}
     row_data.update(extra_row_data or {})
@@ -2137,7 +2189,7 @@ class TestCmdBundleSe:
         defaults.update(kw)
         return argparse.Namespace(**defaults)
 
-    def test_success_pkl(self, tmp_path: Path) -> None:
+    def test_success_pkl(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2156,7 +2208,7 @@ class TestCmdBundleSe:
         assert code == 0
         mock_pickle.assert_called_once()
 
-    def test_success_h5ad(self, tmp_path: Path) -> None:
+    def test_success_h5ad(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
         args = self._make_args(str(out))
@@ -2181,7 +2233,7 @@ class TestCmdBundleSe:
         mock_adata.write_h5ad.assert_called_once_with(out)
 
     def test_h5ad_unsafe_columns_require_sanitization_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
@@ -2222,7 +2274,7 @@ class TestCmdBundleSe:
         assert "--sanitize-columns" in caplog.text
 
     def test_h5ad_normalizes_and_sanitizes_columns_with_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
@@ -2265,7 +2317,7 @@ class TestCmdBundleSe:
         assert "Cast 1 all-missing column" in caplog.text
         assert "star/metric -> star_metric" in caplog.text
 
-    def test_import_error_returns_2(self, tmp_path: Path) -> None:
+    def test_import_error_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2283,7 +2335,7 @@ class TestCmdBundleSe:
             code = _cmd_bundle_se(args, cfg)
         assert code == 2
 
-    def test_general_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_general_exception_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2299,7 +2351,7 @@ class TestCmdBundleSe:
             code = _cmd_bundle_se(args, cfg)
         assert code == 2
 
-    def test_write_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_write_exception_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2317,7 +2369,9 @@ class TestCmdBundleSe:
             code = _cmd_bundle_se(args, cfg)
         assert code == 2
 
-    def test_h5ad_write_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_h5ad_write_exception_returns_2(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
         args = self._make_args(str(out))
@@ -2343,7 +2397,7 @@ class TestCmdBundleSe:
         mock_adata.write_h5ad.assert_called_once_with(out)
 
     def test_h5ad_missing_anndata_returns_2_before_any_build(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
@@ -2368,7 +2422,9 @@ class TestCmdBundleSe:
         assert not out.exists()
         assert 'pip install "recount3[anndata]"' in caplog.text
 
-    def test_pkl_output_does_not_require_anndata(self, tmp_path: Path) -> None:
+    def test_pkl_output_does_not_require_anndata(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2392,7 +2448,7 @@ class TestCmdBundleSe:
         assert code == 0
 
     @pytest.mark.requires_anndata
-    def test_h5ad_round_trip(self, tmp_path: Path) -> None:
+    def test_h5ad_round_trip(self, tmp_path: pathlib.Path) -> None:
         anndata = pytest.importorskip("anndata")
         biocframe = pytest.importorskip("biocframe")
 
@@ -2434,7 +2490,7 @@ class TestCmdBundleSe:
 
     @pytest.mark.requires_anndata
     def test_h5ad_all_missing_column_is_cast_to_nan(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """An absent-for-every-row field would otherwise fail h5py."""
         anndata = pytest.importorskip("anndata")
@@ -2468,7 +2524,7 @@ class TestCmdBundleSe:
 
     @pytest.mark.requires_anndata
     def test_h5ad_slash_in_column_name_returns_2_without_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """HDF5 reads '/' as a path separator; renaming needs consent."""
         biocframe = pytest.importorskip("biocframe")
@@ -2505,7 +2561,7 @@ class TestCmdBundleSe:
 
     @pytest.mark.requires_anndata
     def test_h5ad_slash_in_column_name_round_trips_with_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         anndata = pytest.importorskip("anndata")
         biocframe = pytest.importorskip("biocframe")
@@ -2558,7 +2614,7 @@ class TestCmdBundleRse:
         defaults.update(kw)
         return argparse.Namespace(**defaults)
 
-    def test_success_pkl(self, tmp_path: Path) -> None:
+    def test_success_pkl(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2577,7 +2633,7 @@ class TestCmdBundleRse:
         assert code == 0
         mock_pickle.assert_called_once()
 
-    def test_success_h5ad(self, tmp_path: Path) -> None:
+    def test_success_h5ad(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
         args = self._make_args(str(out))
@@ -2602,7 +2658,7 @@ class TestCmdBundleRse:
         mock_adata.write_h5ad.assert_called_once_with(out)
 
     def test_h5ad_unsafe_columns_require_sanitization_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
@@ -2643,7 +2699,7 @@ class TestCmdBundleRse:
         assert "--sanitize-columns" in caplog.text
 
     def test_h5ad_normalizes_and_sanitizes_columns_with_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
@@ -2686,7 +2742,9 @@ class TestCmdBundleRse:
         assert "Cast 1 all-missing column" in caplog.text
         assert "star/metric -> star_metric" in caplog.text
 
-    def test_allow_fallback_to_se_passed_through(self, tmp_path: Path) -> None:
+    def test_allow_fallback_to_se_passed_through(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out), allow_fallback_to_se=True)
@@ -2706,7 +2764,7 @@ class TestCmdBundleRse:
         _, kwargs = mock_bundle.to_ranged_summarized_experiment.call_args
         assert kwargs["allow_fallback_to_se"] is True
 
-    def test_import_error_returns_2(self, tmp_path: Path) -> None:
+    def test_import_error_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2724,7 +2782,7 @@ class TestCmdBundleRse:
             code = _cmd_bundle_rse(args, cfg)
         assert code == 2
 
-    def test_general_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_general_exception_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2742,7 +2800,7 @@ class TestCmdBundleRse:
             code = _cmd_bundle_rse(args, cfg)
         assert code == 2
 
-    def test_write_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_write_exception_returns_2(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2760,7 +2818,9 @@ class TestCmdBundleRse:
             code = _cmd_bundle_rse(args, cfg)
         assert code == 2
 
-    def test_h5ad_write_exception_returns_2(self, tmp_path: Path) -> None:
+    def test_h5ad_write_exception_returns_2(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
         args = self._make_args(str(out))
@@ -2786,7 +2846,7 @@ class TestCmdBundleRse:
         mock_adata.write_h5ad.assert_called_once_with(out)
 
     def test_h5ad_missing_anndata_returns_2_before_any_build(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.h5ad"
@@ -2811,7 +2871,9 @@ class TestCmdBundleRse:
         assert not out.exists()
         assert 'pip install "recount3[anndata]"' in caplog.text
 
-    def test_pkl_output_does_not_require_anndata(self, tmp_path: Path) -> None:
+    def test_pkl_output_does_not_require_anndata(
+        self, tmp_path: pathlib.Path
+    ) -> None:
         cfg = _make_cfg(tmp_path)
         out = tmp_path / "out.pkl"
         args = self._make_args(str(out))
@@ -2835,7 +2897,7 @@ class TestCmdBundleRse:
         assert code == 0
 
     @pytest.mark.requires_anndata
-    def test_h5ad_round_trip(self, tmp_path: Path) -> None:
+    def test_h5ad_round_trip(self, tmp_path: pathlib.Path) -> None:
         anndata = pytest.importorskip("anndata")
         biocframe = pytest.importorskip("biocframe")
 
@@ -2877,7 +2939,7 @@ class TestCmdBundleRse:
 
     @pytest.mark.requires_anndata
     def test_h5ad_all_missing_column_is_cast_to_nan(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         """An absent-for-every-row field would otherwise fail h5py."""
         anndata = pytest.importorskip("anndata")
@@ -2911,7 +2973,7 @@ class TestCmdBundleRse:
 
     @pytest.mark.requires_anndata
     def test_h5ad_slash_in_column_name_returns_2_without_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """HDF5 reads '/' as a path separator; renaming needs consent."""
         biocframe = pytest.importorskip("biocframe")
@@ -2948,7 +3010,7 @@ class TestCmdBundleRse:
 
     @pytest.mark.requires_anndata
     def test_h5ad_slash_in_column_name_round_trips_with_flag(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+        self, tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         anndata = pytest.importorskip("anndata")
         biocframe = pytest.importorskip("biocframe")
@@ -2988,8 +3050,9 @@ class TestCmdBundleRse:
 
 
 class TestCmdSmokeTest:
+
     def test_smoke_test_downloads_resources(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         args = argparse.Namespace(limit=1, dest="./recount3-smoke")
@@ -3014,7 +3077,7 @@ class TestCmdSmokeTest:
         evt = json.loads(captured.out.strip())
         assert evt["status"] == "ok"
 
-    def test_smoke_test_limit_respected(self, tmp_path: Path) -> None:
+    def test_smoke_test_limit_respected(self, tmp_path: pathlib.Path) -> None:
         cfg = _make_cfg(tmp_path)
         args = argparse.Namespace(limit=1, dest="./recount3-smoke")
         desc = R3ResourceDescription(
@@ -3038,10 +3101,11 @@ class TestCmdSmokeTest:
 
 
 class TestDispatch:
-    def _make_cfg(self, tmp_path: Path) -> Config:
+
+    def _make_cfg(self, tmp_path: pathlib.Path) -> Config:
         return _make_cfg(tmp_path)
 
-    def test_dispatch_ids(self, tmp_path: Path) -> None:
+    def test_dispatch_ids(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(
             command="ids", organism="", samples_out=None, projects_out=None
@@ -3051,7 +3115,7 @@ class TestDispatch:
         assert code == 0
         m.assert_called_once_with(args, cfg)
 
-    def test_dispatch_search(self, tmp_path: Path) -> None:
+    def test_dispatch_search(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="search")
         with mock.patch("recount3.cli._cmd_search", return_value=0) as m:
@@ -3059,14 +3123,14 @@ class TestDispatch:
         assert code == 0
         m.assert_called_once_with(args, cfg)
 
-    def test_dispatch_download(self, tmp_path: Path) -> None:
+    def test_dispatch_download(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="download")
         with mock.patch("recount3.cli._cmd_download", return_value=0) as m:
             code = _dispatch(args, cfg)
         assert code == 0
 
-    def test_dispatch_bundle_stack_counts(self, tmp_path: Path) -> None:
+    def test_dispatch_bundle_stack_counts(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="bundle", bundle_cmd="stack-counts")
         with mock.patch(
@@ -3075,14 +3139,14 @@ class TestDispatch:
             code = _dispatch(args, cfg)
         assert code == 0
 
-    def test_dispatch_bundle_se(self, tmp_path: Path) -> None:
+    def test_dispatch_bundle_se(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="bundle", bundle_cmd="se")
         with mock.patch("recount3.cli._cmd_bundle_se", return_value=0) as m:
             code = _dispatch(args, cfg)
         assert code == 0
 
-    def test_dispatch_bundle_rse(self, tmp_path: Path) -> None:
+    def test_dispatch_bundle_rse(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="bundle", bundle_cmd="rse")
         with mock.patch("recount3.cli._cmd_bundle_rse", return_value=0) as m:
@@ -3090,14 +3154,14 @@ class TestDispatch:
         assert code == 0
 
     def test_dispatch_bundle_unknown_raises_value_error(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="bundle", bundle_cmd="unknown_cmd")
         with pytest.raises(ValueError, match="Unknown bundle subcommand"):
             _dispatch(args, cfg)
 
-    def test_dispatch_smoke_test(self, tmp_path: Path) -> None:
+    def test_dispatch_smoke_test(self, tmp_path: pathlib.Path) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="smoke-test")
         with mock.patch("recount3.cli._cmd_smoke_test", return_value=0) as m:
@@ -3105,7 +3169,7 @@ class TestDispatch:
         assert code == 0
 
     def test_dispatch_unknown_command_raises_value_error(
-        self, tmp_path: Path
+        self, tmp_path: pathlib.Path
     ) -> None:
         cfg = self._make_cfg(tmp_path)
         args = _make_namespace(command="nonexistent")
@@ -3118,7 +3182,7 @@ class TestMain:
         """Minimal argv that runs smoke-test via main()."""
         return ["smoke-test"]
 
-    def test_main_exits_0_on_success(self, tmp_path: Path) -> None:
+    def test_main_exits_0_on_success(self, tmp_path: pathlib.Path) -> None:
         with (
             mock.patch("recount3.cli._dispatch", return_value=0),
             mock.patch("recount3.cli._build_config_from_env_and_flags"),
@@ -3172,7 +3236,7 @@ class TestMain:
             main(["smoke-test"])
         assert exc.value.code == 2
 
-    def test_main_with_non_zero_code(self, tmp_path: Path) -> None:
+    def test_main_with_non_zero_code(self, tmp_path: pathlib.Path) -> None:
         with (
             mock.patch("recount3.cli._dispatch", return_value=3),
             mock.patch("recount3.cli._build_config_from_env_and_flags"),
@@ -3182,7 +3246,7 @@ class TestMain:
         assert exc.value.code == 3
 
     def test_main_full_roundtrip_ids(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """End-to-end test using main() with real arg parsing."""
         with (
@@ -3200,8 +3264,9 @@ class TestMain:
 
 
 class TestSmokeTestCustomDest:
+
     def test_uses_custom_dest(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         cfg = _make_cfg(tmp_path)
         custom = str(tmp_path / "my-smoke")
@@ -3226,7 +3291,7 @@ class TestSmokeTestCustomDest:
             }
             code = _cmd_smoke_test(args, cfg)
         assert code == 0
-        assert Path(custom).exists()
+        assert pathlib.Path(custom).exists()
 
 
 class TestMainBrokenPipe:

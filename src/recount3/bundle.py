@@ -87,20 +87,20 @@ Note:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import collections
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 import concurrent.futures
 import dataclasses
+import datetime
 import functools
 import gzip
 import io
 import logging
 import re
-from collections import Counter
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Any, Optional, TYPE_CHECKING
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy import sparse
 
 from recount3 import _bigwig
@@ -114,9 +114,9 @@ from recount3 import version
 
 if TYPE_CHECKING:  # pragma: no cover
     import biocframe
+    import genomicranges  # type: ignore[import-not-found]
     from numpy.typing import NDArray
     import summarizedexperiment  # type: ignore[import-not-found]
-    import genomicranges  # type: ignore[import-not-found]
 
 _EXON_ID_ATTR_RE = re.compile(r'\bexon_id\s+"([^"]+)"')
 _RECOUNT_EXON_ID_ATTR_RE = re.compile(r'\brecount_exon_id\s+"([^"]+)"')
@@ -464,7 +464,7 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
         df = res.load()
         if isinstance(df, pd.DataFrame):
             return df
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:
         pass
 
     try:
@@ -951,7 +951,7 @@ def _peek_gtf_feature_counts(
     *,
     max_lines: int = 50000,
     autoload: bool = True,
-) -> Counter[str]:
+) -> collections.Counter[str]:
     """Scan the GTF and count feature types without loading it fully.
 
     Args:
@@ -968,7 +968,7 @@ def _peek_gtf_feature_counts(
     path = res.ensure_cached(download=autoload)
 
     opener = gzip.open if str(path).endswith(".gz") else open
-    counts: Counter[str] = Counter()
+    counts: collections.Counter[str] = collections.Counter()
     seen = 0
     with opener(path, "rb") as fh:  # type: ignore[arg-type]
         for line in io.TextIOWrapper(fh, encoding="utf-8"):
@@ -1068,7 +1068,7 @@ def _select_gtf_resource_for_unit(
                 res.url,
             )
             continue
-        except Exception as exc:  # pylint: disable=broad-exception-caught
+        except Exception as exc:
             logging.warning(
                 "Skipping annotation candidate %s: could not inspect its "
                 "GTF features (%r).",
@@ -1465,13 +1465,13 @@ def _merge_count_frames(
 
 
 def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
-    """Return the (family, feature_key) pair for a count-file resource.
+    r"""Return the (family, feature_key) pair for a count-file resource.
 
     The returned values are used to check compatibility before stacking
     count matrices across resources. There are two families:
 
-    * ``\"gene_or_exon\"`` for gene- or exon-level matrices.
-    * ``\"junctions\"`` for junction-level matrices.
+    * ``"gene_or_exon"`` for gene- or exon-level matrices.
+    * ``"junctions"`` for junction-level matrices.
 
     Args:
       res: A resource expected to represent a count matrix.
@@ -1527,7 +1527,7 @@ def _make_unique_names(
         >>> _make_unique_names(["a", "b", "a"])
         ['a', 'b', 'a__dup2']
     """
-    seen: Counter[str] = Counter()
+    seen: collections.Counter[str] = collections.Counter()
     reserved = set(names)
     out: list[str] = []
     for name in names:
@@ -1809,7 +1809,7 @@ class R3ResourceBundle:
         for res in self.resources:
             try:
                 res.load(force=force)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 if strict:
                     raise
         return self
@@ -1847,7 +1847,7 @@ class R3ResourceBundle:
                 if autoload:
                     try:
                         res.load()
-                    except Exception:  # pylint: disable=broad-except
+                    except Exception:
                         continue
                 else:
                     continue
@@ -2004,7 +2004,7 @@ class R3ResourceBundle:
             if predicate is not None:
                 try:
                     predicate_ok = bool(predicate(res))
-                except Exception:  # pylint: disable=broad-except
+                except Exception:
                     predicate_ok = False
 
             match = fields_ok and predicate_ok
@@ -2938,8 +2938,7 @@ class R3ResourceBundle:
         rows = pd.DataFrame({"feature_id": original_ids}, index=counts.index)
 
         def collapse(values: Iterable[str | None]) -> str | list[str]:
-            """Deduplicate provenance values and simplify a singleton to a
-            string.
+            """Deduplicate provenance values, simplifying singletons to strings.
 
             Args:
                 values: Ordered provenance values; ``None`` entries are omitted.
@@ -2952,7 +2951,9 @@ class R3ResourceBundle:
             return values[0] if len(values) == 1 else values
 
         metadata = {
-            "time_created": datetime.now(timezone.utc).isoformat(),
+            "time_created": datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat(),
             "recount3_version": version.__version__,
             "project": collapse(key[2] for key in keys),
             "organism": collapse(key[0] for key in keys),

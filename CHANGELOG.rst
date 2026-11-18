@@ -93,6 +93,22 @@ Documentation
 Internal
 ~~~~~~~~
 
+- Repository text files use LF line endings consistently; binary fixtures
+  are unchanged.
+- Ruff enforces Google-style import ordering, configured scientific aliases,
+  module imports for selected standard-library and scientific modules, and
+  the remaining small docstring and test-variable naming conventions.
+  Unused imports, redundant annotation quotes, legacy collection imports,
+  the unbounded-cache spelling, and a redundant timeout alias are cleaned up.
+  Black remains the formatter. Public exports, parameter names and defaults,
+  data processing, and exception behavior are unchanged; existing code
+  remains source-compatible.
+- Ruff replaces Pylint in the ``dev`` extra and runs in CI. All stable rules
+  are enabled except individually named rules with existing findings, with
+  additional exceptions scoped to tests and Sphinx configuration. The
+  contributor guide documents the passing baseline and how to tighten it.
+  Black remains the formatter; public APIs and runtime behavior are unchanged
+  and existing code remains source-compatible.
 - ``compute_tpm`` tests cover input validation, the documented recipe
   against a reference implementation, missing and degenerate values, every
   SciPy sparse format, sparse storage, output layout, peak memory, and real

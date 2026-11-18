@@ -85,8 +85,8 @@ Attributes:
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Iterable
+import os
 from typing import Any, Literal, TypeAlias
 
 CacheMode: TypeAlias = Literal["enable", "disable", "update"]

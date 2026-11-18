@@ -101,11 +101,11 @@ Typical usage example::
 
 from __future__ import annotations
 
-import os
-import sys
 from collections.abc import Callable
-from dataclasses import dataclass
-from pathlib import Path
+import dataclasses
+import os
+import pathlib
+import sys
 
 from recount3 import _utils
 from recount3 import version
@@ -113,7 +113,7 @@ from recount3 import version
 _DEFAULT_CHUNK_SIZE: int = 1024 * 1024  # 1 MiB
 
 
-@dataclass(frozen=True, slots=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class Config:
     """Immutable configuration bag.
 
@@ -138,7 +138,7 @@ class Config:
     insecure_ssl: bool
     max_retries: int
     user_agent: str
-    cache_dir: Path
+    cache_dir: pathlib.Path
     cache_disabled: bool
     chunk_size: int = _DEFAULT_CHUNK_SIZE
     cache_backend: str = "filesystem"
@@ -149,21 +149,21 @@ class Config:
             raise ValueError(f"Unknown cache backend: {self.cache_backend!r}")
 
 
-def _default_cache_dir(backend: str) -> Path:
+def _default_cache_dir(backend: str) -> pathlib.Path:
     """Choose the native directory or mirror R's R_user_dir cache rules."""
     if backend != "pybiocfilecache":
-        return Path.home() / ".cache" / "recount3" / "files"
+        return pathlib.Path.home() / ".cache" / "recount3" / "files"
     root = os.environ.get("R_USER_CACHE_DIR") or os.environ.get(
         "XDG_CACHE_HOME"
     )
     if root:
-        base = Path(root)
+        base = pathlib.Path(root)
     elif sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", "")) / "R" / "cache"
+        base = pathlib.Path(os.environ.get("LOCALAPPDATA", "")) / "R" / "cache"
     elif sys.platform == "darwin":
-        base = Path.home() / "Library" / "Caches" / "org.R-project.R"
+        base = pathlib.Path.home() / "Library" / "Caches" / "org.R-project.R"
     else:
-        base = Path.home() / ".cache"
+        base = pathlib.Path.home() / ".cache"
     return base / "R" / "recount3"
 
 
@@ -189,7 +189,7 @@ def default_config(*, cache_backend: str | None = None) -> Config:
     )
     if cache_backend is None:
         cache_backend = os.environ.get("RECOUNT3_CACHE_BACKEND", "filesystem")
-    cache_dir = Path(
+    cache_dir = pathlib.Path(
         os.environ.get("RECOUNT3_CACHE_DIR", _default_cache_dir(cache_backend))
     )
     return Config(
@@ -213,7 +213,7 @@ def default_config(*, cache_backend: str | None = None) -> Config:
     )
 
 
-def recount3_cache(config: Config | None = None) -> Path:
+def recount3_cache(config: Config | None = None) -> pathlib.Path:
     """Return the cache directory used for recount3 downloads.
 
     This helper normalizes and materializes the cache directory based on
@@ -235,7 +235,7 @@ def recount3_cache_files(
     config: Config | None = None,
     *,
     pattern: str | None = None,
-) -> list[Path]:
+) -> list[pathlib.Path]:
     """List cached files managed by recount3.
 
     Args:
@@ -258,7 +258,7 @@ def recount3_cache_files(
         return []
 
     glob_pattern = pattern if pattern is not None else "*"
-    files: list[Path] = []
+    files: list[pathlib.Path] = []
 
     for path in root.rglob(glob_pattern):
         if path.is_file() and not _utils._cache_internal(path, root):
@@ -276,9 +276,9 @@ def recount3_cache_files(
 def recount3_cache_rm(
     *,
     config: Config | None = None,
-    predicate: Callable[[Path], bool] | None = None,
+    predicate: Callable[[pathlib.Path], bool] | None = None,
     dry_run: bool = False,
-) -> list[Path]:
+) -> list[pathlib.Path]:
     """Remove cached files that match a predicate.
 
     This helper is analogous to the R-side ``recount3_cache_rm()``: it
@@ -323,7 +323,7 @@ def recount3_cache_rm(
     if not root.exists() or not root.is_dir():
         return []
 
-    def _select(path: Path) -> bool:
+    def _select(path: pathlib.Path) -> bool:
         if predicate is None:
             return True
         return predicate(path)

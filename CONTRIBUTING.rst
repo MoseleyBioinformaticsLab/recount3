@@ -137,29 +137,38 @@ suppressing them.
 Code style
 ~~~~~~~~~~
 
+* **Line endings.** Use LF line endings and end text files with a newline.
 * **Formatting.** Black at a line length of 80, as configured in
   ``[tool.black]``. Black is not part of the ``dev`` extra; install it
   separately and run ``black src tests``. Black does not reflow docstrings or
   comments; wrap those by hand at the same width.
-* **Linting.** Pylint, from the ``dev`` extra, is run at its default
-  configuration: ``python -m pylint src/recount3``. The existing code is not
-  free of messages; those that remain are design-complexity reports
-  (``too-many-arguments``, ``too-many-locals``, and similar) and over-length
-  lines in prose. Introduce no new messages, and prefer resolving any that
-  your change touches.
+* **Linting.** Ruff is included in the ``dev`` extra. From the repository
+  root, run ``python -m ruff check .``; CI runs the same command. This checks
+  package source, tests, the Sphinx configuration, and ``pyproject.toml``.
+  Configuration lives in ``[tool.ruff]`` and ``[tool.ruff.lint]``, with a
+  Python 3.10 target, an 80-character line length, and Google-style
+  docstrings and import ordering. Black remains the formatter; Ruff handles
+  linting and import sorting. To sort imports, run
+  ``python -m ruff check --select I --fix .`` before Black.
 * **Typing.** Every function and method is fully annotated. Modules begin with
   ``from __future__ import annotations``. The package ships ``py.typed``, so
   annotations are part of the public contract.
 * **Imports.** Import modules, not individual names, as the Google Python
   Style Guide specifies: ``from recount3 import resource``, then
-  ``resource.R3Resource``. ``typing`` and ``collections.abc`` are exempt, and
-  ``src/recount3/__init__.py`` imports names directly because it re-exports
-  them. Alias a module only when its name clashes with something else:
+  ``resource.R3Resource``. ``typing``, ``typing_extensions``, and
+  ``collections.abc`` are exempt, and ``src/recount3/__init__.py`` imports
+  names directly because it re-exports them. Standard scientific aliases
+  are ``numpy as np`` and ``pandas as pd``; keep ``datetime`` spelled out.
+  Other aliases follow Google's name-collision and readability exceptions:
   ``types`` is imported as ``r3_types`` (the standard library module), and
   ``config`` and ``bundle`` as ``r3_config`` and ``r3_bundle`` (public
   parameter names). Use the same alias in every module, and add any new alias
   to ``_MODULE_ALIASES`` in ``docs/conf.py`` so that annotations using it
-  still link in the API reference.
+  still link in the API reference. Ruff's ``I001`` sorts imports by package
+  path within each group and keeps module imports on separate lines, with
+  exceptions for the typing modules above. ``ICN001`` enforces the configured
+  scientific aliases. ``ICN003`` requires module imports for the modules in
+  ``banned-from``; review other imports against the same Google convention.
 * **Docstrings.** Google-style sections (``Args``, ``Returns``, ``Raises``),
   rendered by ``sphinx.ext.napoleon``. Reference other objects with Sphinx
   roles, for example ``:class:`~recount3.resource.R3Resource```. Every public
@@ -171,6 +180,23 @@ Code style
   adding a new one.
 * **Errors.** Raise the typed exceptions defined in ``recount3.errors`` rather
   than bare built-ins, so that failure modes remain catchable by category.
+
+
+The Ruff configuration enables all stable rules (``select = ["ALL"]``), then
+ignores individual rules with existing findings. Each ignored rule is named
+in ``pyproject.toml``. Additional exceptions specific to tests and Sphinx are
+scoped to those directories; for example, assertions are permitted in tests
+while unused imports are still checked in package source. This establishes a
+passing baseline without changing runtime code. Preview rules are disabled.
+
+To tighten the baseline, remove one ignore, run ``python -m ruff check .``,
+resolve its findings, and submit that as a separate change. Keep ignores
+specific to individual rule codes, and use a narrow per-file exception when
+it applies only to tests or documentation. Avoid blanket ``noqa`` comments.
+Ruff is constrained to the audited minor release series in both the ``dev``
+dependency and ``required-version``. When upgrading that series, review the
+`Ruff versioning policy <https://docs.astral.sh/ruff/versioning/>`_ and audit
+newly enabled rules before updating the baseline.
 
 
 Documentation
@@ -229,15 +255,16 @@ Pull requests
 2. Confine the branch to one logical change. Submit unrelated changes
    separately.
 3. Ensure the full suite passes, coverage remains at 100 percent, the code is
-   Black-formatted, Pylint reports no new messages, and the documentation
+   Black-formatted, ``python -m ruff check .`` passes, and the documentation
    builds.
 4. Update ``CHANGELOG.rst``.
 5. Open the pull request against ``main``, describing the change, its
    motivation, and any change in public behaviour. Link the relevant issue.
 
-CI runs the suite across the supported Python versions on Linux, macOS, and
-Windows, and enforces the coverage threshold on Python 3.14, the newest version
-on which every extra installs. All checks must pass before review concludes.
+CI runs Ruff in a dedicated job and the suite across the supported Python
+versions on Linux, macOS, and Windows. It enforces the coverage threshold on
+Python 3.14, the newest version on which every extra installs. All checks must
+pass before review concludes.
 
 
 Releases

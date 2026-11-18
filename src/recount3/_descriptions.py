@@ -78,8 +78,8 @@ Typical usage example::
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
+import dataclasses
 from typing import Any, cast
 
 VALID_ORGANISMS: frozenset[str] = frozenset({"human", "mouse"})

@@ -83,68 +83,55 @@ Note:
 
 from __future__ import annotations
 
-from recount3._bigwig import BigWigFile
-from recount3._descriptions import (
-    R3Annotations,
-    R3BigWig,
-    R3DataSourceMetadata,
-    R3DataSources,
-    R3GeneOrExonCounts,
-    R3JunctionCounts,
-    R3ProjectMetadata,
-    R3ResourceDescription,
-)
-from recount3.bundle import R3ResourceBundle
-from recount3.config import (
-    Config,
-    default_config,
-    recount3_cache,
-    recount3_cache_files,
-    recount3_cache_rm,
-)
-from recount3.errors import (
-    CompatibilityError,
-    ConfigurationError,
-    DownloadError,
-    LoadError,
-    MissingRangesError,
-    RangesCoverageError,
-    RangesError,
-    Recount3Error,
-)
-from recount3.resource import R3Resource
-
 from recount3 import se as se
-from recount3.se import (
-    build_ranged_summarized_experiment,
-    build_summarized_experiment,
-    create_rse,
-)
-from recount3.search import (
-    annotation_ext,
-    annotation_label,
-    annotation_options,
-    available_projects,
-    available_samples,
-    create_sample_project_lists,
-    project_homes,
-    samples_for_project,
-    search_annotations,
-    search_bigwig_files,
-    search_count_files_gene_or_exon,
-    search_count_files_junctions,
-    search_data_source_metadata,
-    search_data_sources,
-    search_metadata_files,
-    search_project_all,
-)
-from recount3.types import (
-    CacheMode,
-    CompatibilityMode,
-    FieldSpec,
-    StrPath,
-    StringOrIterable,
-)
+from recount3._bigwig import BigWigFile
+from recount3._descriptions import R3Annotations
+from recount3._descriptions import R3BigWig
+from recount3._descriptions import R3DataSourceMetadata
+from recount3._descriptions import R3DataSources
+from recount3._descriptions import R3GeneOrExonCounts
+from recount3._descriptions import R3JunctionCounts
+from recount3._descriptions import R3ProjectMetadata
+from recount3._descriptions import R3ResourceDescription
+from recount3.bundle import R3ResourceBundle
+from recount3.config import Config
+from recount3.config import default_config
+from recount3.config import recount3_cache
+from recount3.config import recount3_cache_files
+from recount3.config import recount3_cache_rm
+from recount3.errors import CompatibilityError
+from recount3.errors import ConfigurationError
+from recount3.errors import DownloadError
+from recount3.errors import LoadError
+from recount3.errors import MissingRangesError
+from recount3.errors import RangesCoverageError
+from recount3.errors import RangesError
+from recount3.errors import Recount3Error
+from recount3.resource import R3Resource
+from recount3.se import build_ranged_summarized_experiment
+from recount3.se import build_summarized_experiment
+from recount3.se import create_rse
+from recount3.search import annotation_ext
+from recount3.search import annotation_label
+from recount3.search import annotation_options
+from recount3.search import available_projects
+from recount3.search import available_samples
+from recount3.search import create_sample_project_lists
+from recount3.search import project_homes
+from recount3.search import samples_for_project
+from recount3.search import search_annotations
+from recount3.search import search_bigwig_files
+from recount3.search import search_count_files_gene_or_exon
+from recount3.search import search_count_files_junctions
+from recount3.search import search_data_source_metadata
+from recount3.search import search_data_sources
+from recount3.search import search_metadata_files
+from recount3.search import search_project_all
+from recount3.types import CacheMode
+from recount3.types import CompatibilityMode
+from recount3.types import FieldSpec
+from recount3.types import StringOrIterable
+from recount3.types import StrPath
 from recount3.version import __version__
 
 __all__ = [

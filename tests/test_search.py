@@ -29,13 +29,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# pylint: disable=redefined-outer-name
 
 from __future__ import annotations
 
 import math
+import pathlib
 import shutil
-from pathlib import Path
 from unittest import mock
 
 import pandas as pd
@@ -44,39 +43,37 @@ import pytest
 from recount3._descriptions import R3ResourceDescription
 from recount3.config import Config
 from recount3.resource import R3Resource
-from recount3.search import (
-    _ANN_EXT_HUMAN,
-    _ANN_EXT_MOUSE,
-    _ANNOTATION_NAME_TO_EXT_HUMAN,
-    _ANNOTATION_NAME_TO_EXT_MOUSE,
-    _build_param_grid,
-    _make_resources,
-    _normalize_organism_name,
-    _posix_basename,
-    _posix_dirname,
-    _resolve_annotation_exts,
-    _strip_metadata_column_prefix,
-    annotation_ext,
-    annotation_label,
-    annotation_options,
-    _normalize_to_tuple,
-    available_projects,
-    available_samples,
-    create_sample_project_lists,
-    match_spec,
-    project_homes,
-    samples_for_project,
-    search_annotations,
-    search_bigwig_files,
-    search_count_files_gene_or_exon,
-    search_count_files_junctions,
-    search_data_source_metadata,
-    search_data_sources,
-    search_metadata_files,
-    search_project_all,
-)
+from recount3.search import _ANN_EXT_HUMAN
+from recount3.search import _ANN_EXT_MOUSE
+from recount3.search import _ANNOTATION_NAME_TO_EXT_HUMAN
+from recount3.search import _ANNOTATION_NAME_TO_EXT_MOUSE
+from recount3.search import _build_param_grid
+from recount3.search import _make_resources
+from recount3.search import _normalize_organism_name
+from recount3.search import _normalize_to_tuple
+from recount3.search import _posix_basename
+from recount3.search import _posix_dirname
+from recount3.search import _resolve_annotation_exts
+from recount3.search import _strip_metadata_column_prefix
+from recount3.search import annotation_ext
+from recount3.search import annotation_label
+from recount3.search import annotation_options
+from recount3.search import available_projects
+from recount3.search import available_samples
+from recount3.search import create_sample_project_lists
+from recount3.search import match_spec
+from recount3.search import project_homes
+from recount3.search import samples_for_project
+from recount3.search import search_annotations
+from recount3.search import search_bigwig_files
+from recount3.search import search_count_files_gene_or_exon
+from recount3.search import search_count_files_junctions
+from recount3.search import search_data_source_metadata
+from recount3.search import search_data_sources
+from recount3.search import search_metadata_files
+from recount3.search import search_project_all
 
-_DATA_DIR = Path(__file__).parent / "data"
+_DATA_DIR = pathlib.Path(__file__).parent / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
 _META_HUMAN_MD_GZ = (
     _MIRROR
@@ -98,7 +95,7 @@ _BASE_URL = "https://example.org/recount3/"
 
 
 @pytest.fixture()
-def cfg(tmp_path: Path) -> Config:
+def cfg(tmp_path: pathlib.Path) -> Config:
     """Minimal Config pointing at a temporary cache directory."""
     return Config(
         base_url=_BASE_URL,
@@ -112,7 +109,7 @@ def cfg(tmp_path: Path) -> Config:
     )
 
 
-def _seed_desc(desc_params: dict, cfg: Config, src: Path) -> None:
+def _seed_desc(desc_params: dict, cfg: Config, src: pathlib.Path) -> None:
     """Seed the cache for the resource described by desc_params."""
     desc = R3ResourceDescription(**desc_params)
     res = R3Resource(desc, config=cfg)
@@ -841,8 +838,10 @@ class TestAvailableSamples:
         assert df["file_source"].iloc[0] == "sra"
 
     def test_blank_path_cells_render_the_same_on_every_pandas(self) -> None:
-        """A blank cell is rendered as text rather than reaching the path
-        helpers as a float, which pandas 3's string dtype passes through."""
+        """Render blank cells as text before they reach the path helpers.
+
+        pandas 3's string dtype otherwise passes them through as floats.
+        """
         sample_df = pd.DataFrame(
             {
                 "external_id": ["SRR1", "SRR2"],

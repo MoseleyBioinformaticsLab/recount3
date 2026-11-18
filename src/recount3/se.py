@@ -82,10 +82,10 @@ Note:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, TYPE_CHECKING
-
 import logging
 import numbers
+from typing import Any, TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
 from scipy import sparse
@@ -1135,9 +1135,7 @@ def _store_nan_lines(
     indptr = np.concatenate(([0], np.cumsum(entries_per_sample)))
     indices = np.empty(indptr[-1], dtype=np.int64)
     full = indptr[:-1][nan_samples]
-    indices[full[:, np.newaxis] + np.arange(n_features)] = np.arange(
-        n_features
-    )
+    indices[full[:, np.newaxis] + np.arange(n_features)] = np.arange(n_features)
     partial = indptr[:-1][~nan_samples]
     indices[partial[:, np.newaxis] + np.arange(flagged_features.size)] = (
         flagged_features
@@ -1479,10 +1477,9 @@ def compute_scale_factors(
             )
 
         pe_multiplier = pd.Series(np.nan, index=external_id, dtype=float)
-        # pylint: disable=singleton-comparison
+        # Compare elementwise; the nullable Series also contains unknowns.
         pe_multiplier.loc[paired_end_series == True] = 2.0
         pe_multiplier.loc[paired_end_series == False] = 1.0
-        # pylint: enable=singleton-comparison
 
         denom = mapped_reads_values * (avg_mapped_values**2)
         scale_factor = (
