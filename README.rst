@@ -17,6 +17,10 @@ recount3
    :target: https://codecov.io/gh/MoseleyBioinformaticsLab/recount3
    :alt: CodeCov
 
+.. image:: https://img.shields.io/badge/DOI-10.1186%2Fs12864--026--13499--9-blue.svg
+   :target: https://doi.org/10.1186/s12864-026-13499-9
+   :alt: BMC Genomics publication
+
 .. image:: https://img.shields.io/github/stars/MoseleyBioinformaticsLab/recount3.svg?style=social&label=Star
    :target: https://github.com/MoseleyBioinformaticsLab/recount3
    :alt: GitHub project
