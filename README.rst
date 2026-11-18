@@ -71,8 +71,8 @@ Links
    * recount3 @ GitHub_
    * recount3 @ PyPI_
    * Documentation @ Pages_
-   * `recount3 study explorer`_ (browse available studies interactively)
    * Questions & bug reports @ Issues_
+   * `recount3 study explorer`_ (browse available studies interactively)
 
 
 Installation
