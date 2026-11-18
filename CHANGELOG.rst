@@ -93,6 +93,8 @@ Documentation
 Internal
 ~~~~~~~~
 
+- The module entry point drops an unused shebang so Ruff's executable-file
+  checks pass on Linux CI.
 - Repository text files use LF line endings consistently; binary fixtures
   are unchanged.
 - Ruff enforces Google-style import ordering, configured scientific aliases,

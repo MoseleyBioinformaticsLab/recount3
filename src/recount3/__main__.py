@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # Copyright (c) 2026, Alexander Alsalihi, Robert M. Flight, Hunter N.B. Moseley.
 # All rights reserved.
 #
