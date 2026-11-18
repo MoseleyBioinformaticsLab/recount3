@@ -1522,6 +1522,42 @@ def test_resolve_metadata_column_no_dot_raises_directly() -> None:
         _utils._resolve_metadata_column(df, "b")
 
 
+def test_resolve_metadata_column_not_found_message() -> None:
+    """The error names the column and explains the namespace separator."""
+    df = pd.DataFrame({"a": [1]})
+    with pytest.raises(ValueError) as excinfo:
+        _utils._resolve_metadata_column(df, "Missing.Column")
+    assert str(excinfo.value) == (
+        "Required metadata column 'Missing.Column' not found. If your "
+        "metadata uses '__' as a namespace separator, pass the actual column "
+        "name explicitly."
+    )
+
+
+def test_resolve_metadata_column_name_returns_the_actual_label() -> None:
+    """The label is returned as stored, not as requested."""
+    names = ["external_id", "RECOUNT_QC__Star.Reads"]
+    assert (
+        _utils._resolve_metadata_column_name(names, "recount_qc.star.reads")
+        == "RECOUNT_QC__Star.Reads"
+    )
+
+
+def test_resolve_metadata_column_name_last_match_wins() -> None:
+    """Labels that differ only in case resolve to the last one."""
+    names = ["Reads", "READS"]
+    assert _utils._resolve_metadata_column_name(names, "reads") == "READS"
+
+
+def test_resolve_metadata_column_name_prefers_an_exact_spelling() -> None:
+    """The '__' spelling is only tried when the dotted one is absent."""
+    names = ["recount_qc__star.reads", "recount_qc.star.reads"]
+    assert (
+        _utils._resolve_metadata_column_name(names, "recount_qc.star.reads")
+        == "recount_qc.star.reads"
+    )
+
+
 def test_format_optional_dep_error_known_module() -> None:
     """Known modules use a pre-configured install command."""
     msg = _utils._format_optional_dependency_import_error("biocframe")

@@ -803,15 +803,21 @@ def _assay_frame(
     matrix: NDArray[Any] | sparse.spmatrix | sparse.sparray,
     row_names: Sequence[str] | None,
     column_names: Sequence[str] | None,
+    *,
+    copy: bool | None = None,
 ) -> pd.DataFrame:
     """Wrap a dense or sparse assay in a labeled DataFrame.
 
     Args:
         matrix: Two-dimensional assay values. SciPy sparse inputs are converted
-            to pandas sparse columns without densifying the matrix.
+            to pandas sparse columns without densifying the matrix; duplicate
+            entries are summed, and ``matrix`` itself is never modified.
         row_names: Feature labels in assay order, or ``None`` for a RangeIndex.
         column_names: Sample labels in assay order, or ``None`` for
             a RangeIndex.
+        copy: Whether a dense ``matrix`` is copied. ``None`` uses the pandas
+            default (pandas 3 copies; pandas 2 does not). ``False`` wraps the
+            array without copying it. Ignored for sparse input.
 
     Returns:
         A DataFrame preserving assay values and sparse storage where
@@ -827,8 +833,130 @@ def _assay_frame(
         "columns": (list(column_names) if column_names is not None else None),
     }
     if sparse.issparse(matrix):
+        matrix = sparse.csc_matrix(matrix)
+        if not matrix.has_canonical_format:
+            matrix = matrix.copy()
+            matrix.sum_duplicates()
         return pd.DataFrame.sparse.from_spmatrix(matrix, **kwargs)
-    return pd.DataFrame(matrix, **kwargs)
+    return pd.DataFrame(matrix, copy=copy, **kwargs)
+
+
+def _sample_metadata_values(rse: Any, column_name: str) -> NDArray[Any]:
+    """Return one sample-metadata column's values.
+
+    Resolving the column on ``col_data.to_pandas()`` converts every metadata
+    column (recount3 has about two hundred) to read one. When the column data
+    exposes BiocFrame's ``column_names`` and ``get_column``, the column is
+    resolved with the same rules and read on its own, which gives the same
+    values. Other objects, and names that only exist once nested frames are
+    flattened, go through ``to_pandas()``.
+
+    Args:
+        rse: Experiment whose ``get_column_data()`` holds the column.
+        column_name: Column name, resolved as by
+            :func:`recount3._utils._resolve_metadata_column`.
+
+    Returns:
+        The column as a one-dimensional array.
+
+    Raises:
+        ValueError: If the column cannot be found.
+    """
+    col_data = rse.get_column_data()
+    column_names = getattr(col_data, "column_names", None)
+    if column_names is not None and hasattr(col_data, "get_column"):
+        try:
+            resolved = _utils._resolve_metadata_column_name(
+                column_names, column_name
+            )
+        except ValueError:
+            resolved = None
+        if resolved is not None:
+            values = col_data.get_column(resolved)
+            if not hasattr(values, "column_names"):
+                return pd.Series(values).to_numpy()
+    return _utils._resolve_metadata_column(
+        col_data.to_pandas(), column_name
+    ).to_numpy()
+
+
+_REAL_DTYPE_KINDS = "biuf"
+
+
+def _coverage_inputs(
+    rse: Any,
+    avg_mapped_read_length_column: str,
+) -> tuple[str, Any, NDArray[np.float64]]:
+    """Resolve and validate a coverage assay and per-sample read lengths.
+
+    Shared by :func:`compute_read_counts` and :func:`compute_tpm`.
+
+    Args:
+        rse: Experiment holding a coverage-sum assay and sample metadata.
+        avg_mapped_read_length_column: Metadata column with each sample's
+            average mapped read length.
+
+    Returns:
+        The resolved assay name; the assay values, as the stored SciPy matrix
+        for a sparse assay, or as an array for a dense one (boolean, integer,
+        and float arrays keep their dtype; anything else is converted to
+        float); and the read lengths as a float array (missing values are
+        NaN).
+
+    Raises:
+        ValueError: If the assay or the read-length column is missing, a read
+            length is not numeric, the assay is not two-dimensional, or its
+            sample count differs from the number of read lengths.
+    """
+    assay_name = _utils._resolve_counts_assay_name(rse)
+
+    try:
+        avg_len_values = _sample_metadata_values(
+            rse, avg_mapped_read_length_column
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "Required metadata column not found in col_data: "
+            f"{avg_mapped_read_length_column!r}."
+        ) from exc
+
+    assay = rse.get_assay(assay_name)
+    if sparse.issparse(assay):
+        counts = assay
+    else:
+        counts = np.asarray(assay)
+        if counts.dtype.kind not in _REAL_DTYPE_KINDS:
+            counts = np.asarray(assay, dtype=float)
+    if counts.ndim != 2:
+        raise ValueError(
+            f"{assay_name!r} assay must be a 2D matrix "
+            f"(got shape {counts.shape})."
+        )
+
+    for value in avg_len_values:
+        if pd.isna(value):
+            continue
+        if isinstance(value, (str, bytes)):
+            raise ValueError(
+                f"Metadata column {avg_mapped_read_length_column!r} "
+                f"must be numeric; found {type(value).__name__} "
+                f"value {value!r}."
+            )
+        if not isinstance(value, numbers.Real):
+            raise ValueError(
+                f"Metadata column {avg_mapped_read_length_column!r} "
+                f"must be numeric; found {type(value).__name__}."
+            )
+
+    avg_len = np.asarray(avg_len_values, dtype=float)
+
+    if counts.shape[1] != avg_len.shape[0]:
+        raise ValueError(
+            f"Mismatch between number of samples in {assay_name!r} "
+            f"({counts.shape[1]}) and length of "
+            f"{avg_mapped_read_length_column!r} ({avg_len.shape[0]})."
+        )
+    return assay_name, counts, avg_len
 
 
 def compute_read_counts(
@@ -891,56 +1019,12 @@ def compute_read_counts(
     if not isinstance(round_to_integers, bool):
         raise TypeError("round_to_integers must be a bool.")
 
-    assay_name = _utils._resolve_counts_assay_name(rse)
-
-    col_data = rse.get_column_data().to_pandas()
-    try:
-        avg_len_series = _utils._resolve_metadata_column(
-            col_data, avg_mapped_read_length_column
-        )
-    except ValueError as exc:
-        raise ValueError(
-            "Required metadata column not found in col_data: "
-            f"{avg_mapped_read_length_column!r}."
-        ) from exc
-
-    assay = rse.get_assay(assay_name)
+    _, counts, avg_len = _coverage_inputs(rse, avg_mapped_read_length_column)
     raw_counts = (
-        assay.astype(float)
-        if sparse.issparse(assay)
-        else np.asarray(assay, dtype=float)
+        counts.astype(float)
+        if sparse.issparse(counts)
+        else np.asarray(counts, dtype=float)
     )
-    if raw_counts.ndim != 2:
-        raise ValueError(
-            f"{assay_name!r} assay must be a 2D matrix "
-            f"(got shape {raw_counts.shape})."
-        )
-
-    avg_len_values = avg_len_series.to_numpy()
-
-    for value in avg_len_values:
-        if pd.isna(value):
-            continue
-        if isinstance(value, (str, bytes)):
-            raise ValueError(
-                f"Metadata column {avg_mapped_read_length_column!r} "
-                f"must be numeric; found {type(value).__name__} "
-                f"value {value!r}."
-            )
-        if not isinstance(value, numbers.Real):
-            raise ValueError(
-                f"Metadata column {avg_mapped_read_length_column!r} "
-                f"must be numeric; found {type(value).__name__}."
-            )
-
-    avg_len = avg_len_values.astype(float, copy=False)
-
-    if raw_counts.shape[1] != avg_len.shape[0]:
-        raise ValueError(
-            f"Mismatch between number of samples in {assay_name!r} "
-            f"({raw_counts.shape[1]}) and length of "
-            f"{avg_mapped_read_length_column!r} ({avg_len.shape[0]})."
-        )
 
     read_counts = _assay_frame(
         raw_counts, rse.get_row_names(), rse.get_column_names()
@@ -948,16 +1032,163 @@ def compute_read_counts(
     return read_counts.apply(np.rint) if round_to_integers else read_counts
 
 
+def _feature_lengths(rse: Any) -> NDArray[np.float64]:
+    """Return ``bp_length`` from row data when present, else range widths.
+
+    Raises:
+        ValueError: If neither is available.
+    """
+    try:
+        row_data = rse.get_row_data() if hasattr(rse, "get_row_data") else None
+        if row_data is not None and "bp_length" in row_data.column_names:
+            return np.asarray(row_data["bp_length"], dtype=float)
+        return np.asarray(rse.width, dtype=float)
+    except AttributeError as exc:
+        raise ValueError(
+            "Could not determine feature widths from rowRanges."
+        ) from exc
+
+
+def _dense_tpm(
+    counts: NDArray[Any],
+    lengths: NDArray[np.float64],
+    usable_samples: NDArray[np.bool_],
+) -> NDArray[np.float64]:
+    """Return TPM values for a dense assay as a new float array.
+
+    The result is column-major, the layout pandas uses for DataFrame columns,
+    so each sample is contiguous. The division converts integer counts as it
+    writes, so the result is the only matrix-sized allocation. Callers
+    silence floating-point warnings; see :func:`compute_tpm`.
+    """
+    tpm = np.empty(counts.shape, order="F")
+    np.divide(counts, lengths[:, np.newaxis], out=tpm)
+    sample_sums = tpm.sum(axis=0)
+    if np.isnan(sample_sums).any():
+        observed = np.isnan(tpm)
+        np.logical_not(observed, out=observed)
+        sample_sums = np.sum(tpm, axis=0, where=observed)
+    tpm *= np.where(usable_samples, 1_000_000.0 / sample_sums, np.nan)
+    return tpm
+
+
+def _sparse_tpm(
+    counts: sparse.spmatrix | sparse.sparray,
+    lengths: NDArray[np.float64],
+    usable_samples: NDArray[np.bool_],
+) -> sparse.csc_matrix:
+    """Return TPM values for a sparse assay as a new CSC matrix.
+
+    Only stored values are scaled. An implicit zero becomes
+    ``0 / length * scale``, which is 0 unless the length is missing or zero
+    or the scale is not finite; those entries are stored as NaN. Callers
+    silence floating-point warnings; see :func:`compute_tpm`.
+    """
+    tpm = sparse.csc_matrix(counts, dtype=float, copy=True)
+    tpm.sum_duplicates()
+    n_samples = tpm.shape[1]
+    sample_of_value = np.repeat(np.arange(n_samples), np.diff(tpm.indptr))
+
+    tpm.data /= lengths[tpm.indices]
+    sample_sums = np.bincount(
+        sample_of_value,
+        weights=np.where(np.isnan(tpm.data), 0.0, tpm.data),
+        minlength=n_samples,
+    )
+    scale = np.where(usable_samples, 1_000_000.0 / sample_sums, np.nan)
+    tpm.data *= scale[sample_of_value]
+
+    nan_features = np.isnan(lengths) | (lengths == 0)
+    nan_samples = ~np.isfinite(scale)
+    if nan_features.any() or nan_samples.any():
+        tpm = _store_nan_lines(tpm, sample_of_value, nan_features, nan_samples)
+    return tpm
+
+
+def _store_nan_lines(
+    matrix: sparse.csc_matrix,
+    sample_of_value: NDArray[np.intp],
+    nan_features: NDArray[np.bool_],
+    nan_samples: NDArray[np.bool_],
+) -> sparse.csc_matrix:
+    """Store NaN at every implicit zero of the flagged features and samples.
+
+    The NaN entries are laid out directly in sorted CSC order, skipping
+    positions that already hold a stored value, and merged with ``matrix``,
+    in time linear in the size of the result.
+
+    Args:
+        matrix: Canonical CSC matrix. It is not modified.
+        sample_of_value: Sample (column) index of each stored value.
+        nan_features: Features whose implicit zeros become NaN.
+        nan_samples: Samples whose implicit zeros become NaN.
+
+    Returns:
+        A canonical CSC matrix with the stored values of ``matrix`` and NaN at
+        the implicit zeros of the flagged lines.
+    """
+    n_features, n_samples = matrix.shape
+    flagged_features = np.flatnonzero(nan_features)
+    entries_per_sample = np.where(
+        nan_samples, n_features, flagged_features.size
+    )
+    indptr = np.concatenate(([0], np.cumsum(entries_per_sample)))
+    indices = np.empty(indptr[-1], dtype=np.int64)
+    full = indptr[:-1][nan_samples]
+    indices[full[:, np.newaxis] + np.arange(n_features)] = np.arange(
+        n_features
+    )
+    partial = indptr[:-1][~nan_samples]
+    indices[partial[:, np.newaxis] + np.arange(flagged_features.size)] = (
+        flagged_features
+    )
+
+    feature_of_value = matrix.indices
+    in_lines = nan_features[feature_of_value] | nan_samples[sample_of_value]
+    features = feature_of_value[in_lines]
+    samples = sample_of_value[in_lines]
+    rank = np.zeros(n_features, dtype=np.int64)
+    rank[flagged_features] = np.arange(flagged_features.size)
+    offsets = np.where(nan_samples[samples], features, rank[features])
+    occupied = np.zeros(indptr[-1], dtype=bool)
+    occupied[indptr[samples] + offsets] = True
+    indptr -= np.concatenate(
+        ([0], np.cumsum(np.bincount(samples, minlength=n_samples)))
+    )
+    nan_lines = sparse.csc_matrix(
+        (np.full(indptr[-1], np.nan), indices[~occupied], indptr),
+        shape=matrix.shape,
+    )
+    return nan_lines + matrix
+
+
 def compute_tpm(
     rse: summarizedexperiment.RangedSummarizedExperiment,
 ) -> pd.DataFrame:
     """Compute Transcripts Per Million (TPM) from raw coverage sums.
 
-    TPM is calculated as:
+    TPM is defined as:
       1. Approximate Read Counts = Coverage AUC / Avg Read Length
       2. RPK = Read Counts / (Feature Length / 1000)
       3. Scale Factor = Sum(RPK) / 1,000,000
       4. TPM = RPK / Scale Factor
+
+    The read length and the factor of 1000 are the same for every feature in
+    a sample, so they cancel in step 4, and each value is computed directly
+    as ``1e6 * (coverage / length) / sum(coverage / length)`` over the
+    sample. The read length (``recount_qc.star.average_mapped_length``) still
+    decides whether a sample can be normalized: a missing, zero, or infinite
+    value makes the whole sample NaN. Sums skip missing values, so a feature
+    with a missing length is NaN while the other features in each sample
+    still total one million. A zero length is NaN too; where that feature has
+    coverage, its RPK is infinite and the sample's other values become 0. A
+    sample with no coverage is NaN.
+
+    Run time is linear in the size of the assay: proportional to features x
+    samples for a dense assay, and to stored values + features + samples for
+    a sparse one, which is never densified (indices that are not sorted are
+    sorted first). Missing or zero lengths and samples that cannot be
+    normalized add one stored NaN per affected entry.
 
     Args:
       rse: A :class:`~summarizedexperiment.RangedSummarizedExperiment`
@@ -965,16 +1196,19 @@ def compute_tpm(
         when available, otherwise the genomic widths in ``row_ranges``.
 
     Returns:
-      A :class:`~pandas.DataFrame` of TPM values in feature-by-sample order,
-      preserving names and sparse columns when the count assay is sparse.
-      Missing lengths propagate to the corresponding values.
+      A :class:`~pandas.DataFrame` of float64 TPM values in feature-by-sample
+      order, preserving row and column names. A sparse count assay gives
+      sparse columns with a fill value of 0 that store at most the assay's
+      stored values plus the NaN entries. The assay itself is not modified.
 
     Raises:
       TypeError: If rse is not a
         :class:`~summarizedexperiment.RangedSummarizedExperiment`
         (needs rowRanges).
-      ValueError: If feature widths cannot be obtained, the count assay or
-        read-length metadata column is absent, or dimensions do not align.
+      ValueError: If feature lengths cannot be obtained or their number
+        differs from the number of features, the count assay or read-length
+        metadata column is absent, a read length is not numeric, or the
+        dimensions do not align.
 
     Examples:
         Compute TPM from an RSE built with :func:`create_rse`::
@@ -993,28 +1227,25 @@ def compute_tpm(
             "defined rowRanges to determine feature lengths."
         )
 
-    reads = compute_read_counts(rse, round_to_integers=False)
-
-    try:
-        row_data = rse.get_row_data() if hasattr(rse, "get_row_data") else None
-        widths = (
-            np.asarray(row_data["bp_length"], dtype=float)
-            if row_data is not None and "bp_length" in row_data.column_names
-            else np.array(rse.width)
-        )
-    except AttributeError as exc:
+    assay_name, counts, read_lengths = _coverage_inputs(
+        rse, "recount_qc.star.average_mapped_length"
+    )
+    lengths = _feature_lengths(rse)
+    if lengths.shape != (counts.shape[0],):
         raise ValueError(
-            "Could not determine feature widths from rowRanges."
-        ) from exc
+            f"Expected one feature length per row of the {assay_name!r} "
+            f"assay ({counts.shape[0]}); got {lengths.size}."
+        )
+    usable_samples = np.isfinite(read_lengths) & (read_lengths != 0)
 
-    kb_widths = widths / 1000.0
-    rpk = reads.div(kb_widths, axis=0)
-
-    scale_factors = rpk.sum(axis=0) / 1_000_000.0
-
-    tpm = rpk.div(scale_factors, axis=1)
-
-    return tpm
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if sparse.issparse(counts):
+            tpm = _sparse_tpm(counts, lengths, usable_samples)
+        else:
+            tpm = _dense_tpm(counts, lengths, usable_samples)
+    return _assay_frame(
+        tpm, rse.get_row_names(), rse.get_column_names(), copy=False
+    )
 
 
 def is_paired_end(

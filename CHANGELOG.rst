@@ -24,9 +24,37 @@ Breaking changes
   BigBed-handle access could succeed. Use ``pyBigWig.open()`` directly for
   BigBed files.
 
+Changed
+~~~~~~~
+
+- ``compute_tpm`` is faster and uses less memory. The read length and the
+  kilobase factor cancel when each sample is scaled to one million, so it
+  computes ``1e6 * (coverage / length) / sum(coverage / length)`` per sample
+  with one output-sized allocation. Results match the previous
+  implementation to within 1e-14 relative. On a 63,856-gene by 1,000-sample
+  integer assay it runs about 3.6 times faster with a third of the peak
+  memory.
+- ``compute_tpm`` keeps sparse assays sparse. Time and memory are
+  proportional to the stored values, not to features times samples; in
+  benchmarks with 2 to 10 percent nonzero entries it ran 23 to 75 times
+  faster with 14 to 69 times lower peak memory. Result columns have a fill
+  value of 0 and store only the nonzero values and any NaN entries.
+  Previously every entry was stored, with a fill value of NaN.
+- ``compute_tpm`` and ``compute_read_counts`` read only the read-length
+  column from BiocPy sample metadata instead of converting every metadata
+  column to pandas.
+- ``compute_tpm`` raises ``ValueError`` with a message giving both counts
+  when the number of feature lengths does not match the number of features.
+  Previously pandas raised a ``ValueError`` about coercing to a Series.
+
 Fixed
 ~~~~~
 
+- ``compute_read_counts``, ``transform_counts``, and ``compute_tpm`` sum
+  duplicate entries in a sparse CSC or CSR assay, as SciPy defines them.
+  pandas does not sum them when building a sparse DataFrame, so they were
+  assigned to the wrong features and gave wrong values. COO assays were
+  not affected.
 - ``--sanitize-columns`` and ``to_anndata(sanitize_for_hdf5=True)`` no
   longer emit a ``Pandas4Warning`` on pandas 3.1. They renamed ``obs`` and
   ``var`` columns with ``DataFrame.rename(inplace=True)``, and pandas 3.1
@@ -64,6 +92,11 @@ Documentation
 Internal
 ~~~~~~~~
 
+- ``compute_tpm`` tests cover input validation, the documented recipe
+  against a reference implementation, missing and degenerate values, every
+  SciPy sparse format, sparse storage, output layout, peak memory, and real
+  BiocPy experiments. Mutation testing with mutmut kills every mutant of
+  ``compute_tpm`` and its helpers except those that cannot change behavior.
 - The test matrix installs Python 3.15 as a stable release. CPython 3.15.1
   is out, so ``actions/setup-python`` no longer needs ``allow-prereleases``.
 - The release workflow's verify jobs test the installed package. The

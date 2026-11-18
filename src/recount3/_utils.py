@@ -84,7 +84,7 @@ import functools
 import importlib
 import types
 import weakref
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import BinaryIO, Any, cast, TYPE_CHECKING
 
@@ -1056,17 +1056,42 @@ def _resolve_metadata_column(
     Raises:
         ValueError: If the column cannot be found.
     """
-    lower_to_actual = {str(c).lower(): c for c in metadata_df.columns}
+    return metadata_df[
+        _resolve_metadata_column_name(metadata_df.columns, column_name)
+    ]
+
+
+def _resolve_metadata_column_name(
+    column_names: Iterable[Any],
+    column_name: str,
+) -> Any:
+    """Return the actual label that :func:`_resolve_metadata_column` selects.
+
+    Matching is case-insensitive and also accepts ``__`` in place of the
+    first ``.`` namespace separator. When several labels match, the last one
+    wins.
+
+    Args:
+        column_names: Available column labels, in order.
+        column_name: Column name to resolve.
+
+    Returns:
+        The matching label, exactly as it appears in ``column_names``.
+
+    Raises:
+        ValueError: If no label matches.
+    """
+    lower_to_actual = {str(c).lower(): c for c in column_names}
     key = column_name.lower()
     if key in lower_to_actual:
-        return metadata_df[lower_to_actual[key]]
+        return lower_to_actual[key]
 
     # Try swapping only the first namespace separator '.' -> '__'
     if "." in column_name:
         namespace, rest = column_name.split(".", 1)
         alt = f"{namespace}__{rest}".lower()
         if alt in lower_to_actual:
-            return metadata_df[lower_to_actual[alt]]
+            return lower_to_actual[alt]
 
     raise ValueError(
         f"Required metadata column {column_name!r} not found. "
