@@ -118,12 +118,24 @@ finer control is required.
 Finding projects and samples before choosing a study
 ----------------------------------------------------
 
-The quick start above assumes you already know which study you want. If you
-do not, start from the source-level metadata: these calls read and parse the
-mirror's own project and sample tables, so what they return is a record of
-what exists rather than a guess at a filename. Limit ``data_sources`` to the
-source you need. The human SRA table alone covers several thousand
-projects:
+The quick start above assumes you already know which study you want. For
+interactive discovery, open the `recount3 study explorer
+<https://jhubiostatistics.shinyapps.io/recount3-study-explorer/>`_. Filter
+the study table by organism or ``project_home``, search study titles and
+abstracts, and select a project.
+
+Bring the selected row's ``project`` and ``organism`` into the Python calls
+below. Set ``data_source`` to the last component of ``project_home`` (for
+example, ``data_sources/sra`` becomes ``sra``), and use the selected annotation
+as ``annotation_label`` for gene or exon counts. The explorer also generates
+R code; the Python equivalent is :func:`~recount3.create_rse` as shown in the
+quick start.
+
+For programmatic discovery, start from the source-level metadata: these
+calls read and parse the mirror's own project and sample tables, so what
+they return is a record of what exists rather than a guess at a filename.
+Limit ``data_sources`` to the source you need. The human SRA table alone
+covers several thousand projects:
 
 .. code:: python
 

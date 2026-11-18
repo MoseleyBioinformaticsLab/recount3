@@ -71,6 +71,7 @@ Links
    * recount3 @ GitHub_
    * recount3 @ PyPI_
    * Documentation @ Pages_
+   * `recount3 study explorer`_ (browse available studies interactively)
    * Questions & bug reports @ Issues_
 
 
@@ -145,6 +146,11 @@ See the Tutorial_ for a complete walkthrough.
 
 Quickstart
 ~~~~~~~~~~
+
+To find a study you want to use, browse the `recount3 study explorer`_, then
+use the study's project identifier and organism in the Python or CLI examples
+below. Set ``data_source`` to match the source shown in the explorer's
+``project_home``.
 
 Python API
 ----------
@@ -319,6 +325,7 @@ recount3 publication:
   (2021). doi: `10.1186/s13059-021-02533-6`_
 
 .. _recount3: https://rna.recount.bio
+.. _recount3 study explorer: https://jhubiostatistics.shinyapps.io/recount3-study-explorer/
 .. _BiocPy: https://github.com/BiocPy
 .. _GitHub: https://github.com/MoseleyBioinformaticsLab/recount3
 .. _PyPI: https://pypi.org/project/recount3

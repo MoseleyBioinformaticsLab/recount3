@@ -85,6 +85,9 @@ Fixed
 Documentation
 ~~~~~~~~~~~~~
 
+- The README links to the recount3 web study explorer from Links and
+  Quickstart. The tutorial's study-discovery section explains how to use
+  explorer selections with the Python API.
 - ``CITATION.cff``, the README citation section, and the project URLs in
   ``pyproject.toml`` cite the peer-reviewed package paper in *BMC Genomics*
   (doi: 10.1186/s12864-026-13499-9) in place of the bioRxiv preprint.
