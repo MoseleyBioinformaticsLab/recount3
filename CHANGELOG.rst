@@ -100,6 +100,8 @@ Documentation
 Internal
 ~~~~~~~~
 
+- The atomic replacement tests mock ``Path.replace`` so they simulate
+  replacement failures and verify temporary-file cleanup on Python 3.10.
 - Ruff checks 44 more rules in package code. The contributor guide explains
   the 22 remaining global ignores and the targeted exceptions. Some rules
   still have test-only exemptions.

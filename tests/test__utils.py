@@ -422,8 +422,9 @@ def test_hardlink_or_copy_tmp_cleaned_up_on_replace_failure(
         "link",
         mock.Mock(side_effect=OSError(errno.EXDEV, "cross-device")),
     )
+    # Python 3.10's pathlib binds os.replace when the module is imported.
     monkeypatch.setattr(
-        _utils.os,
+        pathlib.Path,
         "replace",
         mock.Mock(side_effect=OSError("replace failed")),
     )
@@ -443,7 +444,7 @@ def test_hardlink_or_copy_unlink_oserror_in_finally_swallowed(
         mock.Mock(side_effect=OSError(errno.EXDEV, "cross-device")),
     )
     monkeypatch.setattr(
-        _utils.os,
+        pathlib.Path,
         "replace",
         mock.Mock(side_effect=OSError("replace failed")),
     )
@@ -740,7 +741,7 @@ def test_download_to_file_cleans_up_tmp_on_replace_failure(
     out = tmp_path / "output.gtf.gz"
 
     monkeypatch.setattr(
-        _utils.os,
+        pathlib.Path,
         "replace",
         mock.Mock(side_effect=OSError("disk full")),
     )
@@ -796,7 +797,7 @@ def test_download_to_file_tmp_unlink_error_swallowed(
     out = tmp_path / "out"
 
     monkeypatch.setattr(
-        _utils.os,
+        pathlib.Path,
         "replace",
         mock.Mock(side_effect=OSError("replace fail")),
     )
@@ -935,7 +936,7 @@ def test_write_or_replace_in_zip_tmpzip_cleaned_up_on_replace_fail(
     )
 
     monkeypatch.setattr(
-        _utils.os,
+        pathlib.Path,
         "replace",
         mock.Mock(side_effect=OSError("disk full")),
     )
@@ -959,7 +960,7 @@ def test_write_or_replace_in_zip_tmpzip_unlink_error_swallowed(
     )
 
     monkeypatch.setattr(
-        _utils.os,
+        pathlib.Path,
         "replace",
         mock.Mock(side_effect=OSError("replace fail")),
     )
