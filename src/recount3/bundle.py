@@ -97,7 +97,7 @@ import gzip
 import io
 import logging
 import re
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -219,10 +219,11 @@ def _standardize_metadata_frame(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     out.columns = [str(col).strip().lower() for col in out.columns]
 
-    rename: dict[str, str] = {}
-    for old, new in _METADATA_KEY_SYNONYMS.items():
-        if old in out.columns and new not in out.columns:
-            rename[old] = new
+    rename = {
+        old: new
+        for old, new in _METADATA_KEY_SYNONYMS.items()
+        if old in out.columns and new not in out.columns
+    }
     if rename:
         out = out.rename(columns=rename)
 
@@ -351,7 +352,7 @@ def _outer_merge_metadata_frames(
         return pd.DataFrame(columns=list(keys))
 
     def merge_two(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-        return pd.merge(left, right, on=list(keys), how="outer")
+        return left.merge(right, on=list(keys), how="outer")
 
     return functools.reduce(merge_two, frames)
 
@@ -389,12 +390,11 @@ def _collapse_rows_by_key(df: pd.DataFrame, *, key: str) -> pd.DataFrame:
         return non_null.iloc[0]
 
     # groupby(..., dropna=False) keeps rows with missing keys as a group.
-    collapsed = (
+    return (
         df.groupby(key, dropna=False, sort=False)
         .aggregate(first_non_null)
         .reset_index()
     )
-    return collapsed
 
 
 def _maybe_relabel_counts_columns_to_external_id(
@@ -464,7 +464,7 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
         df = res.load()
         if isinstance(df, pd.DataFrame):
             return df
-    except Exception:
+    except Exception:  # noqa: S110 - Fall back to reading the cached RR file.
         pass
 
     try:
@@ -477,9 +477,7 @@ def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
     opener = gzip.open if str(path).endswith(".gz") else open
     with opener(path, "rb") as fh:  # type: ignore[arg-type]
         text = io.TextIOWrapper(fh, encoding="utf-8")
-        df = pd.read_csv(text, sep="\t", comment="#")
-
-    return df
+        return pd.read_csv(text, sep="\t", comment="#")
 
 
 _GTF_ATTR_PAIR_RE = re.compile(
@@ -565,8 +563,8 @@ def _coerce_gtf_phase_column(phase_column: pd.Series) -> pd.Series:
 def _coerce_gtf_bp_length(
     score: pd.Series,
     *,
-    starts: pd.Series,
-    ends: pd.Series,
+    starts: pd.Series,  # noqa: ARG001 - Retains the existing keyword.
+    ends: pd.Series,  # noqa: ARG001 - Retains the existing keyword.
 ) -> pd.Series:
     """Parse covered feature lengths from the GTF score column.
 
@@ -643,7 +641,7 @@ def _align_ranges_to_features(
     missing_cols = required - set(ranges.columns)
     if missing_cols:
         raise ValueError(
-            "ranges is missing required columns: " f"{sorted(missing_cols)}"
+            f"ranges is missing required columns: {sorted(missing_cols)}"
         )
 
     feature_index = pd.Index([str(x) for x in feature_ids])
@@ -701,7 +699,7 @@ def _align_ranges_to_features(
 
     dup_mask = ranges_uv["_feature_id_unversioned"].duplicated(keep=False)
     if dup_mask.any():
-        dup = ranges_uv.loc[dup_mask, ["_feature_id_unversioned"] + coord_cols]
+        dup = ranges_uv.loc[dup_mask, ["_feature_id_unversioned", *coord_cols]]
         nunique = dup.groupby("_feature_id_unversioned", sort=False)[
             coord_cols
         ].nunique(dropna=False)
@@ -862,7 +860,7 @@ def _ranges_from_gtf(
             + "|"
             + df.loc[missing, "strand"].astype(str)
         )
-        feature_ids.loc[missing] = coords.values
+        feature_ids.loc[missing] = coords.to_numpy()
 
     out = pd.DataFrame(
         {
@@ -911,7 +909,7 @@ def _ranges_from_gtf(
 
 
 def _classify_ranges_failure(
-    exc: Optional[BaseException], *, source: str = "annotation"
+    exc: BaseException | None, *, source: str = "annotation"
 ) -> str:
     """Describe why genomic ranges could not be derived.
 
@@ -987,9 +985,9 @@ def _select_gtf_resource_for_unit(
     bundle: R3ResourceBundle,
     *,
     genomic_unit: str,
-    annotation_extension: Optional[str],
+    annotation_extension: str | None,
     autoload: bool = True,
-) -> Optional[resource.R3Resource]:
+) -> resource.R3Resource | None:
     """Pick the most appropriate annotation resource for gene/exon ranges.
 
     An unambiguous matching descriptor is selected without file I/O.
@@ -1561,7 +1559,7 @@ def _dedupe_ranges_on_feature_id(ranges: pd.DataFrame) -> pd.DataFrame:
             f"{set(key_cols) - set(have_cols)}"
         )
 
-    dup = ranges.loc[dup_mask, ["feature_id"] + key_cols]
+    dup = ranges.loc[dup_mask, ["feature_id", *key_cols]]
     nunique = dup.groupby("feature_id", sort=False)[key_cols].nunique(
         dropna=False
     )
@@ -1607,9 +1605,9 @@ class R3ResourceBundle:
     resources: list[resource.R3Resource] = dataclasses.field(
         default_factory=list
     )
-    organism: Optional[str] = None
-    data_source: Optional[str] = None
-    project: Optional[str] = None
+    organism: str | None = None
+    data_source: str | None = None
+    project: str | None = None
     _range_cache: Any = dataclasses.field(
         default=None, repr=False, compare=False
     )
@@ -1817,7 +1815,7 @@ class R3ResourceBundle:
     def iter_loaded(
         self,
         *,
-        resource_type: Optional[str] = None,
+        resource_type: str | None = None,
         autoload: bool = False,
     ) -> Iterator[tuple[resource.R3Resource, Any]]:
         """Yield ``(resource, data)`` pairs for resources with loaded data.
@@ -1847,7 +1845,7 @@ class R3ResourceBundle:
                 if autoload:
                     try:
                         res.load()
-                    except Exception:
+                    except Exception:  # noqa: S112 - Autoload is best effort.
                         continue
                 else:
                     continue
@@ -1881,7 +1879,7 @@ class R3ResourceBundle:
     def get_loaded(
         self,
         *,
-        resource_type: Optional[str] = None,
+        resource_type: str | None = None,
         autoload: bool = False,
     ) -> list[Any]:
         """Return loaded data objects for resources in the bundle.
@@ -1911,17 +1909,17 @@ class R3ResourceBundle:
     def filter(
         self,
         *,
-        resource_type: Optional[r3_types.FieldSpec] = None,
-        organism: Optional[r3_types.FieldSpec] = None,
-        data_source: Optional[r3_types.FieldSpec] = None,
-        genomic_unit: Optional[r3_types.FieldSpec] = None,
-        project: Optional[r3_types.FieldSpec] = None,
-        sample: Optional[r3_types.FieldSpec] = None,
-        table_name: Optional[r3_types.FieldSpec] = None,
-        junction_type: Optional[r3_types.FieldSpec] = None,
-        annotation_extension: Optional[r3_types.FieldSpec] = None,
-        junction_extension: Optional[r3_types.FieldSpec] = None,
-        predicate: Optional[Callable[[resource.R3Resource], bool]] = None,
+        resource_type: r3_types.FieldSpec | None = None,
+        organism: r3_types.FieldSpec | None = None,
+        data_source: r3_types.FieldSpec | None = None,
+        genomic_unit: r3_types.FieldSpec | None = None,
+        project: r3_types.FieldSpec | None = None,
+        sample: r3_types.FieldSpec | None = None,
+        table_name: r3_types.FieldSpec | None = None,
+        junction_type: r3_types.FieldSpec | None = None,
+        annotation_extension: r3_types.FieldSpec | None = None,
+        junction_extension: r3_types.FieldSpec | None = None,
+        predicate: Callable[[resource.R3Resource], bool] | None = None,
         invert: bool = False,
     ) -> R3ResourceBundle:
         """Return a new bundle containing resources that match criteria.
@@ -2096,9 +2094,9 @@ class R3ResourceBundle:
 
     def _resolve_project_identity(
         self,
-        organism: Optional[str],
-        data_source: Optional[str],
-        project: Optional[str],
+        organism: str | None,
+        data_source: str | None,
+        project: str | None,
     ) -> tuple[str, str, str]:
         """Resolve project identity from explicit arguments or attributes.
 
@@ -2165,9 +2163,9 @@ class R3ResourceBundle:
     def samples(
         self,
         *,
-        organism: Optional[str] = None,
-        data_source: Optional[str] = None,
-        project: Optional[str] = None,
+        organism: str | None = None,
+        data_source: str | None = None,
+        project: str | None = None,
     ) -> list[str]:
         """Return the list of sample identifiers associated with a project.
 
@@ -2530,6 +2528,7 @@ class R3ResourceBundle:
                 frame["starts"],
                 frame["ends"],
                 frame["strand"],
+                strict=False,
             )
         ]
         if pd.Index(names).has_duplicates:
@@ -2684,8 +2683,9 @@ class R3ResourceBundle:
                 ("rail_id", "external_id"),
                 ("external_id", "rail_id"),
             ):
+                # Count distinct partners separately for each sample ID.
                 if (
-                    identities.dropna(subset=[key, other])
+                    identities.dropna(subset=[key, other])  # noqa: PD101
                     .groupby(key)[other]
                     .nunique()
                     > 1
@@ -2702,8 +2702,7 @@ class R3ResourceBundle:
                     raise ValueError(
                         f"Repeated metadata table columns: {sorted(overlap)}"
                     )
-                merged = pd.merge(
-                    merged,
+                merged = merged.merge(
                     frame,
                     on=list(_METADATA_MERGE_KEYS),
                     how=metadata_join,
@@ -2992,7 +2991,7 @@ class R3ResourceBundle:
         self,
         *,
         genomic_unit: str,
-        annotation_extension: Optional[str] = None,
+        annotation_extension: str | None = None,
         assay_name: str = "raw_counts",
         join_policy: str = "inner",
         metadata_join: str = "inner",
@@ -3060,7 +3059,7 @@ class R3ResourceBundle:
         self,
         *,
         genomic_unit: str,
-        annotation_extension: Optional[str] = None,
+        annotation_extension: str | None = None,
         prefer_rr_junction_coordinates: bool = True,
         assay_name: str = "raw_counts",
         join_policy: str = "inner",

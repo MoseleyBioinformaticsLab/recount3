@@ -83,23 +83,22 @@ pandas, and SciPy. Five optional extras enable additional features:
 
 .. code:: bash
 
-   python3 -m pip install recount3                # core
-   python3 -m pip install "recount3[biocpy]"      # + SummarizedExperiment builders
-   python3 -m pip install "recount3[bigwig]"      # + BigWig coverage access
-   python3 -m pip install "recount3[parquet]"     # + .parquet output
-   python3 -m pip install "recount3[anndata]"     # + .h5ad output
-   python3 -m pip install "recount3[pybiocfilecache]"  # shared R/Python cache
-   python3 -m pip install "recount3[all]"         # every optional feature
+   python3 -m pip install recount3                    # Core package
+   python3 -m pip install "recount3[biocpy]"          # SummarizedExperiment API
+   python3 -m pip install "recount3[bigwig]"          # BigWig coverage access
+   python3 -m pip install "recount3[parquet]"         # Parquet (.parquet) output
+   python3 -m pip install "recount3[anndata]"         # AnnData (.h5ad) output
+   python3 -m pip install "recount3[pybiocfilecache]" # Shared R/Python cache
+   python3 -m pip install "recount3[all]"             # All optional features
 
 * ``biocpy`` (``biocframe``, ``genomicranges``, ``summarizedexperiment``) is
   required for ``create_rse`` and every helper that returns or operates on a
   BiocPy object.
 * ``bigwig`` (``pyBigWig``) is required only for BigWig coverage access.
-* ``parquet`` (``pyarrow``) is required only to write ``.parquet`` output.
-  pandas accepts either ``pyarrow`` or ``fastparquet``; an existing
-  ``fastparquet`` installation is used as-is.
-* ``anndata`` (``anndata``, ``delayedarray``) is required only to write
-  ``.h5ad`` output, and implies ``biocpy``.
+* ``parquet`` installs ``pyarrow`` for writing ``.parquet`` files. pandas
+  can also use a compatible ``fastparquet`` installation.
+* ``anndata`` (``anndata``, ``delayedarray``) enables AnnData conversion and
+  ``.h5ad`` export. It includes ``biocpy``.
 * ``pybiocfilecache`` enables opt-in R BiocFileCache interoperability.
   The default URL-hash cache is ~3x faster and needs no extra. Select sharing
   with ``RECOUNT3_CACHE_BACKEND=pybiocfilecache``; it defaults to R's recount3
@@ -127,7 +126,7 @@ platforms.
 
 
 The three-layer API
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 ``recount3`` exposes the same workflow at three levels of abstraction, so a
 single project can be assembled in one call while multi-project or custom
@@ -256,9 +255,9 @@ Core (installed automatically):
 
 .. code:: text
 
-   numpy>=2.0
-   pandas>=2.2
-   scipy>=1.13
+   numpy>=2.0,<3.0
+   pandas>=2.2.2,<4.0
+   scipy>=1.13,<2.0
 
 Optional: BiocPy integration (``recount3[biocpy]``):
 
@@ -294,9 +293,8 @@ Optional: shared R/Python cache (``recount3[pybiocfilecache]``):
    pybiocfilecache>=0.7.0,<0.8
 
 
-
 Questions, Feature Requests, and Bug Reports
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Please submit questions, feature requests, and bug reports on Issues_.
 
@@ -326,7 +324,6 @@ recount3 publication:
 
 .. _recount3: https://rna.recount.bio
 .. _recount3 study explorer: https://jhubiostatistics.shinyapps.io/recount3-study-explorer/
-.. _BiocPy: https://github.com/BiocPy
 .. _GitHub: https://github.com/MoseleyBioinformaticsLab/recount3
 .. _PyPI: https://pypi.org/project/recount3
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/

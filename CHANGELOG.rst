@@ -85,6 +85,10 @@ Fixed
 Documentation
 ~~~~~~~~~~~~~
 
+- The README and tutorial use matching installation examples, and the README
+  lists the core dependency bounds from ``pyproject.toml``. The contributor
+  guide matches the extras used by CI on each platform, and the fixture
+  README explains how to use the local test mirror.
 - The README links to the recount3 web study explorer from Links and
   Quickstart. The tutorial's study-discovery section explains how to use
   explorer selections with the Python API.
@@ -96,6 +100,12 @@ Documentation
 Internal
 ~~~~~~~~
 
+- Ruff checks 44 more rules in package code. The contributor guide explains
+  the 22 remaining global ignores and the targeted exceptions. Some rules
+  still have test-only exemptions.
+- Package exports are ordered by name length within each ``__all__`` group,
+  with case-insensitive alphabetical tie-breaking. Existing imports remain
+  source-compatible. Code that iterates ``recount3.__all__`` sees the new order.
 - The module entry point drops an unused shebang so Ruff's executable-file
   checks pass on Linux CI.
 - Repository text files use LF line endings consistently; binary fixtures

@@ -258,17 +258,18 @@ def recount3_cache_files(
         return []
 
     glob_pattern = pattern if pattern is not None else "*"
-    files: list[pathlib.Path] = []
-
-    for path in root.rglob(glob_pattern):
-        if path.is_file() and not _utils._cache_internal(path, root):
-            files.append(path)
+    files = [
+        path
+        for path in root.rglob(glob_pattern)
+        if path.is_file() and not _utils._cache_internal(path, root)
+    ]
     if cfg.cache_backend == "pybiocfilecache":
-        for path in _utils._biocfilecache_paths(root):
-            if not _utils._cache_internal(path, root) and path.match(
-                glob_pattern
-            ):
-                files.append(path)
+        files.extend(
+            path
+            for path in _utils._biocfilecache_paths(root)
+            if not _utils._cache_internal(path, root)
+            and path.match(glob_pattern)
+        )
         files = list({path.resolve() for path in files})
     return sorted(files, key=str)
 

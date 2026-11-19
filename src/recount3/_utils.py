@@ -63,7 +63,7 @@ Attributes:
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 import contextlib
 import datetime
 import errno
@@ -80,7 +80,7 @@ import ssl
 import threading
 import time
 import types
-from typing import Any, BinaryIO, cast, TYPE_CHECKING
+from typing import Any, BinaryIO, cast, TYPE_CHECKING, TypeVar
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -94,9 +94,11 @@ from recount3 import errors
 if TYPE_CHECKING:  # pragma: no cover
     import biocframe  # type: ignore[import-not-found]
     import genomicranges  # type: ignore[import-not-found]
+    import pybiocfilecache  # type: ignore[import-not-found]
     import summarizedexperiment  # type: ignore[import-not-found]
 
 _PATH_LOCKS_GUARD = threading.Lock()
+_RetryResult = TypeVar("_RetryResult")
 _PATH_LOCKS: weakref.WeakValueDictionary[str, _WeakRefLock] = (
     weakref.WeakValueDictionary()
 )
@@ -112,14 +114,20 @@ class _WeakRefLock:
     (``__enter__`` / ``__exit__``) to the inner lock.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
 
-    def __enter__(self):
+    def __enter__(self) -> bool:
         return self._lock.__enter__()
 
-    def __exit__(self, *args):
-        return self._lock.__exit__(*args)
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: types.TracebackType | None,
+        /,
+    ) -> None:
+        self._lock.__exit__(exc_type, exc_value, traceback)
 
 
 def _strip_extended_prefix(text: str) -> str:
@@ -175,7 +183,9 @@ def _zip_lock_for_path(zip_path: pathlib.Path) -> _WeakRefLock:
 
 
 @contextlib.contextmanager
-def _biocfilecache(root: pathlib.Path):
+def _biocfilecache(
+    root: pathlib.Path,
+) -> Iterator[pybiocfilecache.BiocFileCache]:
     """Open the optional shared R/Python registry under a process-local lock.
 
     Network transfers must take place outside this context. Separate processes
@@ -188,7 +198,9 @@ def _biocfilecache(root: pathlib.Path):
             yield cache
 
 
-def _biocfilecache_rows(cache, url: str | None = None) -> list[dict]:
+def _biocfilecache_rows(
+    cache: pybiocfilecache.BiocFileCache, url: str | None = None
+) -> list[dict]:
     """Read records without the upstream get() wait for missing payloads."""
     model = import_optional_module("pybiocfilecache.models").Resource
     with cache.get_session() as session:
@@ -245,7 +257,8 @@ def _register_biocfilecache(
             return
         record = rows[0]
         values = {
-            "access_time": datetime.datetime.now(),
+            # Match the shared registry's naive local timestamp.
+            "access_time": datetime.datetime.now(),  # noqa: DTZ005
             "last_modified_time": record["last_modified_time"],
         }
         if record["rtype"] == "web":
@@ -424,10 +437,8 @@ def _hardlink_or_copy(src: pathlib.Path, dst: pathlib.Path) -> None:
         _atomic_replace(tmp_dst, dst)
     finally:
         if tmp_dst.exists():
-            try:
+            with contextlib.suppress(OSError):
                 tmp_dst.unlink()
-            except OSError:
-                pass
 
 
 def _atomic_replace(src_tmp: pathlib.Path, final_path: pathlib.Path) -> None:
@@ -445,7 +456,7 @@ def _atomic_replace(src_tmp: pathlib.Path, final_path: pathlib.Path) -> None:
         OSError: If the replace operation fails.
     """
     _ensure_dir(final_path.parent)
-    os.replace(src_tmp, final_path)
+    src_tmp.replace(final_path)
 
 
 def _ssl_insecure_context() -> ssl.SSLContext:
@@ -510,11 +521,14 @@ def http_open(
             urllib.request.HTTPSHandler(context=_ssl_insecure_context())
         )
 
-    req = urllib.request.Request(url, headers=merged)
+    # Local mirrors use file:// alongside the public HTTP(S) mirrors.
+    req = urllib.request.Request(url, headers=merged)  # noqa: S310
     return opener.open(req, timeout=timeout)
 
 
-def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
+def with_retries(
+    func: Callable[[], _RetryResult], *, attempts: int, base_sleep: float = 0.5
+) -> _RetryResult:
     """Execute function with simple exponential backoff on transient errors.
 
     Implements retry logic for network operations that may fail transiently.
@@ -531,8 +545,8 @@ def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
     Raises:
         Exception: The last exception encountered if all attempts fail.
     """
-    last_exc: BaseException | None = None
-    for i in range(max(1, attempts)):
+    retry_index = 0
+    while True:
         try:
             return func()
         except (
@@ -541,15 +555,14 @@ def with_retries(func, *, attempts: int, base_sleep: float = 0.5):
             ConnectionError,
             http.client.HTTPException,
             ssl.SSLError,
-        ) as exc:
-            last_exc = exc
-            if i < attempts - 1:
-                time.sleep(base_sleep * (2**i))
-    if last_exc:  # pragma: no branch
-        raise last_exc
+        ):
+            if retry_index >= attempts - 1:
+                raise
+            time.sleep(base_sleep * (2**retry_index))
+            retry_index += 1
 
 
-def _stream_copy(src_fh, dst_fh, *, chunk_size: int) -> int:
+def _stream_copy(src_fh: BinaryIO, dst_fh: BinaryIO, *, chunk_size: int) -> int:
     """Copy bytes in chunks from source to destination filehandle.
 
     Args:
@@ -600,7 +613,7 @@ def download_to_file(
         OSError: If filesystem operations fail.
     """
 
-    def _do():
+    def _do() -> None:
         with contextlib.closing(
             http_open(
                 url,
@@ -618,15 +631,13 @@ def download_to_file(
             )
 
             try:
-                with open(tmp, "wb") as fh:
+                with tmp.open("wb") as fh:
                     _stream_copy(resp, fh, chunk_size=chunk_size)
                 _atomic_replace(tmp, out_path)
             finally:
                 if tmp.exists():
-                    try:
+                    with contextlib.suppress(OSError):
                         tmp.unlink()
-                    except OSError:
-                        pass
 
     try:
         with_retries(_do, attempts=attempts)
@@ -733,10 +744,8 @@ def _write_or_replace_in_zip(
 
             finally:
                 if tmp_zip.exists():
-                    try:
+                    with contextlib.suppress(OSError):
                         tmp_zip.unlink()
-                    except OSError:
-                        pass
         else:
             with zipfile.ZipFile(
                 zip_path, "a", compression=zipfile.ZIP_DEFLATED
@@ -815,7 +824,7 @@ def download_stream_to_zip(
                     user_agent=user_agent,
                 )
             ) as resp:
-                with open(tmp_path, "wb") as f:
+                with tmp_path.open("wb") as f:
                     _stream_copy(resp, f, chunk_size=chunk_size)
 
         with_retries(_do, attempts=attempts)
@@ -824,10 +833,8 @@ def download_stream_to_zip(
 
     finally:
         if tmp_path.exists():
-            try:
+            with contextlib.suppress(OSError):
                 tmp_path.unlink()
-            except OSError:
-                pass
 
 
 def write_cached_file_to_zip(
@@ -1244,7 +1251,7 @@ def get_biocframe_class() -> type[biocframe.BiocFrame]:
     """
     module = import_optional_module("biocframe")
     return cast(
-        type["biocframe.BiocFrame"],
+        "type[biocframe.BiocFrame]",
         _get_module_attribute(
             module,
             "BiocFrame",
@@ -1264,7 +1271,7 @@ def get_genomicranges_class() -> type[genomicranges.GenomicRanges]:
     """
     module = import_optional_module("genomicranges")
     return cast(
-        type["genomicranges.GenomicRanges"],
+        "type[genomicranges.GenomicRanges]",
         _get_module_attribute(
             module,
             "GenomicRanges",
@@ -1286,7 +1293,7 @@ def get_summarizedexperiment_class() -> (
     """
     module = import_optional_module("summarizedexperiment")
     return cast(
-        type["summarizedexperiment.SummarizedExperiment"],
+        "type[summarizedexperiment.SummarizedExperiment]",
         _get_module_attribute(
             module,
             "SummarizedExperiment",
@@ -1308,7 +1315,7 @@ def get_ranged_summarizedexperiment_class() -> (
     """
     module = import_optional_module("summarizedexperiment")
     return cast(
-        type["summarizedexperiment.RangedSummarizedExperiment"],
+        "type[summarizedexperiment.RangedSummarizedExperiment]",
         _get_module_attribute(
             module,
             "RangedSummarizedExperiment",
@@ -1485,7 +1492,7 @@ def sanitize_anndata_column_names(adata: Any) -> list[tuple[str, str]]:
 
         if mapping:
             frame.columns = frame.columns.map(
-                lambda column: mapping.get(column, column)
+                lambda column, mapping=mapping: mapping.get(column, column)
             )
     return renames
 

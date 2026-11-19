@@ -113,9 +113,9 @@ from recount3 import resource
 from recount3 import types as r3_types
 
 #   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)
-# Human:  G026 (Gencode v26), G029 (Gencode v29), F006 (FANTOM6_cat),
-#         R109 (RefSeq), ERCC (ERCC), SIRV (SIRV)
-# Mouse:  M023 (Gencode v23)
+# Human codes include G026 and G029 for Gencode, F006 for FANTOM6_cat,
+# R109 for RefSeq, plus ERCC and SIRV.
+# Mouse uses M023 for Gencode v23.
 _ANN_EXT_HUMAN: Final[tuple[str, ...]] = (
     "G026",
     "G029",
@@ -1029,13 +1029,11 @@ def project_homes(
         projects["file_source"] = pd.NA
 
     group_cols = ["project_home", "project_type", "organism", "file_source"]
-    grouped = (
+    return (
         projects.groupby(group_cols, dropna=False)["project"]
         .nunique()
         .reset_index(name="n_projects")
     )
-
-    return grouped
 
 
 def annotation_options(organism: str) -> dict[str, str]:
@@ -1265,8 +1263,7 @@ def samples_for_project(
             return []
         samp_col = candidates[0]
 
-    values = sorted({str(x) for x in sub[samp_col].dropna().astype(str)})
-    return values
+    return sorted({str(x) for x in sub[samp_col].dropna().astype(str)})
 
 
 def search_project_all(
@@ -1338,8 +1335,8 @@ def search_project_all(
 
     found: list[resource.R3Resource] = []
 
-    include_gene = "gene" in set(u.lower() for u in genomic_units)
-    include_exon = "exon" in set(u.lower() for u in genomic_units)
+    include_gene = "gene" in {u.lower() for u in genomic_units}
+    include_exon = "exon" in {u.lower() for u in genomic_units}
     if include_gene or include_exon:
         units: list[str] = []
         if include_gene:

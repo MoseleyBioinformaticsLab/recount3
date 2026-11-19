@@ -196,8 +196,7 @@ def _expand_sra_attributes_df(
         return col_df.copy()
 
     attrs_df = pd.DataFrame(rows, index=col_df.index)
-    merged = pd.concat([col_df, attrs_df], axis=1)
-    return merged
+    return pd.concat([col_df, attrs_df], axis=1)
 
 
 def _resolve_annotation_extension(
@@ -772,7 +771,7 @@ def expand_sra_attributes(
 
     col_bf = experiment_or_coldata.column_data
     try:
-        col_df = col_bf.to_pandas()  # type: ignore
+        col_df = col_bf.to_pandas()  # type: ignore[attr-defined]
     except AttributeError as exc:
         raise AttributeError(
             "Expected column_data to implement to_pandas(); got "
@@ -796,7 +795,7 @@ def expand_sra_attributes(
         attribute_column_prefix=attribute_column_prefix,
     )
     expanded_bf = bioc_frame_cls.from_pandas(expanded_df)
-    return experiment_or_coldata.set_column_data(expanded_bf)  # type: ignore
+    return experiment_or_coldata.set_column_data(expanded_bf)
 
 
 def _assay_frame(
@@ -1309,7 +1308,7 @@ def is_paired_end(
     return paired_end
 
 
-def compute_scale_factors(
+def compute_scale_factors(  # noqa: PLR0917 - Existing positional API.
     sample_metadata_source: Any,
     by: str = "auc",
     target_read_count: float = 4e7,
@@ -1478,8 +1477,8 @@ def compute_scale_factors(
 
         pe_multiplier = pd.Series(np.nan, index=external_id, dtype=float)
         # Compare elementwise; the nullable Series also contains unknowns.
-        pe_multiplier.loc[paired_end_series == True] = 2.0
-        pe_multiplier.loc[paired_end_series == False] = 1.0
+        pe_multiplier.loc[paired_end_series.eq(other=True)] = 2.0
+        pe_multiplier.loc[paired_end_series.eq(other=False)] = 1.0
 
         denom = mapped_reads_values * (avg_mapped_values**2)
         scale_factor = (

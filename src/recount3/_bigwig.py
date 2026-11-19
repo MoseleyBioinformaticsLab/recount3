@@ -166,7 +166,9 @@ class BigWigFile:
 
         try:
             if not writable and not bw.isBigWig():
-                raise errors.LoadError(f"Not a BigWig file: {self.path}")
+                raise errors.LoadError(  # noqa: TRY301
+                    f"Not a BigWig file: {self.path}"
+                )
         except BaseException:
             bw.close()
             raise
@@ -194,7 +196,7 @@ class BigWigFile:
         return self._ensure_open()
 
     def close(self) -> None:
-        """Close and clear the cached handle, if any; repeated calls are safe."""
+        """Close and clear the cached handle. Repeated calls are safe."""
         if self._bw is None:
             return
         try:
@@ -258,7 +260,7 @@ class BigWigFile:
             RuntimeError: If the handle is in write mode.
         """
         bw = self._ensure_readable()
-        return cast(dict[str, Any], bw.header())
+        return cast("dict[str, Any]", bw.header())
 
     def values(
         self,
@@ -319,7 +321,7 @@ class BigWigFile:
         start: int | None = None,
         end: int | None = None,
         *,
-        type: str = "mean",
+        type: str = "mean",  # noqa: A002 - Matches the pyBigWig keyword.
         n_bins: int | None = None,
         exact: bool | None = None,
     ) -> list[float | None]:

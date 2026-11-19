@@ -21,13 +21,13 @@ tutorial:
 
 .. code:: bash
 
-   python3 -m pip install recount3               # core only
-   python3 -m pip install "recount3[biocpy]"     # + SummarizedExperiment
-   python3 -m pip install "recount3[bigwig]"     # + pyBigWig
-   python3 -m pip install "recount3[parquet]"    # + .parquet output
-   python3 -m pip install "recount3[anndata]"    # + .h5ad output
-   python3 -m pip install "recount3[pybiocfilecache]"  # R cache sharing
-   python3 -m pip install "recount3[all]"        # every optional feature
+   python3 -m pip install recount3                    # Core package
+   python3 -m pip install "recount3[biocpy]"          # SummarizedExperiment API
+   python3 -m pip install "recount3[bigwig]"          # BigWig coverage access
+   python3 -m pip install "recount3[parquet]"         # Parquet (.parquet) output
+   python3 -m pip install "recount3[anndata]"         # AnnData (.h5ad) output
+   python3 -m pip install "recount3[pybiocfilecache]" # Shared R/Python cache
+   python3 -m pip install "recount3[all]"             # All optional features
 
 What each extra enables:
 
@@ -39,11 +39,11 @@ What each extra enables:
 - ``bigwig`` is required only when you call
   :meth:`~recount3.resource.R3Resource.load` on a BigWig resource or use the
   :class:`~recount3._bigwig.BigWigFile` reader directly.
-- ``parquet`` installs ``pyarrow`` and is required to write ``.parquet``, both
-  from :meth:`pandas.DataFrame.to_parquet` on a stacked matrix and from
-  ``recount3 bundle stack-counts --out=counts.parquet``. pandas accepts either
-  ``pyarrow`` or ``fastparquet``; an existing ``fastparquet`` installation is
-  used as-is, and the ``io.parquet.engine`` option is honoured.
+- ``parquet`` installs ``pyarrow`` for writing ``.parquet`` files with
+  :meth:`pandas.DataFrame.to_parquet` or
+  ``recount3 bundle stack-counts --out=counts.parquet``. pandas can also use
+  a compatible ``fastparquet`` installation and honours the
+  ``io.parquet.engine`` option.
 - ``anndata`` installs ``anndata`` and ``delayedarray`` (and implies
   ``biocpy``). ``SummarizedExperiment.to_anndata()`` imports both, and
   ``summarizedexperiment`` declares neither as a required dependency, so the

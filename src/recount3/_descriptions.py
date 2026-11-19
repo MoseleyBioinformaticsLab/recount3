@@ -80,7 +80,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import dataclasses
-from typing import Any, cast
+from typing import Any, cast, ClassVar
 
 VALID_ORGANISMS: frozenset[str] = frozenset({"human", "mouse"})
 VALID_DATA_SOURCES: frozenset[str] = frozenset({"sra", "gtex", "tcga"})
@@ -207,11 +207,11 @@ class R3ResourceDescription:
             static typing; implemented by ``_R3CommonFields``.
     """
 
-    _TYPE_REGISTRY: dict[str, type[R3ResourceDescription]] = {}
+    _TYPE_REGISTRY: ClassVar[dict[str, type[R3ResourceDescription]]] = {}
     _RESOURCE_TYPE: str
     resource_type: str
 
-    def __new__(
+    def __new__(  # noqa: PYI034 - The factory returns registered subclasses.
         cls,
         *args: Any,
         **kwargs: Any,

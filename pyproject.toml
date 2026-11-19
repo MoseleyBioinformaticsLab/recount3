@@ -24,20 +24,20 @@ maintainers = [
   { name = "Moseley Bioinformatics Lab" }
 ]
 keywords = [
-  "bioinformatics",
-  "genomics",
-  "recount3",
-  "RNA-seq",
-  "transcriptomics",
-  "gene-expression",
-  "SRA",
-  "GTEx",
-  "TCGA",
-  "SummarizedExperiment",
   "BiocPy",
+  "bioinformatics",
   "CLI",
   "data-pipelines",
+  "gene-expression",
+  "genomics",
+  "GTEx",
   "manifests",
+  "recount3",
+  "RNA-seq",
+  "SRA",
+  "SummarizedExperiment",
+  "TCGA",
+  "transcriptomics",
 ]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
@@ -85,7 +85,14 @@ recount3 = ["py.typed"]
 version = { attr = "recount3.version.__version__" }
 
 [project.optional-dependencies]
-pybiocfilecache = ["pybiocfilecache>=0.7.0,<0.8"]
+all = [
+  "recount3[anndata,bigwig,biocpy,parquet,pybiocfilecache]",
+]
+anndata = [
+  "anndata>=0.11",
+  "delayedarray>=0.5",
+  "recount3[biocpy]",
+]
 bigwig = [
   "pybigwig>=0.3.18",
 ]
@@ -94,31 +101,23 @@ biocpy = [
   "genomicranges>=0.8",
   "summarizedexperiment>=0.7.1",
 ]
-parquet = [
-  "pyarrow>=23.0.1",
-]
-anndata = [
-  "recount3[biocpy]",
-  "anndata>=0.11",
-  "delayedarray>=0.5",
-]
-docs = [
-  "sphinx>=7",
-  "sphinx-rtd-theme>=2",
-]
 dev = [
+  "build>=1.2",
   "pytest>=8,<9",
   "pytest-cov>=7,<8",
   "pytest-mock>=3.12,<4",
   "pytest-xdist>=3,<4",
   "ruff>=0.17.5,<0.18",
-  "build>=1.2",
   "twine>=5",
 ]
-
-all = [
-  "recount3[bigwig,biocpy,parquet,anndata,pybiocfilecache]"
+docs = [
+  "sphinx>=7",
+  "sphinx-rtd-theme>=2",
 ]
+parquet = [
+  "pyarrow>=23.0.1",
+]
+pybiocfilecache = ["pybiocfilecache>=0.7.0,<0.8"]
 
 [tool.black]
 line-length = 80
@@ -131,80 +130,41 @@ line-length = 80
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-  "A002",     # builtin-argument-shadowing
-  "ANN001",   # missing-type-function-argument
-  "ANN002",   # missing-type-args
-  "ANN202",   # missing-return-type-private-function
-  "ANN204",   # missing-return-type-special-method
   "ANN401",   # any-type
-  "ARG001",   # unused-function-argument
-  "B023",     # function-uses-loop-variable
-  "B905",     # zip-without-explicit-strict
   "BLE001",   # blind-except
-  "C401",     # unnecessary-generator-set
-  "C408",     # unnecessary-collection-call
   "C901",     # complex-structure
   "COM812",   # missing-trailing-comma
-  "DTZ005",   # call-datetime-now-without-tzinfo
-  "E501",     # line-too-long
-  "E712",     # true-false-comparison
   "EM101",    # raw-string-in-exception
   "EM102",    # f-string-in-exception
-  "ERA001",   # commented-out-code
   "FBT001",   # boolean-type-hint-positional-argument
   "FBT002",   # boolean-default-value-positional-argument
-  "FBT003",   # boolean-positional-value-in-call
-  "FURB110",  # if-exp-instead-of-or-operator
-  "ISC001",   # single-line-implicit-string-concatenation
   "LOG015",   # root-logger-call
-  "PD011",    # pandas-use-of-dot-values
-  "PD015",    # pandas-use-of-pd-merge
-  "PD101",    # pandas-nunique-constant-series-check
   "PERF203",  # try-except-in-loop
-  "PERF401",  # manual-list-comprehension
-  "PERF403",  # manual-dict-comprehension
-  "PGH003",   # blanket-type-ignore
-  "PIE810",   # multiple-starts-ends-with
   "PLC0415",  # import-outside-top-level
-  "PLR0911",  # too-many-return-statements
   "PLR0912",  # too-many-branches
   "PLR0913",  # too-many-arguments
   "PLR0915",  # too-many-statements
-  "PLR0917",  # too-many-positional-arguments
   "PLR2004",  # magic-value-comparison
-  "PLW2901",  # redefined-loop-name
-  "PTH105",   # os-replace
-  "PTH123",   # builtin-open
-  "PYI034",   # non-self-return-type
-  "RET503",   # implicit-return
-  "RET504",   # unnecessary-assign
-  "RUF005",   # collection-literal-concatenation
-  "RUF012",   # mutable-class-default
-  "RUF022",   # unsorted-dunder-all
-  "S110",     # try-except-pass
-  "S112",     # try-except-continue
-  "S310",     # suspicious-url-open-usage
-  "SIM102",   # collapsible-if
-  "SIM105",   # suppressible-exception
   "SIM117",   # multiple-with-statements
   "SLF001",   # private-member-access
   "TC002",    # typing-only-third-party-import
   "TC003",    # typing-only-standard-library-import
-  "TC006",    # runtime-cast-value
   "TRY003",   # raise-vanilla-args
   "TRY004",   # type-check-without-type-error
-  "TRY300",   # try-consider-else
-  "TRY301",   # raise-within-try
   "TRY400",   # error-instead-of-exception
-  "UP045",    # non-pep604-annotation-optional
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = [
+  "ANN001",   # missing-type-function-argument
   "ANN201",   # missing-return-type-public-function
+  "ANN202",   # missing-return-type-private-function
+  "ARG001",   # unused-function-argument
   "ARG002",   # unused-method-argument
   "ARG005",   # unused-lambda-argument
   "B017",     # assert-raises-exception
+  "B905",     # zip-without-explicit-strict
+  "C408",     # unnecessary-collection-call
   "C416",     # unnecessary-comprehension
   "D100",     # undocumented-public-module
   "D101",     # undocumented-public-class
@@ -212,13 +172,22 @@ ignore = [
   "D103",     # undocumented-public-function
   "D403",     # first-word-uncapitalized
   "E402",     # module-import-not-at-top-of-file
+  "E501",     # line-too-long
+  "E712",     # true-false-comparison
   "E741",     # ambiguous-variable-name
+  "ERA001",   # commented-out-code
   "F841",     # unused-variable
+  "FBT003",   # boolean-positional-value-in-call
   "FURB171",  # single-item-membership-test
   "INP001",   # implicit-namespace-package
+  "ISC001",   # single-line-implicit-string-concatenation
   "ISC004",   # implicit-string-concatenation-in-collection-literal
   "PD008",    # pandas-use-of-dot-at
+  "PD011",    # pandas-use-of-dot-values
+  "PD015",    # pandas-use-of-pd-merge
+  "PGH003",   # blanket-type-ignore
   "PLR0402",  # manual-from-import
+  "PLR0917",  # too-many-positional-arguments
   "PLW1510",  # subprocess-run-without-check
   "PT001",    # pytest-fixture-incorrect-parentheses-style
   "PT006",    # pytest-parametrize-names-wrong-type
@@ -228,8 +197,11 @@ ignore = [
   "PT018",    # pytest-composite-assertion
   "PT019",    # pytest-fixture-param-without-value
   "PTH111",   # os-path-expanduser
+  "PYI034",   # non-self-return-type
+  "RET504",   # unnecessary-assign
   "RUF001",   # ambiguous-unicode-character-string
   "RUF003",   # ambiguous-unicode-character-comment
+  "RUF012",   # mutable-class-default
   "RUF015",   # unnecessary-iterable-allocation-for-first-element
   "RUF043",   # pytest-raises-ambiguous-pattern
   "RUF059",   # unused-unpacked-variable
@@ -263,7 +235,7 @@ order-by-type = false
 # Use established scientific aliases; keep datetime spelled out.
 aliases = {numpy = "np", pandas = "pd"}
 # Enforce module imports for these common sources of direct member imports.
-banned-from = ["pathlib", "datetime", "dataclasses", "numpy", "pandas", "types"]
+banned-from = ["dataclasses", "datetime", "numpy", "pandas", "pathlib", "types"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

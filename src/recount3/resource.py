@@ -90,6 +90,7 @@ Note:
 from __future__ import annotations
 
 from collections.abc import Mapping
+import contextlib
 import csv
 import dataclasses
 import errno
@@ -179,10 +180,8 @@ def _read_metadata_table(path: pathlib.Path) -> pd.DataFrame:
         # Treat blanks as missing in numeric columns, but preserve them in
         # character columns. NaN likewise depends on the inferred column type.
         candidate = column.mask(column.isin(["", "NaN"]))
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             frame[name] = pd.to_numeric(candidate, errors="raise")
-        except (ValueError, TypeError):
-            pass
     return frame
 
 
@@ -700,10 +699,9 @@ class R3Resource:
             return str(dest_path)
 
         cached = self._ensure_cached(mode=cache_mode, chunk_size=cs)
-        if dest_path.exists():
-            if not overwrite:
-                self.filepath = str(dest_path)
-                return str(dest_path)
+        if dest_path.exists() and not overwrite:
+            self.filepath = str(dest_path)
+            return str(dest_path)
         _utils._hardlink_or_copy(cached, dest_path)
         self.filepath = str(dest_path)
         return str(dest_path)
@@ -869,11 +867,7 @@ class R3Resource:
             raise FileNotFoundError(str(cached))
 
         name = cached.name.lower()
-        if (
-            name.endswith(".tsv")
-            or name.endswith(".tsv.gz")
-            or name.endswith(".md.gz")
-        ):
+        if name.endswith((".tsv", ".tsv.gz", ".md.gz")):
             obj = _read_metadata_table(cached)
             self._cached_data = obj
             return obj

@@ -159,7 +159,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--user-agent",
         default=None,
         metavar="STRING",
-        help=("Custom HTTP User-Agent header. " "Env: RECOUNT3_USER_AGENT."),
+        help="Custom HTTP User-Agent header. Env: RECOUNT3_USER_AGENT.",
     )
     parser.add_argument(
         "--chunk-size",
@@ -1122,16 +1122,16 @@ def _iter_manifest(
     else:
         p = pathlib.Path(path_or_dash)
         with p.open("r", encoding="utf-8") as infile:
-            for line in infile:
-                line = line.strip()
+            for raw_line in infile:
+                line = raw_line.strip()
                 if not line:
                     continue
                 obj = json.loads(line)
                 yield _resource_from_dict(obj, cfg)
         return
 
-    for line in stream:
-        line = line.strip()
+    for raw_line in stream:
+        line = raw_line.strip()
         if not line:
             continue
         obj = json.loads(line)
@@ -1286,7 +1286,7 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         case "project":
             _require("organism", "data_source", "project")
 
-            def _as_bool(s: str | None, default: bool = False) -> bool:
+            def _as_bool(s: str | None, *, default: bool = False) -> bool:
                 if s is None:
                     return default
                 return s.lower() in ("1", "true", "t", "yes", "y", "on")
@@ -1306,20 +1306,18 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
             # extension wins, mirroring the library's two-tier API
             # (see search._resolve_annotation_exts).
             annotations = filters.get("annotation", "default")
-            ann_ext = _csv_or_default(
-                filters.get("annotation_extension"), tuple()
-            )
+            ann_ext = _csv_or_default(filters.get("annotation_extension"), ())
             jext = _csv_or_default(filters.get("junction_extension"), ("MM",))
             jtype = filters.get("junction_type", "ALL")
-            inc_meta = _as_bool(filters.get("include_metadata"), True)
-            inc_bw = _as_bool(filters.get("include_bigwig"), False)
+            inc_meta = _as_bool(filters.get("include_metadata"), default=True)
+            inc_bw = _as_bool(filters.get("include_bigwig"), default=False)
 
             found = search.search_project_all(
                 organism=filters["organism"],
                 data_source=filters["data_source"],
                 project=filters["project"],
                 genomic_units=gu,
-                annotations=ann_ext if ann_ext else annotations,
+                annotations=ann_ext or annotations,
                 junction_type=jtype,
                 junction_extension=jext,
                 include_metadata=inc_meta,
@@ -1347,7 +1345,8 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         out_path = pathlib.Path(args.output)
     elif args.outdir:
         ext = "jsonl" if args.format == "jsonl" else "tsv"
-        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        # Default manifest filenames use the caller's local wall-clock time.
+        ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")  # noqa: DTZ005
         fname = f"{args.mode}-{ts}.{ext}"
         out_path = pathlib.Path(args.outdir) / fname
     else:
@@ -1411,7 +1410,6 @@ def _download_one(
                 chunk_size=cfg.chunk_size,
             )
             status = "ok"
-        return {"url": res.url, "status": status, "dest": out_path}
     except Exception as exc:
         return {
             "url": res.url,
@@ -1419,6 +1417,8 @@ def _download_one(
             "dest": None,
             "error": repr(exc),
         }
+    else:
+        return {"url": res.url, "status": status, "dest": out_path}
 
 
 def _cmd_download(args: argparse.Namespace, cfg: r3_config.Config) -> int:
@@ -1677,7 +1677,7 @@ def _cmd_bundle_se(args: argparse.Namespace, cfg: r3_config.Config) -> int:
                 )
             adata.write_h5ad(out)
         else:
-            with open(out, "wb") as fh:
+            with out.open("wb") as fh:
                 pickle.dump(se, fh, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as exc:
         logging.error("Failed to write output (reason: %r): %s", exc, out)
@@ -1773,7 +1773,7 @@ def _cmd_bundle_rse(args: argparse.Namespace, cfg: r3_config.Config) -> int:
                 )
             adata.write_h5ad(out)
         else:
-            with open(out, "wb") as fh:
+            with out.open("wb") as fh:
                 pickle.dump(rse, fh, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as exc:
         logging.error("Failed to write output (reason: %r): %s", exc, out)
@@ -1815,7 +1815,9 @@ def _cmd_smoke_test(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     return 0
 
 
-def _dispatch(args: argparse.Namespace, cfg: r3_config.Config) -> int:
+def _dispatch(  # noqa: PLR0911 - Each command returns its handler's exit code.
+    args: argparse.Namespace, cfg: r3_config.Config
+) -> int:
     """Dispatch parsed arguments to the appropriate subcommand handler.
 
     Args:
