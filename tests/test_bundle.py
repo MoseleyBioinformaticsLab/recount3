@@ -5382,6 +5382,22 @@ class TestMergeCountFramesContract:
         assert list(out.index) == ["G1", "G1"]
         assert list(out.columns) == ["S1", "S2"]
 
+    def test_sparse_reindex_at_the_int32_row_boundary(self) -> None:
+        last_row = np.iinfo(np.int32).max
+        target = pd.RangeIndex(last_row + 1)
+        source = pd.DataFrame.sparse.from_spmatrix(
+            scipy.sparse.csc_matrix([[7], [13], [11]]),
+            index=pd.Index([last_row, -1, 3], dtype=np.int64),
+            columns=["S1"],
+        )
+
+        result = bmod._reindex_sparse_frame(source, target)
+
+        pd.testing.assert_index_equal(result.index, target)
+        column = result["S1"].array
+        np.testing.assert_array_equal(column.sp_index.indices, [3, last_row])
+        np.testing.assert_array_equal(column.sp_values, [11, 7])
+
     def test_error_messages(self) -> None:
         with pytest.raises(
             ValueError, match=r"^join_policy must be 'inner' or 'outer'\.$"
