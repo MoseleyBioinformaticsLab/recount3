@@ -4989,3 +4989,1570 @@ class TestToRangedSummarizedExperimentRangeReuse:
             "chr1:200-300:-",
         ]
         assert list(rse.get_row_ranges().get_start()) == [1, 200]
+
+
+# ---------------------------------------------------------------------------
+# Characterization of the count merge, project grouping, BigWig URL, and
+# sample-lookup paths. The reference implementations below are the original
+# code, kept verbatim as oracles, so faster rewrites must reproduce them
+# exactly (values, dtypes, sparse storage, labels, names and attrs).
+# ---------------------------------------------------------------------------
+
+
+def _reference_merge_count_frames(
+    frames: list[pd.DataFrame], join_policy: str
+) -> pd.DataFrame:
+    """Return the original ``_merge_count_frames`` result."""
+    if join_policy not in ("inner", "outer"):
+        raise ValueError("join_policy must be 'inner' or 'outer'.")
+    if len(frames) == 1:
+        return frames[0].copy(deep=False)
+    if all(frame.index.equals(frames[0].index) for frame in frames[1:]):
+        return pd.concat(frames, axis=1)
+    if any(not frame.index.is_unique for frame in frames):
+        raise CompatibilityError(
+            "Cannot align duplicate feature IDs across projects."
+        )
+    index = frames[0].index
+    for frame in frames[1:]:
+        index = (
+            index.intersection(frame.index, sort=False)
+            if join_policy == "inner"
+            else index.union(frame.index, sort=False)
+        )
+    return pd.concat(
+        [frame.reindex(index, fill_value=0) for frame in frames], axis=1
+    )
+
+
+def _assert_identical_frames(
+    result: pd.DataFrame, expected: pd.DataFrame
+) -> None:
+    """Assert equality down to sparse storage, dtypes, names and attrs."""
+    pd.testing.assert_frame_equal(result, expected, check_exact=True)
+    pd.testing.assert_index_equal(result.index, expected.index, exact=True)
+    pd.testing.assert_index_equal(result.columns, expected.columns, exact=True)
+    assert result.index.name == expected.index.name
+    assert result.columns.name == expected.columns.name
+    assert result.attrs == expected.attrs
+    assert [str(d) for d in result.dtypes] == [str(d) for d in expected.dtypes]
+    for position in range(expected.shape[1]):
+        got = result.iloc[:, position].array
+        want = expected.iloc[:, position].array
+        assert type(got) is type(want)
+        if isinstance(want, pd.arrays.SparseArray):
+            assert got.kind == want.kind
+            assert type(got.fill_value) is type(want.fill_value)
+            assert got.sp_values.dtype == want.sp_values.dtype
+            np.testing.assert_array_equal(
+                got.sp_index.to_int_index().indices,
+                want.sp_index.to_int_index().indices,
+            )
+            np.testing.assert_array_equal(got.sp_values, want.sp_values)
+
+
+def _loader_frame(
+    dense: np.ndarray,
+    labels: list[str],
+    columns: list[str],
+    *,
+    stored: np.ndarray | None = None,
+    dtype: Any = np.int64,
+    name: str | None = None,
+) -> pd.DataFrame:
+    """Return a sparse frame built the way the junction loader builds one.
+
+    ``stored`` marks entries to store even when they are zero, so the frame
+    can carry explicit zeros the way a MatrixMarket file can.
+    """
+    mask = dense != 0 if stored is None else stored
+    rows, cols = np.nonzero(mask)
+    matrix = scipy.sparse.coo_matrix(
+        (dense[rows, cols].astype(dtype), (rows, cols)), shape=dense.shape
+    ).tocsc()
+    frame = pd.DataFrame.sparse.from_spmatrix(matrix)
+    frame.index = pd.Index(labels, name=name)
+    frame.columns = columns
+    return frame
+
+
+_MERGE_FLAVORS = (
+    "loader_int64",
+    "loader_float64",
+    "loader_float64_nan",
+    "loader_mixed_subtypes",
+    "dense_int64",
+    "dense_float64",
+    "sparse_int64",
+    "sparse_int32",
+    "sparse_float32",
+    "sparse_uint64",
+    "sparse_bool",
+    "sparse_block",
+    "sparse_float64_numpy_fill",
+    "sparse_int64_numpy_fill",
+    "mixed_dense_sparse",
+)
+
+
+def _merge_frame(
+    rng: np.random.Generator,
+    flavor: str,
+    labels: list[str],
+    columns: list[str],
+    name: str | None,
+) -> pd.DataFrame:
+    """Return one random count frame of the requested storage flavor."""
+    shape = (len(labels), len(columns))
+    dense = rng.integers(0, 4, size=shape) * (rng.random(shape) < 0.5)
+    stored = (dense != 0) | (rng.random(shape) < 0.15)
+    if flavor.startswith("loader_"):
+        values = dense.astype(float)
+        if flavor == "loader_float64_nan":
+            values[rng.random(shape) < 0.1] = np.nan
+            stored |= np.isnan(values)
+        if flavor == "loader_mixed_subtypes":
+            frame = _loader_frame(
+                values, labels, columns, stored=stored, name=name
+            )
+            for position in range(0, len(columns), 2):
+                column = _loader_frame(
+                    values[:, [position]],
+                    labels,
+                    [columns[position]],
+                    stored=stored[:, [position]],
+                    dtype=np.float64,
+                    name=name,
+                )
+                frame.isetitem(position, column.iloc[:, 0])
+            return frame
+        dtype = np.int64 if flavor == "loader_int64" else np.float64
+        return _loader_frame(
+            values, labels, columns, stored=stored, dtype=dtype, name=name
+        )
+    index = pd.Index(labels, name=name)
+    if flavor.startswith("dense_"):
+        dtype = np.int64 if flavor == "dense_int64" else np.float64
+        return pd.DataFrame(dense.astype(dtype), index=index, columns=columns)
+    specs = {
+        "sparse_int64": (np.int64, 0, "integer"),
+        "sparse_int32": (np.int32, 0, "integer"),
+        "sparse_float32": (np.float32, 0, "integer"),
+        "sparse_uint64": (np.uint64, 0, "integer"),
+        "sparse_bool": (bool, False, "integer"),
+        "sparse_block": (np.int64, 0, "block"),
+        "sparse_float64_numpy_fill": (np.float64, np.float64(0.0), "integer"),
+        "sparse_int64_numpy_fill": (np.int64, np.int64(0), "integer"),
+        "mixed_dense_sparse": (np.int64, 0, "integer"),
+    }
+    dtype, fill_value, kind = specs[flavor]
+    data = {}
+    for position, column in enumerate(columns):
+        values = dense[:, position].astype(dtype)
+        if flavor == "mixed_dense_sparse" and position % 2:
+            data[column] = values
+        else:
+            data[column] = pd.arrays.SparseArray(
+                values, fill_value=fill_value, kind=kind
+            )
+    return pd.DataFrame(data, index=index, columns=columns)
+
+
+def _random_merge_case(seed: int) -> tuple[list[pd.DataFrame], str]:
+    """Return random frames with overlapping features and a join policy."""
+    rng = np.random.default_rng(seed)
+    pool = [f"F{i}" for i in range(int(rng.integers(1, 25)))]
+    name = [None, "gene_id"][int(rng.integers(0, 2))]
+    attrs = [{}, {"origin": "test"}][int(rng.integers(0, 2))]
+    frames = []
+    for project in range(int(rng.integers(2, 6))):
+        size = int(rng.integers(0, len(pool) + 1))
+        labels = [str(x) for x in rng.choice(pool, size=size, replace=False)]
+        columns = [f"P{project}S{j}" for j in range(int(rng.integers(0, 4)))]
+        flavor = _MERGE_FLAVORS[int(rng.integers(0, len(_MERGE_FLAVORS)))]
+        frame = _merge_frame(rng, flavor, labels, columns, name)
+        frame.attrs = dict(attrs)
+        frames.append(frame)
+    if rng.random() < 0.2:
+        frames.append(frames[0].iloc[::-1].copy())
+    return frames, ["inner", "outer"][int(rng.integers(0, 2))]
+
+
+class TestMergeCountFramesCharacterization:
+    """Pin every observable property of the cross-project count merge."""
+
+    @staticmethod
+    def _three_loader_frames(dtype: Any = np.int64) -> list[pd.DataFrame]:
+        first = _loader_frame(
+            np.array([[1, 0], [0, 2], [3, 0]]),
+            ["a", "b", "c"],
+            ["S1", "S2"],
+            dtype=dtype,
+        )
+        second = _loader_frame(
+            np.array([[4], [5], [0]]), ["d", "b", "a"], ["S3"], dtype=dtype
+        )
+        third = _loader_frame(
+            np.array([[6, 7], [0, 8]]), ["e", "a"], ["S4", "S5"], dtype=dtype
+        )
+        return [first, second, third]
+
+    def test_outer_join_lists_features_in_first_seen_order(self) -> None:
+        out = bmod._merge_count_frames(self._three_loader_frames(), "outer")
+        assert list(out.index) == ["a", "b", "c", "d", "e"]
+        assert list(out.columns) == ["S1", "S2", "S3", "S4", "S5"]
+        expected = np.array(
+            [
+                [1, 0, 0, 0, 8],
+                [0, 2, 5, 0, 0],
+                [3, 0, 0, 0, 0],
+                [0, 0, 4, 0, 0],
+                [0, 0, 0, 6, 7],
+            ]
+        )
+        np.testing.assert_array_equal(out.to_numpy(), expected)
+        assert all(str(d) == "Sparse[int64, 0]" for d in out.dtypes)
+
+    def test_inner_join_keeps_the_first_frames_order(self) -> None:
+        frames = self._three_loader_frames()
+        frames[2] = _loader_frame(
+            np.array([[6], [7], [9]]), ["b", "c", "a"], ["S4"]
+        )
+        frames[1] = _loader_frame(
+            np.array([[4], [5], [0]]), ["c", "a", "b"], ["S3"]
+        )
+        out = bmod._merge_count_frames(frames, "inner")
+        assert list(out.index) == ["a", "b", "c"]
+        np.testing.assert_array_equal(
+            out.to_numpy(),
+            np.array([[1, 0, 5, 9], [0, 2, 0, 6], [3, 0, 4, 7]]),
+        )
+
+    def test_reindexed_columns_keep_rows_sorted(self) -> None:
+        out = bmod._merge_count_frames(self._three_loader_frames(), "outer")
+        for position in range(out.shape[1]):
+            rows = out.iloc[:, position].array.sp_index.to_int_index().indices
+            assert np.all(np.diff(rows) > 0)
+
+    def test_reindexing_drops_stored_zeros(self) -> None:
+        dense = np.array([[0, 2], [5, 0]])
+        stored = np.ones_like(dense, dtype=bool)
+        moved = _loader_frame(dense, ["y", "x"], ["S2", "S3"], stored=stored)
+        anchor = _loader_frame(np.array([[1], [1]]), ["x", "z"], ["S1"])
+        out = bmod._merge_count_frames([anchor, moved], "outer")
+        assert list(out.index) == ["x", "z", "y"]
+        s2 = out["S2"].array
+        assert list(s2.sp_index.to_int_index().indices) == [0]
+        assert list(s2.sp_values) == [5]
+
+    def test_a_frame_already_on_the_joined_index_keeps_stored_zeros(
+        self,
+    ) -> None:
+        stored = np.ones((2, 1), dtype=bool)
+        full = _loader_frame(
+            np.array([[0], [3]]), ["x", "y"], ["S1"], stored=stored
+        )
+        subset = _loader_frame(np.array([[1]]), ["y"], ["S2"])
+        out = bmod._merge_count_frames([full, subset], "outer")
+        assert list(out["S1"].array.sp_values) == [0, 3]
+        assert list(out["S2"].array.sp_index.to_int_index().indices) == [1]
+
+    def test_stored_missing_counts_survive_reindexing(self) -> None:
+        dense = np.array([[np.nan], [2.0]])
+        moved = _loader_frame(dense, ["y", "x"], ["S2"], dtype=np.float64)
+        anchor = _loader_frame(
+            np.array([[1.0]]), ["x"], ["S1"], dtype=np.float64
+        )
+        frames = [anchor, moved]
+        out = bmod._merge_count_frames(frames, "outer")
+        assert list(out.index) == ["x", "y"]
+        assert out["S2"].loc["x"] == 2.0
+        assert pd.isna(out["S2"].loc["y"])
+        _assert_identical_frames(
+            out, _reference_merge_count_frames(frames, "outer")
+        )
+
+    def test_an_empty_inner_join_has_no_rows_and_keeps_dtypes(self) -> None:
+        first = _loader_frame(np.array([[1]]), ["a"], ["S1"])
+        second = _loader_frame(
+            np.array([[2.0]]), ["b"], ["S2"], dtype=np.float64
+        )
+        out = bmod._merge_count_frames([first, second], "inner")
+        assert out.shape == (0, 2)
+        _assert_identical_frames(
+            out, _reference_merge_count_frames([first, second], "inner")
+        )
+
+    @pytest.mark.parametrize(
+        ("names", "expected"),
+        [
+            (["gene_id", "gene_id", "gene_id"], "gene_id"),
+            (["gene_id", None, "gene_id"], None),
+            (["gene_id", "gene_id", "exon_id"], None),
+        ],
+    )
+    def test_index_names_reconcile_like_set_operations(
+        self, names: list[str | None], expected: str | None
+    ) -> None:
+        frames = self._three_loader_frames()
+        for frame, name in zip(frames, names):
+            frame.index.name = name
+        for policy in ("inner", "outer"):
+            out = bmod._merge_count_frames(frames, policy)
+            assert out.index.name == expected
+
+    def test_shared_attrs_are_kept(self) -> None:
+        frames = self._three_loader_frames()
+        for frame in frames:
+            frame.attrs = {"origin": "recount3"}
+        out = bmod._merge_count_frames(frames, "outer")
+        assert out.attrs == {"origin": "recount3"}
+
+    def test_inputs_are_not_modified(self) -> None:
+        frames = self._three_loader_frames()
+        before = [frame.copy() for frame in frames]
+        bmod._merge_count_frames(frames, "outer")
+        for frame, copy in zip(frames, before):
+            _assert_identical_frames(frame, copy)
+
+    def test_repeated_sample_labels_across_frames_are_kept(self) -> None:
+        first = _loader_frame(np.array([[1], [2]]), ["a", "b"], ["S1"])
+        second = _loader_frame(np.array([[3]]), ["b"], ["S1"])
+        out = bmod._merge_count_frames([first, second], "outer")
+        assert list(out.columns) == ["S1", "S1"]
+        np.testing.assert_array_equal(out.to_numpy(), [[1, 0], [2, 3]])
+
+    def test_mixed_index_dtypes_join_like_pandas(self) -> None:
+        first = _gene_df(features=["G1", "G2"], samples=["S1"])
+        second = _gene_df(features=["G2", "G3"], samples=["S2"])
+        second.index = pd.Index(["G2", "G3"], dtype=object)
+        for policy in ("inner", "outer"):
+            _assert_identical_frames(
+                bmod._merge_count_frames([first, second], policy),
+                _reference_merge_count_frames([first, second], policy),
+            )
+
+    def test_an_empty_frame_joins_like_pandas(self) -> None:
+        empty = _loader_frame(np.zeros((0, 1)), [], ["S0"])
+        first = _loader_frame(np.array([[1]]), ["a"], ["S1"])
+        for frames in ([empty, first], [first, empty]):
+            for policy in ("inner", "outer"):
+                _assert_identical_frames(
+                    bmod._merge_count_frames(frames, policy),
+                    _reference_merge_count_frames(frames, policy),
+                )
+
+    def test_frames_without_columns_join_like_pandas(self) -> None:
+        bare = _loader_frame(np.zeros((2, 0)), ["b", "z"], [])
+        first = _loader_frame(np.array([[1]]), ["a"], ["S1"])
+        for policy in ("inner", "outer"):
+            _assert_identical_frames(
+                bmod._merge_count_frames([first, bare], policy),
+                _reference_merge_count_frames([first, bare], policy),
+            )
+
+    @pytest.mark.parametrize("seed", range(400))
+    def test_matches_the_reference_on_random_frames(self, seed: int) -> None:
+        frames, policy = _random_merge_case(seed)
+        try:
+            expected = _reference_merge_count_frames(frames, policy)
+        except (CompatibilityError, ValueError) as exc:
+            with pytest.raises(type(exc)) as raised:
+                bmod._merge_count_frames(frames, policy)
+            assert str(raised.value) == str(exc)
+            return
+        _assert_identical_frames(
+            bmod._merge_count_frames(frames, policy), expected
+        )
+
+
+class TestMergeCountFramesContract:
+    def test_a_single_frame_is_returned_without_copying_its_data(
+        self,
+    ) -> None:
+        frame = _gene_df()
+        out = bmod._merge_count_frames([frame], "outer")
+        assert out is not frame
+        assert np.shares_memory(out.to_numpy(), frame.to_numpy())
+
+    def test_identical_indexes_may_repeat_feature_ids(self) -> None:
+        first = _gene_df(features=["G1", "G1"], samples=["S1"])
+        second = _gene_df(features=["G1", "G1"], samples=["S2"])
+        out = bmod._merge_count_frames([first, second], "inner")
+        assert list(out.index) == ["G1", "G1"]
+        assert list(out.columns) == ["S1", "S2"]
+
+    def test_error_messages(self) -> None:
+        with pytest.raises(
+            ValueError, match=r"^join_policy must be 'inner' or 'outer'\.$"
+        ):
+            bmod._merge_count_frames([_gene_df()], "left")
+        repeated = _gene_df(features=["G1", "G1"], samples=["S1"])
+        with pytest.raises(
+            CompatibilityError,
+            match=r"^Cannot align duplicate feature IDs across projects\.$",
+        ):
+            bmod._merge_count_frames([repeated, _gene_df()], "outer")
+
+    def test_object_labels_keep_their_dtype_in_an_outer_join(self) -> None:
+        indexes = [
+            pd.Index([1, 2], dtype=object),
+            pd.Index([3, 1], dtype=object),
+        ]
+        joined = bmod._join_feature_index(indexes, "outer")
+        pd.testing.assert_index_equal(
+            joined, indexes[0].union(indexes[1], sort=False), exact=True
+        )
+        frames = [
+            _loader_frame(np.array([[1], [2]]), [1, 2], ["S1"]),
+            _loader_frame(np.array([[3], [4]]), [3, 1], ["S2"]),
+        ]
+        for frame, index in zip(frames, indexes):
+            frame.index = index
+        _assert_identical_frames(
+            bmod._merge_count_frames(frames, "outer"),
+            _reference_merge_count_frames(frames, "outer"),
+        )
+
+    @pytest.mark.parametrize(
+        ("first_labels", "second_labels"),
+        [
+            ([2**53 + 1], [float(2**53)]),
+            ([5, np.nan], [1, None]),
+        ],
+        ids=["integers-above-float-precision", "distinct-missing-labels"],
+    )
+    def test_object_labels_keep_distinct_values(
+        self, first_labels: list[Any], second_labels: list[Any]
+    ) -> None:
+        indexes = [
+            pd.Index(labels, dtype=object)
+            for labels in (first_labels, second_labels)
+        ]
+        joined = bmod._join_feature_index(indexes, "outer")
+        pd.testing.assert_index_equal(
+            joined, indexes[0].union(indexes[1], sort=False), exact=True
+        )
+        assert len(joined) == sum(map(len, indexes))
+
+        frames = [
+            _loader_frame(
+                np.arange(1, len(index) + 1)[:, None],
+                list(index),
+                [f"S{position}"],
+            ).set_axis(index)
+            for position, index in enumerate(indexes)
+        ]
+        _assert_identical_frames(
+            bmod._merge_count_frames(frames, "outer"),
+            _reference_merge_count_frames(frames, "outer"),
+        )
+
+
+def _project_resources(
+    project: str,
+    samples: list[str],
+    *,
+    tables: tuple[str, ...] = ("recount_qc",),
+    features: list[str] | None = None,
+) -> list[MagicMock]:
+    """Return a loaded gene-count resource and metadata tables for a project."""
+    identity = {"organism": "human", "data_source": "sra", "project": project}
+    counts = _mock_resource(
+        "count_files_gene_or_exon",
+        url=f"http://example.com/{project}.gene.gz",
+        loaded_data=_gene_df(features=features, samples=samples),
+        genomic_unit="gene",
+        annotation_extension="G026",
+        **identity,
+    )
+    tables_out = []
+    for number, table in enumerate(tables):
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(samples, dtype="string"),
+                "rail_id": pd.array(
+                    [f"{project}-{s}" for s in samples], dtype="string"
+                ),
+                "study": pd.array([project] * len(samples), dtype="string"),
+                f"value{number}": [float(i) for i in range(len(samples))],
+            }
+        )
+        res = _metadata_resource(frame, table_name=table, **identity)
+        res.url = f"http://example.com/{project}.{table}.MD.gz"
+        tables_out.append(res)
+    return [counts, *tables_out]
+
+
+class TestPrepareExperimentProjectGrouping:
+    """Projects are grouped by identity in first-seen order."""
+
+    @staticmethod
+    def _interleaved_bundle() -> tuple[R3ResourceBundle, list[str]]:
+        a_counts, a_qc, a_sra = _project_resources(
+            "SRP00A", ["A1", "A2"], tables=("recount_qc", "sra")
+        )
+        b_counts, b_qc = _project_resources("SRP00B", ["B1"])
+        c_counts, c_qc = _project_resources("SRP00C", ["C1", "C2", "C3"])
+        unrelated = _mock_resource(
+            "annotations",
+            url="http://example.com/annotation.gtf.gz",
+            organism="human",
+            data_source="sra",
+            project="SRP00A",
+        )
+        resources = [
+            b_qc,
+            a_sra,
+            b_counts,
+            unrelated,
+            c_qc,
+            a_counts,
+            c_counts,
+            a_qc,
+        ]
+        expected_urls = [
+            b_counts.url,
+            b_qc.url,
+            a_counts.url,
+            a_sra.url,
+            a_qc.url,
+            c_counts.url,
+            c_qc.url,
+        ]
+        return R3ResourceBundle(resources=resources), expected_urls
+
+    def test_interleaved_projects_keep_first_seen_order(self) -> None:
+        bundle, expected_urls = self._interleaved_bundle()
+        counts, rows, col, ranges, metadata = bundle._prepare_experiment(
+            genomic_unit="gene",
+            annotation_extension=None,
+            join_policy="inner",
+            metadata_join="inner",
+            autoload=False,
+        )
+        samples = ["B1", "A1", "A2", "C1", "C2", "C3"]
+        assert list(counts.columns) == samples
+        assert list(col.index) == samples
+        assert (
+            list(col["study"]) == ["SRP00B"] + ["SRP00A"] * 2 + ["SRP00C"] * 3
+        )
+        assert metadata["resource_urls"] == expected_urls
+        assert metadata["project"] == ["SRP00B", "SRP00A", "SRP00C"]
+        assert list(rows["feature_id"]) == ["ENSG0001", "ENSG0002"]
+        assert ranges is None
+
+    def test_each_project_receives_only_its_own_metadata(self) -> None:
+        bundle, _ = self._interleaved_bundle()
+        _, _, col, _, metadata = bundle._prepare_experiment(
+            genomic_unit="gene",
+            annotation_extension=None,
+            join_policy="inner",
+            metadata_join="inner",
+            autoload=False,
+        )
+        assert list(col["recount_qc__value0"]) == [0.0, 0.0, 1.0, 0, 1, 2]
+        sra = col["sra__value1"]
+        assert sra.isna().tolist() == [True, False, False, True, True, True]
+        assert list(sra.iloc[1:3]) == [0.0, 1.0]
+        assert set(metadata["metadata_columns"]) >= {
+            "recount_qc__value0",
+            "sra__value1",
+        }
+        assert col["BigWigURL"].iloc[0].endswith("SRP00B_B1.ALL.bw")
+        assert col["BigWigURL"].iloc[1].endswith("SRP00A_A1.ALL.bw")
+
+    def test_junction_groups_carry_their_own_coordinate_sidecars(
+        self,
+    ) -> None:
+        mm1, rr1 = _junction_resources(
+            project="SRP001", samples=["S1"], rr_frame=_rr_frame()
+        )
+        other = pd.DataFrame(
+            {
+                "chromosome": ["chr2", "chr1"],
+                "start": [5, 1],
+                "end": [50, 100],
+                "strand": ["+", "+"],
+            }
+        )
+        mm2, rr2 = _junction_resources(
+            project="SRP002", samples=["S2"], rr_frame=other
+        )
+        bundle = R3ResourceBundle(resources=[rr2, mm1, mm2, rr1])
+        counts, _, _, ranges, metadata = bundle._prepare_experiment(
+            genomic_unit="junction",
+            annotation_extension=None,
+            join_policy="outer",
+            metadata_join="inner",
+            autoload=False,
+        )
+        assert list(counts.index) == [
+            "chr1:1-100:+",
+            "chr1:200-300:-",
+            "chr2:5-50:+",
+        ]
+        assert metadata["resource_urls"] == [mm1.url, rr1.url, mm2.url, rr2.url]
+        assert list(ranges["seqnames"]) == ["chr1", "chr1", "chr2"]
+        np.testing.assert_array_equal(
+            counts.to_numpy(), [[1.0, 1.0], [1.0, 0.0], [0.0, 1.0]]
+        )
+
+
+class TestPrepareExperimentResourceSelection:
+    _IDENTITY = {"organism": "human", "data_source": "sra", "project": "SRP001"}
+
+    def test_a_project_split_across_count_files_is_built_once(self) -> None:
+        first = _mock_resource(
+            "count_files_gene_or_exon",
+            url="http://example.com/part1.gz",
+            loaded_data=_gene_df(samples=["S1", "S2"]),
+            genomic_unit="gene",
+            annotation_extension="G026",
+            **self._IDENTITY,
+        )
+        second = _mock_resource(
+            "count_files_gene_or_exon",
+            url="http://example.com/part2.gz",
+            loaded_data=_gene_df(samples=["S3"]),
+            genomic_unit="gene",
+            annotation_extension="G026",
+            **self._IDENTITY,
+        )
+        bundle = R3ResourceBundle(resources=[first, second])
+        counts, _, col, _, metadata = bundle._prepare_experiment(
+            genomic_unit="gene",
+            annotation_extension=None,
+            join_policy="inner",
+            metadata_join="inner",
+            autoload=False,
+        )
+        assert list(counts.columns) == ["S1", "S2", "S3"]
+        assert list(col.index) == ["S1", "S2", "S3"]
+        assert metadata["resource_urls"] == [first.url, second.url]
+
+    def test_gene_builds_record_sidecars_but_not_junction_counts(self) -> None:
+        counts_res, metadata_res = _project_resources("SRP001", ["S1", "S2"])
+        mm, rr = _junction_resources(
+            project="SRP001", samples=["S1", "S2"], rr_frame=_rr_frame()
+        )
+        bundle = R3ResourceBundle(resources=[counts_res, mm, metadata_res, rr])
+        _, _, _, _, metadata = bundle._prepare_experiment(
+            genomic_unit="gene",
+            annotation_extension=None,
+            join_policy="inner",
+            metadata_join="inner",
+            autoload=False,
+        )
+        assert metadata["resource_urls"] == [
+            counts_res.url,
+            metadata_res.url,
+            rr.url,
+        ]
+
+
+class TestStackCountsForJunctionGrouping:
+    def test_interleaved_projects_are_keyed_by_their_own_sidecars(
+        self,
+    ) -> None:
+        frames = {
+            "SRP001": _rr_frame(),
+            "SRP002": pd.DataFrame(
+                {
+                    "chromosome": ["chr3", "chr1"],
+                    "start": [7, 200],
+                    "end": [70, 300],
+                    "strand": ["-", "-"],
+                }
+            ),
+            "SRP003": pd.DataFrame(
+                {
+                    "chromosome": ["chr1"],
+                    "start": [1],
+                    "end": [100],
+                    "strand": ["+"],
+                }
+            ),
+        }
+        pairs = {
+            project: _junction_resources(
+                project=project, samples=[f"{project}_S"], rr_frame=rr
+            )
+            for project, rr in frames.items()
+        }
+        (mm1, rr1), (mm2, rr2), (mm3, rr3) = pairs.values()
+        bundle = R3ResourceBundle(resources=[mm2, rr3, mm1, rr2, mm3, rr1])
+        out = bundle._stack_counts_for(
+            genomic_unit="junction", join_policy="outer", autoload=False
+        )
+        assert list(out.index) == [
+            "chr3:7-70:-",
+            "chr1:200-300:-",
+            "chr1:1-100:+",
+        ]
+        assert list(out.columns) == ["SRP002_S", "SRP001_S", "SRP003_S"]
+        np.testing.assert_array_equal(
+            out.to_numpy(),
+            [[1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 1.0]],
+        )
+
+
+class TestStackCountsForGeneProjects:
+    def test_gene_tables_with_different_features_are_merged(self) -> None:
+        identity = {"organism": "human", "annotation_extension": "G026"}
+        first = _mock_resource(
+            "count_files_gene_or_exon",
+            url="http://example.com/a.gz",
+            loaded_data=_gene_df(features=["G1", "G2"], samples=["S1"]),
+            genomic_unit="gene",
+            project="SRP001",
+            **identity,
+        )
+        second = _mock_resource(
+            "count_files_gene_or_exon",
+            url="http://example.com/b.gz",
+            loaded_data=_gene_df(features=["G3", "G2"], samples=["S2"]),
+            genomic_unit="gene",
+            project="SRP002",
+            **identity,
+        )
+        out = R3ResourceBundle(resources=[first, second])._stack_counts_for(
+            genomic_unit="gene", join_policy="outer", autoload=False
+        )
+        assert list(out.index) == ["G1", "G2", "G3"]
+        np.testing.assert_array_equal(
+            out.to_numpy(), [[0.0, 0.0], [1.0, 1.0], [0.0, 0.0]]
+        )
+
+
+class TestStackCountsForTables:
+    """Validation and labels of the tables ``_stack_counts_for`` combines."""
+
+    @staticmethod
+    def _bundle(frame: Any, *, url: str = "http://example.com/g.gz") -> Any:
+        res = _mock_resource(
+            "count_files_gene_or_exon",
+            url=url,
+            loaded_data=frame,
+            genomic_unit="gene",
+            annotation_extension="G026",
+            organism="human",
+        )
+        return R3ResourceBundle(resources=[res])
+
+    @pytest.mark.parametrize("bad", [-1.0, np.nan, np.inf])
+    def test_invalid_counts_are_rejected(self, bad: float) -> None:
+        frame = _gene_df()
+        frame.iloc[0, 0] = bad
+        with pytest.raises(
+            ValueError,
+            match=r"^Counts must be finite, non-missing and nonnegative\.$",
+        ):
+            self._bundle(frame)._stack_counts_for(
+                genomic_unit="gene", autoload=False
+            )
+
+    def test_labels_become_text_without_touching_the_loaded_table(
+        self,
+    ) -> None:
+        frame = pd.DataFrame(
+            np.arange(4.0).reshape(2, 2), index=[7, 8], columns=[1, 2]
+        )
+        out = self._bundle(frame)._stack_counts_for(
+            genomic_unit="gene", autoload=False
+        )
+        assert list(out.index) == ["7", "8"]
+        assert list(out.columns) == ["1", "2"]
+        assert list(frame.index) == [7, 8]
+        assert list(frame.columns) == [1, 2]
+        assert np.shares_memory(out.to_numpy(), frame.to_numpy())
+
+    def test_missing_feature_identifiers_are_rejected(self) -> None:
+        frame = _gene_df()
+        frame.index = pd.Index(["G1", np.nan], dtype=object)
+        with pytest.raises(ValueError) as raised:
+            self._bundle(frame)._stack_counts_for(
+                genomic_unit="gene", autoload=False
+            )
+        assert str(raised.value) == (
+            "Missing feature or sample identifiers in http://example.com/g.gz"
+        )
+
+    def test_error_messages_name_the_resource(self) -> None:
+        url = "http://example.com/g.gz"
+        repeated = _gene_df(samples=["S1", "S1"])
+        with pytest.raises(ValueError) as raised:
+            self._bundle(repeated)._stack_counts_for(
+                genomic_unit="gene", autoload=False
+            )
+        assert str(raised.value) == f"Duplicate sample identifiers in {url}"
+        with pytest.raises(TypeError) as raised:
+            self._bundle(np.zeros((2, 2)))._stack_counts_for(
+                genomic_unit="gene", autoload=False
+            )
+        assert str(raised.value) == f"Loaded counts are not a DataFrame: {url}"
+        unloaded = _mock_resource(
+            "count_files_gene_or_exon",
+            url=url,
+            genomic_unit="gene",
+            annotation_extension="G026",
+            organism="human",
+        )
+        bundle = R3ResourceBundle(resources=[unloaded])
+        with pytest.raises(ValueError) as raised:
+            bundle._stack_counts_for(genomic_unit="gene", autoload=False)
+        assert str(raised.value) == (
+            f"Count resource is not loaded: {url}. "
+            "Load it first or use autoload=True."
+        )
+        unloaded.load.side_effect = OSError("disk")
+        with pytest.raises(ValueError) as raised:
+            bundle._stack_counts_for(genomic_unit="gene", autoload=True)
+        assert str(raised.value) == (
+            f"Failed to load requested count matrix {url}: disk"
+        )
+
+
+class TestRowValues:
+    """Per-sample loops read columns as ``iterrows()`` presented them."""
+
+    def test_row_values_of_a_single_row_use_the_shared_dtype(self) -> None:
+        frame = pd.DataFrame({"external_id": [12], "auc": [1.5]})
+        assert bmod._row_values(frame, "external_id").tolist() == [12.0]
+
+    @pytest.mark.parametrize(
+        "frame",
+        [
+            pd.DataFrame({"x": pd.array([1, None], dtype="Int64")}),
+            pd.DataFrame({"x": pd.array([1, None], dtype="Int64"), "y": 1.5}),
+            pd.DataFrame({"x": pd.array(["a", None], dtype="string")}),
+            pd.DataFrame({"x": [True, False], "y": [1, 2]}),
+            pd.DataFrame({"x": pd.Categorical([12, None]), "y": ["a", "b"]}),
+        ],
+        ids=["masked", "masked_and_float", "text", "bool_and_int", "category"],
+    )
+    def test_row_values_match_iterrows(self, frame: pd.DataFrame) -> None:
+        expected = [row["x"] for _, row in frame.iterrows()]
+        values = list(bmod._row_values(frame, "x"))
+        assert [type(v) for v in values] == [type(v) for v in expected]
+        assert [str(v) for v in values] == [str(v) for v in expected]
+
+
+def _reference_add_bigwig_urls(
+    bundle: R3ResourceBundle, col_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Return the original row-by-row ``_add_bigwig_urls`` result."""
+    out = col_df.copy()
+    count_types = {"count_files_gene_or_exon", "count_files_junctions"}
+    candidates = [
+        r
+        for r in bundle.resources
+        if getattr(r.description, "resource_type", None) in count_types
+    ]
+    urls = []
+    for _, row in out.iterrows():
+        study = row.get("study")
+        matching = [
+            r
+            for r in candidates
+            if pd.notna(study)
+            and bmod._description_value(r, "project") == str(study)
+        ]
+        if (
+            not matching
+            and len({bmod._project_key(r) for r in candidates}) == 1
+        ):
+            matching = candidates[:1]
+        res = matching[0] if matching else None
+        external = row.get("external_id")
+        if res is None or pd.isna(external) or not str(external).strip():
+            urls.append(None)
+            continue
+        org, source, project = bmod._project_key(res)
+        source_fields = [
+            c for c in out.columns if c.lower().endswith("file_source")
+        ]
+        if source_fields and isinstance(row[source_fields[0]], str):
+            source = row[source_fields[0]].rstrip("/").rsplit("/", 1)[-1]
+        if not all((org, source, project)):
+            urls.append(None)
+            continue
+        urls.append(
+            bmod.resource.build_url(
+                "bigwig_files",
+                organism=org,
+                data_source=source,
+                project=project,
+                sample=str(external),
+                config=res.config,
+            )
+        )
+    out["BigWigURL"] = urls
+    return out
+
+
+def _mirror_config(base_url: str) -> Config:
+    return Config(
+        base_url=base_url,
+        timeout=5,
+        insecure_ssl=False,
+        max_retries=1,
+        user_agent="test",
+        cache_dir="unused-cache",
+        cache_disabled=True,
+    )
+
+
+def _count_resource(
+    project: str,
+    *,
+    organism: str = "human",
+    data_source: str = "sra",
+    genomic_unit: str = "gene",
+    base_url: str = "https://mirror-a.example/recount3/",
+) -> R3Resource:
+    return R3Resource(
+        R3ResourceDescription(
+            resource_type="count_files_gene_or_exon",
+            organism=organism,
+            data_source=data_source,
+            genomic_unit=genomic_unit,
+            project=project,
+            annotation_extension="G026",
+        ),
+        config=_mirror_config(base_url),
+    )
+
+
+class TestAddBigwigUrlsCharacterization:
+    """Pin the BigWig URL column exactly, row by row."""
+
+    @staticmethod
+    def _multi_project_bundle() -> R3ResourceBundle:
+        mouse = _mock_resource(
+            "count_files_gene_or_exon",
+            organism=None,
+            data_source="sra",
+            project="SRP004",
+        )
+
+        return R3ResourceBundle(
+            resources=[
+                _count_resource("SRP001"),
+                _count_resource(
+                    "SRP001",
+                    genomic_unit="exon",
+                    base_url="https://mirror-b.example/r3/",
+                ),
+                _mock_resource("metadata_files", project="SRP003"),
+                _count_resource(
+                    "SRP002",
+                    organism="mouse",
+                    data_source="gtex",
+                    base_url="https://mirror-c.example/",
+                ),
+                mouse,
+            ]
+        )
+
+    def test_missing_category_does_not_change_an_integer_id(self) -> None:
+        bundle = R3ResourceBundle([_count_resource("SRP001")])
+        frame = pd.DataFrame(
+            {"external_id": pd.Categorical([12, None]), "study": "SRP001"}
+        )
+        urls = bundle._add_bigwig_urls(frame)
+        _assert_identical_frames(
+            urls, _reference_add_bigwig_urls(bundle, frame)
+        )
+        assert (
+            urls["BigWigURL"]
+            .iloc[0]
+            .endswith("/12/sra.base_sums.SRP001_12.ALL.bw")
+        )
+
+    @staticmethod
+    def _metadata() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "external_id": pd.array(
+                    ["SRR1", "SRR2", "SRR3", "SRR4", " ", "", pd.NA, "SRR8"],
+                    dtype="string",
+                ),
+                "study": pd.array(
+                    [
+                        "SRP001",
+                        "SRP002",
+                        "SRP003",
+                        pd.NA,
+                        "SRP001",
+                        "SRP001",
+                        "SRP001",
+                        "SRP004",
+                    ],
+                    dtype="string",
+                ),
+                "score": np.arange(8.0),
+            },
+            index=[f"row{i}" for i in range(8)],
+        )
+
+    def test_urls_follow_each_samples_study(self) -> None:
+        out = self._multi_project_bundle()._add_bigwig_urls(self._metadata())
+        urls = out["BigWigURL"].tolist()
+        assert urls[:2] == [
+            "https://mirror-a.example/recount3/human/data_sources/sra/"
+            "base_sums/01/SRP001/R1/sra.base_sums.SRP001_SRR1.ALL.bw",
+            "https://mirror-c.example/mouse/data_sources/gtex/base_sums/"
+            "02/SRP002/SR/gtex.base_sums.SRP002_SRR2.ALL.bw",
+        ]
+        # No count resource for SRP003; no study across several projects;
+        # blank, empty or missing external IDs; SRP004 has no organism.
+        assert all(pd.isna(url) for url in urls[2:])
+        assert list(out.columns) == [
+            "external_id",
+            "study",
+            "score",
+            "BigWigURL",
+        ]
+        assert list(out.index) == [f"row{i}" for i in range(8)]
+
+    def test_matches_the_reference(self) -> None:
+        bundle = self._multi_project_bundle()
+        _assert_identical_frames(
+            bundle._add_bigwig_urls(self._metadata()),
+            _reference_add_bigwig_urls(bundle, self._metadata()),
+        )
+
+    def test_a_single_project_supplies_samples_without_a_matching_study(
+        self,
+    ) -> None:
+        bundle = R3ResourceBundle(
+            resources=[
+                _count_resource("SRP001"),
+                _count_resource("SRP001", genomic_unit="exon"),
+            ]
+        )
+        frame = pd.DataFrame(
+            {
+                "external_id": ["SRR1", "SRR2", "SRR3"],
+                "study": pd.array([pd.NA, "SRP999", "SRP001"], dtype="string"),
+            }
+        )
+        out = bundle._add_bigwig_urls(frame)
+        assert all(
+            url.endswith(f"SRP001_SRR{i}.ALL.bw")
+            for i, url in enumerate(out["BigWigURL"], start=1)
+        )
+        _assert_identical_frames(out, _reference_add_bigwig_urls(bundle, frame))
+
+    def test_without_a_study_column_only_a_single_project_resolves(
+        self,
+    ) -> None:
+        frame = pd.DataFrame({"external_id": ["SRR1"]})
+        single = R3ResourceBundle(resources=[_count_resource("SRP001")])
+        multi = R3ResourceBundle(
+            resources=[_count_resource("SRP001"), _count_resource("SRP002")]
+        )
+        assert single._add_bigwig_urls(frame)["BigWigURL"].iloc[0]
+        assert pd.isna(multi._add_bigwig_urls(frame)["BigWigURL"].iloc[0])
+
+    @pytest.mark.parametrize(
+        ("source", "expected"),
+        [
+            ("s3://bucket/gtex/", "gtex"),
+            ("gs://bucket/data/tcga", "tcga"),
+            ("tcga", "tcga"),
+            ("/", None),
+            ("", None),
+            (42, "sra"),
+            (None, "sra"),
+        ],
+    )
+    def test_file_source_overrides_the_data_source(
+        self, source: Any, expected: str | None
+    ) -> None:
+        bundle = R3ResourceBundle(resources=[_count_resource("SRP001")])
+        frame = pd.DataFrame(
+            {
+                "external_id": ["SRR1"],
+                "RECOUNT_PROJECT__FILE_SOURCE": pd.Series(
+                    [source], dtype=object
+                ),
+                "other__file_source": ["unused"],
+            }
+        )
+        url = bundle._add_bigwig_urls(frame)["BigWigURL"].iloc[0]
+        if expected is None:
+            assert pd.isna(url)
+        else:
+            assert f"/data_sources/{expected}/" in url
+            assert f"/{expected}.base_sums." in url
+        _assert_identical_frames(
+            bundle._add_bigwig_urls(frame),
+            _reference_add_bigwig_urls(bundle, frame),
+        )
+
+    def test_identifiers_take_the_frames_common_row_dtype(self) -> None:
+        """Rows are read at the dtype all columns share, as iterrows did.
+
+        In an all-numeric frame that dtype is float, so an integer sample
+        ID renders as ``12.0``; with any text column it stays ``12``.
+        """
+        bundle = R3ResourceBundle(resources=[_count_resource("SRP001")])
+        numeric = pd.DataFrame({"external_id": [11, 12], "study": [1.5, 2.5]})
+        out = bundle._add_bigwig_urls(numeric)
+        assert (
+            out["BigWigURL"]
+            .iloc[1]
+            .endswith("/.0/sra.base_sums.SRP001_12.0.ALL.bw")
+        )
+        _assert_identical_frames(
+            out, _reference_add_bigwig_urls(bundle, numeric)
+        )
+        mixed = numeric.assign(note=["a", "b"])
+        out = bundle._add_bigwig_urls(mixed)
+        assert (
+            out["BigWigURL"]
+            .iloc[1]
+            .endswith("/12/sra.base_sums.SRP001_12.ALL.bw")
+        )
+        _assert_identical_frames(out, _reference_add_bigwig_urls(bundle, mixed))
+
+    def test_an_empty_frame_gains_an_empty_column(self) -> None:
+        bundle = R3ResourceBundle(resources=[_count_resource("SRP001")])
+        frame = pd.DataFrame(
+            {"external_id": pd.array([], dtype="string"), "score": []}
+        )
+        out = bundle._add_bigwig_urls(frame)
+        assert list(out.columns) == ["external_id", "score", "BigWigURL"]
+        _assert_identical_frames(out, _reference_add_bigwig_urls(bundle, frame))
+
+    def test_the_input_is_copied_not_modified(self) -> None:
+        bundle = self._multi_project_bundle()
+        frame = self._metadata()
+        before = frame.copy()
+        out = bundle._add_bigwig_urls(frame)
+        _assert_identical_frames(frame, before)
+        out.loc["row0", "score"] = -1.0
+        assert frame.loc["row0", "score"] == 0.0
+
+    def test_a_non_text_column_label_fails_only_when_consulted(self) -> None:
+        bundle = R3ResourceBundle(resources=[_count_resource("SRP001")])
+        unreached = pd.DataFrame({"external_id": [pd.NA], 5: ["x"]})
+        assert pd.isna(bundle._add_bigwig_urls(unreached)["BigWigURL"].iloc[0])
+        reached = pd.DataFrame({"external_id": ["SRR1"], 5: ["x"]})
+        with pytest.raises(AttributeError):
+            bundle._add_bigwig_urls(reached)
+
+    def test_each_resource_uses_its_own_configuration(self) -> None:
+        bundle = R3ResourceBundle(
+            resources=[
+                _count_resource("SRP001"),
+                _count_resource(
+                    "SRP002", base_url="https://mirror-z.example/x/"
+                ),
+            ]
+        )
+        frame = pd.DataFrame(
+            {"external_id": ["SRR1", "SRR2"], "study": ["SRP001", "SRP002"]}
+        )
+        urls = bundle._add_bigwig_urls(frame)["BigWigURL"].tolist()
+        assert urls[0].startswith("https://mirror-a.example/recount3/")
+        assert urls[1].startswith("https://mirror-z.example/x/")
+
+    @pytest.mark.parametrize("seed", range(60))
+    def test_matches_the_reference_on_random_metadata(self, seed: int) -> None:
+        rng = np.random.default_rng(seed)
+        projects = ["SRP001", "SRP002", "SRP003"]
+        resources = [
+            _count_resource(projects[int(i)])
+            for i in rng.integers(0, 3, size=int(rng.integers(0, 4)))
+        ]
+        bundle = R3ResourceBundle(resources=resources)
+        size = int(rng.integers(0, 8))
+        choices_ext = ["SRR1", "SRR2", "", "  ", None, "ERR9"]
+        choices_study = [*projects, "SRP999", None]
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(
+                    [choices_ext[int(i)] for i in rng.integers(0, 6, size)],
+                    dtype="string",
+                ),
+                "study": pd.array(
+                    [choices_study[int(i)] for i in rng.integers(0, 5, size)],
+                    dtype="string",
+                ),
+                "x__file_source": pd.Series(
+                    [
+                        ["a/sra", "gtex", "/", None][int(i)]
+                        for i in rng.integers(0, 4, size)
+                    ],
+                    dtype=object,
+                ),
+            }
+        )
+        if rng.random() < 0.3:
+            frame = frame.drop(columns="x__file_source")
+        _assert_identical_frames(
+            bundle._add_bigwig_urls(frame),
+            _reference_add_bigwig_urls(bundle, frame),
+        )
+
+
+class TestAddBigwigUrlsCandidates:
+    def test_junction_count_files_identify_their_project(self) -> None:
+        junctions = R3Resource(
+            R3ResourceDescription(
+                resource_type="count_files_junctions",
+                organism="human",
+                data_source="sra",
+                project="SRP001",
+                junction_type="ALL",
+                junction_extension="MM",
+            ),
+            config=_mirror_config("https://mirror-a.example/recount3/"),
+        )
+        frame = pd.DataFrame({"external_id": ["SRR1"], "study": ["SRP001"]})
+        url = R3ResourceBundle(resources=[junctions])._add_bigwig_urls(frame)
+        assert url["BigWigURL"].iloc[0].endswith("SRP001_SRR1.ALL.bw")
+
+    def test_metadata_files_never_supply_a_project(self) -> None:
+        metadata = R3Resource(
+            R3ResourceDescription(
+                resource_type="metadata_files",
+                organism="human",
+                data_source="sra",
+                table_name="recount_project",
+                project="SRP003",
+            )
+        )
+        bundle = R3ResourceBundle(
+            resources=[
+                metadata,
+                _count_resource("SRP001"),
+                _count_resource("SRP002"),
+            ]
+        )
+        frame = pd.DataFrame(
+            {"external_id": ["SRR1", "SRR2"], "study": ["SRP003", "SRP001"]}
+        )
+        urls = bundle._add_bigwig_urls(frame)["BigWigURL"]
+        assert pd.isna(urls.iloc[0])
+        assert urls.iloc[1].endswith("SRP001_SRR2.ALL.bw")
+
+    def test_a_missing_study_matches_no_project_name(self) -> None:
+        bundle = R3ResourceBundle(
+            resources=[_count_resource("nan"), _count_resource("SRP002")]
+        )
+        frame = pd.DataFrame(
+            {"external_id": ["SRR1"], "study": [np.nan], "note": ["x"]}
+        )
+        assert pd.isna(bundle._add_bigwig_urls(frame)["BigWigURL"].iloc[0])
+
+    def test_numeric_studies_match_projects_by_their_text(self) -> None:
+        bundle = R3ResourceBundle(
+            resources=[_count_resource("7"), _count_resource("SRP002")]
+        )
+        frame = pd.DataFrame(
+            {"external_id": ["SRR1"], "study": [7], "note": ["x"]}
+        )
+        url = bundle._add_bigwig_urls(frame)["BigWigURL"].iloc[0]
+        assert url.endswith("sra.base_sums.7_SRR1.ALL.bw")
+
+    def test_only_slashes_are_trimmed_from_the_source(self) -> None:
+        """A source is the last path component, other characters kept.
+
+        An unknown source is an error, so trimming more than slashes from
+        ``tcga_/`` would wrongly turn it into the valid ``tcga``.
+        """
+        bundle = R3ResourceBundle(resources=[_count_resource("SRP001")])
+        frame = pd.DataFrame(
+            {"external_id": ["SRR1"], "file_source": ["s3://b/tcga_/"]}
+        )
+        with pytest.raises(ValueError, match="Invalid data_source: 'tcga_'"):
+            bundle._add_bigwig_urls(frame)
+
+
+class TestNormalizeSampleMetadataLookup:
+    """Sample identifiers resolve to metadata rows exactly as before."""
+
+    @staticmethod
+    def _bundle(external: list[Any], rail: list[Any]) -> R3ResourceBundle:
+        frame = pd.DataFrame(
+            {
+                "external_id": pd.array(external, dtype="string"),
+                "rail_id": pd.array(rail, dtype="string"),
+                "study": pd.array(["SRP001"] * len(external), dtype="string"),
+                "value": np.arange(len(external), dtype=float),
+            }
+        )
+        return R3ResourceBundle(resources=[_metadata_resource(frame)])
+
+    def test_the_first_conflict_in_row_order_is_reported(self) -> None:
+        bundle = self._bundle(["X", "Y"], ["Y", "X"])
+        with pytest.raises(
+            ValueError, match=r"^Ambiguous sample identifier 'Y' in metadata\.$"
+        ):
+            bundle._normalize_sample_metadata(sample_ids=["X", "Y"])
+
+    def test_a_rail_id_conflict_is_reported(self) -> None:
+        bundle = self._bundle(["A", "C"], ["B", "A"])
+        with pytest.raises(ValueError, match=r"identifier 'A'"):
+            bundle._normalize_sample_metadata(sample_ids=["A", "C"])
+
+    def test_one_row_may_use_the_same_identifier_twice(self) -> None:
+        bundle = self._bundle(["Z", "W"], ["Z", "7"])
+        out = bundle._normalize_sample_metadata(sample_ids=["7", "Z"])
+        assert list(out.index) == ["7", "Z"]
+        assert list(out["external_id"]) == ["W", "Z"]
+        assert list(out["recount_qc__value"]) == [1.0, 0.0]
+
+    def test_samples_resolve_through_either_identifier(self) -> None:
+        bundle = self._bundle(["SRR1", "SRR2", "SRR3"], ["11", "12", "13"])
+        out = bundle._normalize_sample_metadata(sample_ids=["13", "SRR1", "12"])
+        assert list(out.index) == ["13", "SRR1", "12"]
+        assert list(out["external_id"]) == ["SRR3", "SRR1", "SRR2"]
+        assert list(out["rail_id"]) == ["13", "11", "12"]
+        assert list(out["recount_qc__value"]) == [2.0, 0.0, 1.0]
+
+    def test_missing_identifiers_are_never_matched(self) -> None:
+        bundle = self._bundle(["SRR1", pd.NA], [pd.NA, "12"])
+        out = bundle._normalize_sample_metadata(
+            sample_ids=["SRR1", "12", "<NA>"], metadata_join="outer"
+        )
+        assert list(out.index) == ["SRR1", "12", "<NA>"]
+        assert list(out["recount_qc__value"].iloc[:2]) == [0.0, 1.0]
+        assert pd.isna(out["recount_qc__value"].iloc[2])
+        assert list(out["external_id"]) == ["SRR1", "12", "<NA>"]
+
+    def test_identifiers_shared_across_projects_are_ambiguous(self) -> None:
+        frames = [
+            pd.DataFrame(
+                {
+                    "external_id": pd.array(["SRR1"], dtype="string"),
+                    "rail_id": pd.array([rail], dtype="string"),
+                    "study": pd.array([project], dtype="string"),
+                }
+            )
+            for project, rail in (("SRP001", "1"), ("SRP002", "SRR1"))
+        ]
+        bundle = R3ResourceBundle(
+            resources=[
+                _metadata_resource(frames[0], project="SRP001"),
+                _metadata_resource(frames[1], project="SRP002"),
+            ]
+        )
+        with pytest.raises(ValueError, match=r"identifier 'SRR1'"):
+            bundle._normalize_sample_metadata(sample_ids=["SRR1"])
+
+
+class TestNormalizeSampleMetadataMessages:
+    @staticmethod
+    def _bundle(*tables: pd.DataFrame) -> R3ResourceBundle:
+        return R3ResourceBundle(
+            resources=[
+                _metadata_resource(table, table_name=f"t{number}")
+                for number, table in enumerate(tables)
+            ]
+        )
+
+    @staticmethod
+    def _table(external: list[Any], rail: list[str]) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "external_id": pd.array(external, dtype="string"),
+                "rail_id": pd.array(rail, dtype="string"),
+                "study": pd.array(["SRP001"] * len(rail), dtype="string"),
+            }
+        )
+
+    def test_metadata_rows_without_counts(self) -> None:
+        bundle = self._bundle(self._table(["S1", "S2"], ["1", "2"]))
+        with pytest.raises(
+            ValueError,
+            match=(
+                r"^Metadata contains samples missing from the counts "
+                r"matrix\.$"
+            ),
+        ):
+            bundle._normalize_sample_metadata(sample_ids=["S1"])
+
+    def test_matched_rows_without_external_ids(self) -> None:
+        bundle = self._bundle(self._table([pd.NA], ["1"]))
+        with pytest.raises(
+            ValueError,
+            match=r"^Matched metadata rows have missing external_id values\.$",
+        ):
+            bundle._normalize_sample_metadata(sample_ids=["1"])
+
+    def test_an_inner_join_matching_nothing(self) -> None:
+        bundle = self._bundle(
+            self._table(["S1"], ["1"]), self._table(["S9"], ["9"])
+        )
+        with pytest.raises(ValueError) as raised:
+            bundle._normalize_sample_metadata(sample_ids=["S1"])
+        assert str(raised.value) == (
+            "No count sample matched the merged sample metadata. The "
+            "metadata tables for this project share no "
+            "rail_id/external_id/study rows, so the inner join produced no "
+            "samples. Check that the tables describe the same samples, or "
+            "pass metadata_join='outer' to keep every count sample and leave "
+            "the unmatched metadata missing."
+        )
+
+    def test_no_requested_samples_and_no_shared_rows_is_empty(self) -> None:
+        bundle = self._bundle(
+            self._table(["S1"], ["1"]), self._table(["S9"], ["9"])
+        )
+        out = bundle._normalize_sample_metadata(sample_ids=[])
+        assert out.shape[0] == 0
+        assert "external_id" in out.columns
+
+
+class TestConstructionStaysLinear:
+    """Guard the choices that keep SE/RSE construction linear in its data.
+
+    Each test forbids the operation whose cost grows faster than the input:
+    a sparse ``take`` expands a column to the full target length, pairwise
+    unions rehash the growing union per project, per-project scans of the
+    bundle are quadratic in projects, and ``iterrows`` builds every metadata
+    column for every sample.
+    """
+
+    @staticmethod
+    def _forbid(owner: Any, name: str) -> Any:
+        def fail(*args: Any, **kwargs: Any) -> None:
+            raise AssertionError(f"{name} must not be called here")
+
+        return patch.object(owner, name, fail)
+
+    @pytest.mark.parametrize("dtype", [np.int64, np.float64])
+    def test_loader_sparse_frames_are_never_expanded(self, dtype: Any) -> None:
+        frames = TestMergeCountFramesCharacterization._three_loader_frames(
+            dtype=dtype
+        )
+        if frames[0].dtypes.iloc[0].fill_value != 0:
+            pytest.skip("This pandas version uses NaN fill for this dtype")
+        expected = {
+            policy: _reference_merge_count_frames(frames, policy)
+            for policy in ("inner", "outer")
+        }
+        with self._forbid(pd.arrays.SparseArray, "take"):
+            merged = {
+                policy: bmod._merge_count_frames(frames, policy)
+                for policy in expected
+            }
+        for policy, want in expected.items():
+            _assert_identical_frames(merged[policy], want)
+
+    @pytest.mark.parametrize("shared", [[], ["shared"]], ids=["empty", "one"])
+    def test_small_inner_join_skips_full_sparse_conversion(
+        self, shared: list[str]
+    ) -> None:
+        frames = []
+        for project in range(2):
+            labels = [f"P{project}F{i}" for i in range(128)] + shared
+            frames.append(
+                _loader_frame(
+                    np.arange(len(labels)).reshape(-1, 1),
+                    labels,
+                    [f"S{project}"],
+                )
+            )
+        expected = _reference_merge_count_frames(frames, "inner")
+        with self._forbid(pd.DataFrame.sparse, "to_coo"):
+            merged = bmod._merge_count_frames(frames, "inner")
+        _assert_identical_frames(merged, expected)
+
+    def test_the_outer_join_is_not_built_pairwise(self) -> None:
+        frames = TestMergeCountFramesCharacterization._three_loader_frames()
+        with self._forbid(pd.Index, "union"):
+            out = bmod._merge_count_frames(frames, "outer")
+        assert list(out.index) == ["a", "b", "c", "d", "e"]
+
+    @pytest.mark.parametrize(
+        "dtype", [object, pd.StringDtype(storage="python")]
+    )
+    @pytest.mark.parametrize("missing_first", [False, True])
+    def test_overlapping_outer_join_does_not_append_numpy_labels(
+        self, dtype: Any, missing_first: bool
+    ) -> None:
+        shared = pd.Index(
+            [f"F{i}" for i in range(128)], dtype=dtype, name="feature"
+        )
+        subset = shared[1:].rename(None)
+        indexes = [shared] * 40
+        indexes.insert(0 if missing_first else len(indexes), subset)
+        expected = (
+            subset.union(shared, sort=False)
+            if missing_first
+            else shared.union(subset, sort=False)
+        )
+        with (
+            self._forbid(pd.Index, "append"),
+            patch.object(
+                bmod,
+                "_has_duplicate_features",
+                wraps=bmod._has_duplicate_features,
+            ) as duplicate_check,
+        ):
+            joined = bmod._join_feature_index(indexes, "outer")
+        assert duplicate_check.call_count == 2
+        pd.testing.assert_index_equal(joined, expected, exact=True)
+
+    def test_projects_are_grouped_in_one_pass(self) -> None:
+        resources = []
+        for number in range(40):
+            resources.extend(
+                _project_resources(f"SRP{number:03d}", [f"S{number}"])
+            )
+        bundle = R3ResourceBundle(resources=resources)
+        calls = 0
+        original = bmod._project_key
+
+        def counting(res: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            return original(res)
+
+        with patch.object(bmod, "_project_key", counting):
+            counts, *_ = bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=False,
+            )
+        assert counts.shape[1] == 40
+        # A scan of the bundle per project would make 40 * 80 calls.
+        assert calls <= 10 * len(resources)
+
+    def test_sample_loops_read_only_the_columns_they_need(self) -> None:
+        bundle = TestAddBigwigUrlsCharacterization._multi_project_bundle()
+        metadata = TestAddBigwigUrlsCharacterization._metadata()
+        expected = _reference_add_bigwig_urls(bundle, metadata)
+        lookup = TestNormalizeSampleMetadataLookup._bundle(
+            ["SRR1", "SRR2"], ["11", "12"]
+        )
+        with self._forbid(pd.DataFrame, "iterrows"):
+            urls = bundle._add_bigwig_urls(metadata)
+            out = lookup._normalize_sample_metadata(sample_ids=["12", "SRR1"])
+        _assert_identical_frames(urls, expected)
+        assert list(out["external_id"]) == ["SRR2", "SRR1"]
+
+    def test_dense_merges_skip_sparse_reindexing(self) -> None:
+        first = _gene_df(features=["G1", "G2"], samples=["S1"])
+        second = _gene_df(features=["G2", "G3"], samples=["S2"])
+        with patch.object(
+            bmod, "_reindex_sparse_frame", side_effect=AssertionError
+        ):
+            out = bmod._merge_count_frames([first, second], "outer")
+        assert list(out.index) == ["G1", "G2", "G3"]
+
+
+def test_docstring_examples_run() -> None:
+    import doctest
+
+    results = doctest.testmod(bmod, raise_on_error=False)
+    assert results.attempted > 0
+    assert results.failed == 0

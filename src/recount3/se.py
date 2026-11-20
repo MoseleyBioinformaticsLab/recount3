@@ -81,9 +81,11 @@ Note:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+import functools
 import logging
 import numbers
+import sys
 from typing import Any, TYPE_CHECKING
 
 import numpy as np
@@ -166,6 +168,21 @@ def _expand_sra_attributes_df(
     Returns:
       A new DataFrame with the same index as ``col_df`` and additional
       columns containing one parsed SRA attribute per column.
+
+    Note:
+        ``O(L + S * (M + K))`` for ``S`` samples, ``L`` characters of
+        attribute text, ``M`` existing columns and ``K`` distinct attribute
+        keys: each string is split once, and the result is an ``S`` by
+        ``M + K`` table. That is the size of the input plus the output.
+
+    Examples:
+        >>> metadata = pd.DataFrame(
+        ...     {"sra.sample_attributes": ["age;;67|tissue;;brain", None]}
+        ... )
+        >>> _expand_sra_attributes_df(metadata).iloc[:, 1:]
+          sra_attribute.age sra_attribute.tissue
+        0                67                brain
+        1               NaN                  NaN
     """
     resolved = _resolve_sra_attributes_column(
         col_df.columns, sra_attributes_column
@@ -408,6 +425,12 @@ def create_ranged_summarized_experiment(
     ranges come from the selected GTF annotation; junction ranges use the
     matching RR sidecar. Sparse counts remain sparse in the output.
 
+    Note:
+        Discovery reads the project's resource listings. See
+        :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`
+        for the cost of building the experiment. Downloads usually dominate
+        when files are uncached.
+
     Args:
       project: Study or project identifier (for example, ``"SRP009615"``).
       genomic_unit: One of ``{"gene", "exon", "junction"}``.
@@ -564,6 +587,12 @@ def create_rse(
     Count matrices and sample metadata are aligned by identity. Gene/exon
     ranges come from the selected GTF annotation; junction ranges use the
     matching RR sidecar. Sparse counts remain sparse in the output.
+
+    Note:
+        Discovery reads the project's resource listings. See
+        :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`
+        for the cost of building the experiment. Downloads usually dominate
+        when files are uncached.
 
     Args:
       project: Study or project identifier (for example, ``"SRP009615"``).
@@ -734,6 +763,13 @@ def expand_sra_attributes(
       TypeError: If ``experiment_or_coldata`` is neither a
         :class:`~pandas.DataFrame` nor a supported BiocPy experiment object.
 
+    Note:
+        ``O(L + S * (M + K))`` for ``S`` samples, ``M`` metadata columns,
+        ``L`` characters of attribute text and ``K`` distinct attribute
+        keys: the size of the input plus the output. For an experiment the
+        sample metadata is converted to pandas and back, ``O(S * M)`` each
+        way.
+
     Examples:
         Expand attributes on a metadata DataFrame::
 
@@ -820,12 +856,20 @@ def _assay_frame(
 
     Returns:
         A DataFrame preserving assay values and sparse storage where
-        applicable.
-        Dense output may share storage with the input array.
+        applicable. Dense output may share storage with the input array.
 
     Raises:
         ValueError: If labels do not match the matrix dimensions or the dense
             input is not two-dimensional.
+
+    Note:
+        A dense ``F`` by ``S`` assay costs ``O(F * S)`` if copied.
+        With ``copy=False``, only supplied labels take time to copy,
+        ``O(F + S)`` if both are provided. A sparse assay with ``N`` stored
+        values takes ``O(N + F + S)`` when canonical (sorted rows, no
+        duplicates), which recount3's loaders guarantee. Otherwise SciPy
+        first sorts each column's rows, ``O(N log N)`` at worst, and sums
+        duplicates.
     """
     kwargs = {
         "index": list(row_names) if row_names is not None else None,
@@ -860,6 +904,10 @@ def _sample_metadata_values(rse: Any, column_name: str) -> NDArray[Any]:
 
     Raises:
         ValueError: If the column cannot be found.
+
+    Note:
+        ``O(M + S)`` for ``M`` metadata columns and ``S`` samples when the
+        column is read on its own, and ``O(S * M)`` through ``to_pandas()``.
     """
     col_data = rse.get_column_data()
     column_names = getattr(col_data, "column_names", None)
@@ -877,6 +925,140 @@ def _sample_metadata_values(rse: Any, column_name: str) -> NDArray[Any]:
     return _utils._resolve_metadata_column(
         col_data.to_pandas(), column_name
     ).to_numpy()
+
+
+def _is_plain_biocframe(col_data: Any) -> bool:
+    """Return whether ``col_data`` converts to pandas column by column.
+
+    ``BiocFrame.to_pandas()`` builds a :class:`pandas.DataFrame` from a dict
+    of the frame's columns. The fast path uses the same constructor for
+    individual columns of an exact :class:`biocframe.BiocFrame` whose
+    columns are plain lists or one-dimensional unstructured arrays. The
+    full conversion flattens nested frames into ``parent.child`` columns,
+    converts ``Factor`` columns to categoricals, and validates all arrays,
+    including unused columns.
+
+    Note:
+        ``O(M)`` for ``M`` columns; no column is converted.
+
+    Args:
+        col_data: Sample metadata of an experiment.
+
+    Returns:
+        :data:`True` if every column can be read on its own.
+    """
+    frame_cls = getattr(sys.modules.get("biocframe"), "BiocFrame", None)
+    if not isinstance(frame_cls, type) or type(col_data) is not frame_cls:
+        return False
+    for name in col_data.get_column_names():
+        column = col_data.get_column(name)
+        if type(column) is list:
+            continue
+        if (
+            type(column) is not np.ndarray
+            or column.ndim != 1
+            or column.dtype.fields is not None
+        ):
+            return False
+    return True
+
+
+def _sample_metadata_columns(
+    sample_metadata_source: Any,
+) -> Callable[[str], pd.Series]:
+    """Return a function that reads one sample-metadata column by name.
+
+    Each column resolves as :func:`recount3._utils._resolve_metadata_column`
+    resolves it on ``col_data.to_pandas()``, and reads the same values and
+    errors. Converting all of ``col_data`` costs every column (recount3 has
+    about two hundred), while scale factors and paired-end status need four
+    or five, so plain BiocFrames are read one column at a time.
+
+    :func:`_sample_metadata_values` serves the coverage helpers, which need
+    only an array of values. The scale-factor functions return Series whose
+    index and name come from these columns, so here a column is read on its
+    own only when the Series provably equals the one ``to_pandas()`` holds.
+
+    Steps
+
+    1. A DataFrame is read directly. Any other source whose ``col_data`` is
+       not plain (:func:`_is_plain_biocframe`) is converted with
+       ``to_pandas()`` once, and its columns are read from that frame.
+    2. For a plain BiocFrame, the labels ``to_pandas()`` would produce are
+       the column names, plus the ``rownames`` column that it appends when
+       the samples are named. A requested name is resolved among those
+       labels with the same rules: case-insensitively, ``__`` standing in
+       for the first ``.``, the last match winning.
+    3. A resolved column is read through a one-column DataFrame with the
+       sample names as its index. This uses the same dtype inference as
+       ``to_pandas()``, including for empty columns.
+    4. A name that resolves to ``rownames``, or does not resolve, is looked
+       up on ``to_pandas()``, converted at most once. It supplies the sample
+       names in place of any column of that name, or raises the same error
+       for a missing column.
+
+    For example, with columns ``external_id`` and ``recount_qc__star.x`` and
+    named samples::
+
+        labels:    external_id, recount_qc__star.x, rownames
+        "recount_qc.star.x" -> recount_qc__star.x   (read on its own)
+        "ROWNAMES"          -> rownames             (via to_pandas())
+        "missing"           -> no match             (to_pandas() raises)
+
+    Note:
+        ``O(M)`` to set up for ``M`` metadata columns and ``O(M + S)`` per
+        column read for ``S`` samples, where ``to_pandas()`` costs
+        ``O(S * M)``. A source that is not plain costs ``O(S * M)`` once.
+
+    Args:
+        sample_metadata_source: A :class:`pandas.DataFrame`, or an object
+            with ``col_data.to_pandas()``.
+
+    Returns:
+        A function from a column name to that column as a Series.
+
+    Raises:
+        TypeError: If the source is neither form.
+
+    Examples:
+        >>> column = _sample_metadata_columns(
+        ...     pd.DataFrame({"External_ID": ["S1"], "recount_qc__x": [2.0]})
+        ... )
+        >>> column("external_id").tolist(), column("recount_qc.x").tolist()
+        (['S1'], [2.0])
+    """
+    col_data = (
+        None
+        if isinstance(sample_metadata_source, pd.DataFrame)
+        else getattr(sample_metadata_source, "col_data", None)
+    )
+    if not _is_plain_biocframe(col_data):
+        metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
+        return functools.partial(_utils._resolve_metadata_column, metadata)
+
+    row_names = col_data.get_row_names()
+    labels = list(col_data.get_column_names())
+    if row_names is not None:
+        labels.append("rownames")
+    index = None if row_names is None else pd.Index(list(row_names))
+
+    @functools.cache
+    def converted() -> pd.DataFrame:
+        return col_data.to_pandas()
+
+    def column(name: str) -> pd.Series:
+        try:
+            resolved = _utils._resolve_metadata_column_name(labels, name)
+        except ValueError:
+            resolved = None
+        if resolved is None or (
+            row_names is not None and resolved == "rownames"
+        ):
+            return _utils._resolve_metadata_column(converted(), name)
+        values = col_data.get_column(resolved)
+        return pd.DataFrame({resolved: values}, index=index)[resolved]
+
+    return column
 
 
 _REAL_DTYPE_KINDS = "biuf"
@@ -906,6 +1088,12 @@ def _coverage_inputs(
         ValueError: If the assay or the read-length column is missing, a read
             length is not numeric, the assay is not two-dimensional, or its
             sample count differs from the number of read lengths.
+
+    Note:
+        ``O(M + S)`` for ``M`` metadata columns and ``S`` samples (see
+        :func:`_sample_metadata_values`). The assay is returned as stored,
+        except that a dense assay of a non-numeric dtype is converted to
+        float in ``O(F * S)``.
     """
     assay_name = _utils._resolve_counts_assay_name(rse)
 
@@ -1006,6 +1194,12 @@ def compute_read_counts(
       ValueError: If the "raw_counts" assay is missing, if
         `avg_mapped_read_length_column` is missing from `col_data`, or if the
         assay and metadata dimensions do not align.
+
+    Note:
+        ``O(F * S + M)`` for a dense assay of ``F`` features and ``S``
+        samples with ``M`` metadata columns. A sparse assay with ``N`` stored
+        values takes ``O(N + F + S + M)``: division and rounding touch only
+        the stored values, and the result stays sparse.
     """
     ranged_summarized_experiment_cls = (
         _utils.get_ranged_summarizedexperiment_class()
@@ -1034,6 +1228,9 @@ def compute_read_counts(
 def _feature_lengths(rse: Any) -> NDArray[np.float64]:
     """Return ``bp_length`` from row data when present, else range widths.
 
+    Note:
+        ``O(F)`` for ``F`` features.
+
     Raises:
         ValueError: If neither is available.
     """
@@ -1059,6 +1256,19 @@ def _dense_tpm(
     so each sample is contiguous. The division converts integer counts as it
     writes, so the result is the only matrix-sized allocation. Callers
     silence floating-point warnings; see :func:`compute_tpm`.
+
+    Steps
+
+    1. Divide each count by its feature's length into the output array.
+    2. Sum each sample. Only if a sum is NaN, sum again skipping missing
+       values, which needs a boolean mask the size of the assay.
+    3. Multiply each sample by ``1e6 / sum``, or by NaN where the sample
+       cannot be normalized.
+
+    Note:
+        ``O(F * S)`` time for ``F`` features and ``S`` samples, with one
+        float64 output array and, only when values are missing, one boolean
+        mask of the same shape.
     """
     tpm = np.empty(counts.shape, order="F")
     np.divide(counts, lengths[:, np.newaxis], out=tpm)
@@ -1082,6 +1292,25 @@ def _sparse_tpm(
     ``0 / length * scale``, which is 0 unless the length is missing or zero
     or the scale is not finite; those entries are stored as NaN. Callers
     silence floating-point warnings; see :func:`compute_tpm`.
+
+    Steps
+
+    1. Copy the assay to a float CSC matrix with sorted rows and no
+       duplicate entries, and record the sample of each stored value.
+    2. Divide each stored value by its feature's length.
+    3. Sum each sample's stored values, skipping missing ones, with one
+       ``bincount`` over the values' samples.
+    4. Multiply each stored value by its sample's ``1e6 / sum``, or by NaN
+       where the sample cannot be normalized.
+    5. If any feature has a missing or zero length, or any sample cannot be
+       normalized, store NaN at those lines' implicit zeros with
+       :func:`_store_nan_lines`.
+
+    Note:
+        ``O(N + F + S + Z)`` for ``N`` stored values, ``F`` features, ``S``
+        samples and ``Z`` stored NaN entries. The assay is never densified.
+        An assay whose rows are not sorted within each column is sorted
+        first, ``O(N log N)`` at worst.
     """
     tpm = sparse.csc_matrix(counts, dtype=float, copy=True)
     tpm.sum_duplicates()
@@ -1115,6 +1344,41 @@ def _store_nan_lines(
     The NaN entries are laid out directly in sorted CSC order, skipping
     positions that already hold a stored value, and merged with ``matrix``,
     in time linear in the size of the result.
+
+    1. Lay out the NaN entries sample by sample, in CSC order: a flagged
+       sample gets every feature, and every other sample gets the flagged
+       features in ascending order.
+    2. Find the stored values that fall on a flagged feature or sample.
+       Their slots in the layout are already filled, so they are marked:
+       a value's slot is its feature in a flagged sample's block, and its
+       feature's rank among the flagged features in any other block.
+    3. Drop the marked slots and shift each sample's start by the number
+       of slots dropped before it.
+    4. Add the NaN matrix to ``matrix``. The two store disjoint positions,
+       so the sum keeps every stored value and adds the NaN entries.
+
+    Note:
+        ``O(N + Z + F + S)`` for ``N`` stored values, ``Z`` NaN entries,
+        ``F`` features and ``S`` samples: each step is one vectorized pass,
+        and SciPy merges two canonical matrices in linear time.
+
+    Examples:
+        Feature 1 has no usable length and sample 1 cannot be normalized,
+        so every implicit zero on either becomes NaN, while stored values,
+        such as the 2 of feature 2 in sample 1, are kept:
+
+        >>> matrix = sparse.csc_matrix(
+        ...     np.array([[5.0, 0.0], [0.0, 0.0], [0.0, 2.0]])
+        ... )
+        >>> _store_nan_lines(
+        ...     matrix,
+        ...     sample_of_value=np.array([0, 1]),
+        ...     nan_features=np.array([False, True, False]),
+        ...     nan_samples=np.array([False, True]),
+        ... ).toarray()
+        array([[ 5., nan],
+               [nan, nan],
+               [ 0.,  2.]])
 
     Args:
         matrix: Canonical CSC matrix. It is not modified.
@@ -1181,11 +1445,15 @@ def compute_tpm(
     coverage, its RPK is infinite and the sample's other values become 0. A
     sample with no coverage is NaN.
 
-    Run time is linear in the size of the assay: proportional to features x
-    samples for a dense assay, and to stored values + features + samples for
-    a sparse one, which is never densified (indices that are not sorted are
-    sorted first). Missing or zero lengths and samples that cannot be
-    normalized add one stored NaN per affected entry.
+    Note:
+        A dense assay with ``F`` features and ``S`` samples takes ``O(F * S)``
+        time, with one output-sized array and a boolean mask of the same
+        shape when needed to skip NaNs. A canonical sparse assay takes
+        ``O(N + F + S + Z)`` for ``N`` stored input values and ``Z`` implicit
+        zeros written as NaNs. ``Z`` can reach ``F * S`` if every sample
+        has zero coverage. Sorting unsorted indices can add ``O(N log N)``
+        time. Reading the read-length column directly takes ``O(M + S)``
+        for ``M`` metadata columns.
 
     Args:
       rse: A :class:`~summarizedexperiment.RangedSummarizedExperiment`
@@ -1245,12 +1513,15 @@ def compute_tpm(
     )
 
 
+_AVG_READ_LENGTH_COLUMN = "recount_seq_qc.avg_len"
+
+
 def is_paired_end(
     sample_metadata_source: Any,
     avg_mapped_read_length_column: str = (
         "recount_qc.star.average_mapped_length"
     ),
-    avg_read_length_column: str = "recount_seq_qc.avg_len",
+    avg_read_length_column: str = _AVG_READ_LENGTH_COLUMN,
 ) -> pd.Series:
     """Infer paired-end status, matching recount3::is_paired_end().
 
@@ -1273,20 +1544,68 @@ def is_paired_end(
 
     Raises:
         ValueError: If required metadata columns are missing or non-numeric.
-    """
-    metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
 
-    external_id = _utils._resolve_metadata_column(metadata, "external_id")
-    external_id = external_id.map(str)
-    avg_mapped = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(
-            metadata, avg_mapped_read_length_column
-        ),
+    Note:
+        ``O(S + M)`` for ``S`` samples and ``M`` metadata columns: the three
+        columns used are found among the ``M`` names and read on their own,
+        also from a BiocPy experiment whose column data holds plain lists
+        and one-dimensional unstructured arrays. Other experiment-like
+        objects are converted with ``col_data.to_pandas()``, ``O(S * M)``.
+
+    Examples:
+        >>> metadata = pd.DataFrame(
+        ...     {
+        ...         "external_id": ["SRR1", "SRR2", "SRR3"],
+        ...         "recount_qc.star.average_mapped_length": [99.0, 202.0, 50],
+        ...         "recount_seq_qc.avg_len": [100.0, 101.0, 100.0],
+        ...     }
+        ... )
+        >>> is_paired_end(metadata).tolist()
+        [False, True, <NA>]
+    """
+    return _paired_end_status(
+        _sample_metadata_columns(sample_metadata_source),
         avg_mapped_read_length_column,
+        avg_read_length_column,
+    )
+
+
+def _paired_end_status(
+    column: Callable[[str], pd.Series],
+    avg_mapped_read_length_column: str,
+    avg_read_length_column: str,
+) -> pd.Series:
+    """Infer paired-end status from sample-metadata columns.
+
+    Steps
+
+    1. Read ``external_id`` as text, and both lengths as numbers.
+    2. Round each sample's mapped-to-read length ratio half to even, as R's
+       ``round(x, 0)`` does.
+    3. A ratio of 1 is single-end, 2 is paired-end; any other ratio is
+       unknown and is logged once for all such samples.
+
+    Note:
+        ``O(S)`` for ``S`` samples, plus the cost of reading three columns.
+
+    Args:
+        column: Reads a metadata column by name; see
+            :func:`_sample_metadata_columns`.
+        avg_mapped_read_length_column: Column with average mapped length.
+        avg_read_length_column: Column with average read length.
+
+    Returns:
+        The result documented by :func:`is_paired_end`.
+
+    Raises:
+        ValueError: If required metadata columns are missing or non-numeric.
+    """
+    external_id = column("external_id").map(str)
+    avg_mapped = _utils._coerce_numeric_column(
+        column(avg_mapped_read_length_column), avg_mapped_read_length_column
     )
     avg_len = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(metadata, avg_read_length_column),
-        avg_read_length_column,
+        column(avg_read_length_column), avg_read_length_column
     )
 
     # R uses round(..., 0). numpy.rint matches "round to nearest, ties to even".
@@ -1411,6 +1730,15 @@ def compute_scale_factors(  # noqa: PLR0917 - Existing positional API.
       TypeError: If `target_read_count` or `target_read_length_bp` are not
         numeric scalars.
 
+    Note:
+        ``O(S + M)`` for ``S`` samples and ``M`` metadata columns: the four
+        or five columns used are found among the ``M`` names and read on
+        their own, and every factor is one vectorized operation per sample.
+        A BiocPy experiment whose column data holds plain lists and
+        one-dimensional unstructured arrays is read the same way. Other
+        experiment-like objects are converted with ``col_data.to_pandas()``,
+        ``O(S * M)``.
+
     Examples:
         AUC-based scaling (default)::
 
@@ -1435,25 +1763,17 @@ def compute_scale_factors(  # noqa: PLR0917 - Existing positional API.
     ):
         raise TypeError("target_read_length_bp must be a numeric scalar.")
 
-    metadata = _utils._coerce_col_data_to_pandas(sample_metadata_source)
+    column = _sample_metadata_columns(sample_metadata_source)
 
     # Match recount3's stopifnot(): all of these must exist even if by="auc".
-    external_id = _utils._resolve_metadata_column(metadata, "external_id")
-    external_id = external_id.map(str)
+    external_id = column("external_id").map(str)
 
-    auc_values = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(metadata, auc_column),
-        auc_column,
-    )
+    auc_values = _utils._coerce_numeric_column(column(auc_column), auc_column)
     avg_mapped_values = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(
-            metadata, avg_mapped_read_length_column
-        ),
-        avg_mapped_read_length_column,
+        column(avg_mapped_read_length_column), avg_mapped_read_length_column
     )
     mapped_reads_values = _utils._coerce_numeric_column(
-        _utils._resolve_metadata_column(metadata, mapped_reads_column),
-        mapped_reads_column,
+        column(mapped_reads_column), mapped_reads_column
     )
 
     auc_values.index = external_id
@@ -1464,9 +1784,8 @@ def compute_scale_factors(  # noqa: PLR0917 - Existing positional API.
         scale_factor = float(target_read_count) / auc_values
     else:
         if paired_end_status is None:
-            paired_end_series = is_paired_end(
-                metadata,
-                avg_mapped_read_length_column=avg_mapped_read_length_column,
+            paired_end_series = _paired_end_status(
+                column, avg_mapped_read_length_column, _AVG_READ_LENGTH_COLUMN
             )
         else:
             paired_end_series = pd.Series(
@@ -1552,8 +1871,8 @@ def transform_counts(
         :func:`~recount3.se.compute_scale_factors`. Use this to override
         metadata column names (for example, `auc_column=...`,
         `mapped_reads_column=...`, `avg_mapped_read_length_column=...`) or to
-        provide
-        `paired_end_status=...` when paired-end status should not be inferred.
+        provide `paired_end_status=...` when paired-end status should not be
+        inferred.
 
     Returns:
       A :class:`~pandas.DataFrame` of scaled counts with the same dimensions
@@ -1567,6 +1886,13 @@ def transform_counts(
       TypeError: If ``rse`` is not a RangedSummarizedExperiment,
         ``round_to_integers`` is not a bool, or numeric parameters are not
         valid scalars.
+
+    Note:
+        ``O(F * S + M)`` for a dense assay of ``F`` features and ``S``
+        samples with ``M`` metadata columns, and ``O(N + F + S + M)`` for a
+        sparse assay with ``N`` stored values, which stays sparse: scaling
+        and rounding touch only stored values. The scale factors cost
+        ``O(S + M)`` (see :func:`compute_scale_factors`).
     """
     ranged_summarized_experiment_cls = (
         _utils.get_ranged_summarizedexperiment_class()
@@ -1659,6 +1985,12 @@ def to_anndata(experiment: Any, *, sanitize_for_hdf5: bool = False) -> Any:
         ValueError: If ``sanitize_for_hdf5`` is requested and a sanitized
           name would collide with an existing one, which would silently
           merge two distinct fields.
+
+    Note:
+        The size of the experiment: its assays (``O(F * S)`` dense, or
+        ``O(N)`` for ``N`` stored values of a sparse assay), its row and
+        column data, ``O(F * K + S * M)``, and its provenance. Sanitizing
+        adds one pass over every column and ``uns`` key.
 
     Examples:
         Convert an RSE and inspect the orientation::

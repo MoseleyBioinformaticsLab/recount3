@@ -2983,3 +2983,427 @@ class TestToAnndata:
         ):
             with pytest.raises(ImportError, match="recount3\\[anndata\\]"):
                 to_anndata(mock.MagicMock())
+
+
+# ---------------------------------------------------------------------------
+# Sample metadata read from experiments. Scale factors and paired-end status
+# must equal what the same calls return on ``col_data.to_pandas()``, whether
+# the experiment's columns are read one at a time or converted together.
+# ---------------------------------------------------------------------------
+
+
+_SCALE_COLUMNS = {
+    "external_id": ["SRR1", "SRR2", "SRR3", "SRR4"],
+    "recount_qc.bc_auc.all_reads_all_bases": [4e9, 8e9, None, 2e9],
+    "recount_qc.star.average_mapped_length": [100.0, 200.0, 300.0, 100.0],
+    "recount_qc.star.all_mapped_reads": [1e6, 2e6, 1e6, 3e6],
+    "recount_seq_qc.avg_len": [100.0, 100.0, 100.0, 50.0],
+}
+
+
+def _metadata_experiment(
+    column_data: dict[str, Any], *, row_names: Sequence[str] | None = ()
+) -> Any:
+    """Return a real SummarizedExperiment whose samples carry column_data.
+
+    ``row_names`` defaults to generated sample names; ``None`` builds an
+    experiment without sample names.
+    """
+    biocframe = pytest.importorskip("biocframe")
+    summarizedexperiment = pytest.importorskip("summarizedexperiment")
+    n_samples = len(next(iter(column_data.values())))
+    if row_names == ():
+        row_names = [f"sample{i}" for i in range(n_samples)]
+    return summarizedexperiment.SummarizedExperiment(
+        assays={"raw_counts": np.arange(2.0 * n_samples).reshape(2, -1)},
+        column_data=biocframe.BiocFrame(column_data, row_names=row_names),
+    )
+
+
+def _same_as_frame(function: Any, experiment: Any, **kwargs: Any) -> None:
+    """Assert function(experiment) equals function on its pandas frame.
+
+    The pandas frame is what ``col_data.to_pandas()`` yields, so this pins
+    an experiment to the documented coercion path, including errors.
+    """
+    frame = experiment.col_data.to_pandas()
+    try:
+        expected = function(frame, **kwargs)
+    except (TypeError, ValueError) as exc:
+        with pytest.raises(type(exc)) as raised:
+            function(experiment, **kwargs)
+        assert str(raised.value) == str(exc)
+        return
+    pd.testing.assert_series_equal(
+        function(experiment, **kwargs), expected, check_exact=True
+    )
+
+
+def _variant(**changes: Any) -> dict[str, Any]:
+    columns = {key: list(value) for key, value in _SCALE_COLUMNS.items()}
+    for key, value in changes.items():
+        if value is None:
+            columns.pop(key)
+        else:
+            columns[key] = value
+    return columns
+
+
+def _renamed(old: str, new: str) -> dict[str, Any]:
+    columns = _variant()
+    return {new if key == old else key: value for key, value in columns.items()}
+
+
+_METADATA_VARIANTS = {
+    "lists": _variant(),
+    "arrays": {
+        key: np.asarray(value, dtype=float) if key != "external_id" else value
+        for key, value in _variant(
+            **{"recount_qc.bc_auc.all_reads_all_bases": [4e9, 8e9, 1e9, 2e9]}
+        ).items()
+    },
+    "integer_arrays": _variant(
+        **{
+            "recount_qc.star.all_mapped_reads": np.array(
+                [10, 20, 30, 40], dtype=np.int64
+            ),
+            "external_id": np.array([1, 2, 3, 4]),
+        }
+    ),
+    "structured_ids": _variant(
+        external_id=np.array(
+            [("SRR1",), ("SRR2",), ("SRR3",), ("SRR4",)],
+            dtype=[("accession", "U4")],
+        )
+    ),
+    "numeric_text": _variant(
+        **{"recount_qc.star.average_mapped_length": ["100", " ", "", "50"]}
+    ),
+    "non_numeric_text": _variant(
+        **{"recount_qc.star.all_mapped_reads": ["1e6", "many", None, "3"]}
+    ),
+    "namespaced": _renamed(
+        "recount_qc.star.average_mapped_length",
+        "recount_qc__star.average_mapped_length",
+    ),
+    "upper_case": _renamed("external_id", "EXTERNAL_ID"),
+    "case_duplicates": {
+        **_variant(),
+        "EXTERNAL_ID": ["e1", "e2", "e3", "e4"],
+    },
+    "missing_auc": _variant(**{"recount_qc.bc_auc.all_reads_all_bases": None}),
+    "missing_read_length": _variant(**{"recount_seq_qc.avg_len": None}),
+    "missing_external_id": _variant(external_id=None),
+}
+
+
+@pytest.mark.requires_biocpy
+class TestSampleMetadataFromExperiments:
+    """Experiments yield exactly what their ``to_pandas()`` frame yields."""
+
+    @pytest.mark.parametrize("variant", sorted(_METADATA_VARIANTS))
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"by": "auc"},
+            {"by": "auc", "target_read_count": 1e6},
+            {"by": "mapped_reads"},
+            {
+                "by": "mapped_reads",
+                "paired_end_status": [True, False, None, True],
+            },
+        ],
+        ids=["auc", "auc_target", "mapped_inferred", "mapped_given"],
+    )
+    def test_scale_factors(self, variant: str, kwargs: dict[str, Any]) -> None:
+        experiment = _metadata_experiment(_METADATA_VARIANTS[variant])
+        _same_as_frame(compute_scale_factors, experiment, **kwargs)
+
+    @pytest.mark.parametrize("variant", sorted(_METADATA_VARIANTS))
+    def test_paired_end_status(self, variant: str) -> None:
+        experiment = _metadata_experiment(_METADATA_VARIANTS[variant])
+        _same_as_frame(is_paired_end, experiment)
+
+    @pytest.mark.parametrize("row_names", [None, ()], ids=["unnamed", "named"])
+    def test_empty_metadata_preserves_result_index_dtype(
+        self, row_names: Sequence[str] | None
+    ) -> None:
+        experiment = _metadata_experiment(
+            {name: [] for name in _SCALE_COLUMNS}, row_names=row_names
+        )
+        _same_as_frame(compute_scale_factors, experiment)
+        _same_as_frame(compute_scale_factors, experiment, by="mapped_reads")
+        _same_as_frame(is_paired_end, experiment)
+
+    @pytest.mark.parametrize("function", [compute_scale_factors, is_paired_end])
+    def test_multidimensional_metadata_preserves_conversion_error(
+        self, function: Any
+    ) -> None:
+        experiment = _metadata_experiment(_variant(embedding=np.zeros((4, 2))))
+        with pytest.raises(ValueError) as expected:
+            experiment.col_data.to_pandas()
+        with pytest.raises(ValueError) as raised:
+            function(experiment)
+        assert str(raised.value) == str(expected.value)
+
+    def test_values_are_exact(self) -> None:
+        experiment = _metadata_experiment(_variant())
+        factors = compute_scale_factors(experiment, by="mapped_reads")
+        assert list(factors.index) == ["SRR1", "SRR2", "SRR3", "SRR4"]
+        assert factors.name == "scale_factor"
+        np.testing.assert_allclose(
+            factors.to_numpy(),
+            [
+                4e7 * 100 / (1e6 * 100.0**2),
+                4e7 * 100 * 2 / (2e6 * 200.0**2),
+                np.nan,
+                4e7 * 100 * 2 / (3e6 * 100.0**2),
+            ],
+            rtol=0,
+        )
+        status = is_paired_end(experiment)
+        assert status.dtype == "boolean"
+        assert status.tolist()[:2] == [False, True]
+        assert pd.isna(status.iloc[2])
+        assert status.iloc[3]
+
+    def test_a_nested_frame_is_read_through_its_flattened_name(self) -> None:
+        biocframe = pytest.importorskip("biocframe")
+        columns = _variant(**{"recount_qc.star.average_mapped_length": None})
+        columns["recount_qc"] = biocframe.BiocFrame(
+            {"star.average_mapped_length": [100.0, 200.0, 300.0, 100.0]}
+        )
+        experiment = _metadata_experiment(columns)
+        _same_as_frame(compute_scale_factors, experiment, by="mapped_reads")
+        _same_as_frame(is_paired_end, experiment)
+        assert is_paired_end(experiment).tolist()[:2] == [False, True]
+
+    def test_a_factor_column_is_read_like_its_pandas_conversion(self) -> None:
+        biocutils = pytest.importorskip("biocutils")
+        columns = _variant(
+            external_id=biocutils.Factor.from_sequence(
+                ["SRR1", "SRR2", "SRR3", "SRR4"]
+            )
+        )
+        experiment = _metadata_experiment(columns)
+        _same_as_frame(compute_scale_factors, experiment, by="auc")
+        _same_as_frame(is_paired_end, experiment)
+
+    def test_sample_names_are_available_as_rownames(self) -> None:
+        experiment = _metadata_experiment(
+            _variant(), row_names=["100", "50", "200", "25"]
+        )
+        _same_as_frame(
+            is_paired_end, experiment, avg_read_length_column="ROWNAMES"
+        )
+        status = is_paired_end(experiment, avg_read_length_column="rownames")
+        # Mapped lengths 100/200/300/100 over 100/50/200/25.
+        assert status.isna().tolist() == [False, True, False, True]
+        assert not status.iloc[0]
+        assert status.iloc[2]
+
+    def test_a_rownames_column_is_replaced_by_the_sample_names(self) -> None:
+        experiment = _metadata_experiment(
+            {**_variant(), "rownames": [1.0, 1.0, 1.0, 1.0]},
+            row_names=["100", "101", "75", "50"],
+        )
+        _same_as_frame(
+            is_paired_end, experiment, avg_read_length_column="rownames"
+        )
+
+    def test_without_sample_names_there_is_no_rownames_column(self) -> None:
+        experiment = _metadata_experiment(_variant(), row_names=None)
+        _same_as_frame(compute_scale_factors, experiment, by="mapped_reads")
+        _same_as_frame(
+            is_paired_end, experiment, avg_read_length_column="rownames"
+        )
+
+    def test_transform_counts_scales_each_sample(self) -> None:
+        biocframe = pytest.importorskip("biocframe")
+        genomicranges = pytest.importorskip("genomicranges")
+        iranges = pytest.importorskip("iranges")
+        summarizedexperiment = pytest.importorskip("summarizedexperiment")
+        columns = _variant(
+            **{"recount_qc.bc_auc.all_reads_all_bases": [4e9, 8e9, 1e9, 2e9]}
+        )
+        samples = ["SRR1", "SRR2", "SRR3", "SRR4"]
+        counts = np.array([[1e3, 2e3, 3e3, 4e3], [5e3, 6e3, 7e3, 8e3]])
+        rse = summarizedexperiment.RangedSummarizedExperiment(
+            assays={"raw_counts": counts},
+            row_ranges=genomicranges.GenomicRanges(
+                seqnames=["chr1", "chr1"],
+                ranges=iranges.IRanges(start=[1, 50], width=[10, 10]),
+                names=["G1", "G2"],
+            ),
+            column_data=biocframe.BiocFrame(columns, row_names=samples),
+        )
+        frame = rse.col_data.to_pandas()
+        for by in ("auc", "mapped_reads"):
+            factors = compute_scale_factors(frame, by=by).to_numpy()
+            out = transform_counts(rse, by=by, round_to_integers=False)
+            np.testing.assert_array_equal(out.to_numpy(), counts * factors)
+            assert list(out.columns) == samples
+
+
+@pytest.mark.requires_biocpy
+class TestSampleMetadataReadsOnlyNeededColumns:
+    """Plain BiocPy column data is read column by column, never converted."""
+
+    def test_scaling_and_status_skip_to_pandas(self) -> None:
+        biocframe = pytest.importorskip("biocframe")
+        experiment = _metadata_experiment(_variant())
+        frame = experiment.col_data.to_pandas()
+        expected = [
+            compute_scale_factors(frame, by="auc"),
+            compute_scale_factors(frame, by="mapped_reads"),
+            is_paired_end(frame),
+        ]
+
+        def fail(self: Any) -> None:
+            raise AssertionError("to_pandas() converts every column")
+
+        with mock.patch.object(biocframe.BiocFrame, "to_pandas", fail):
+            got = [
+                compute_scale_factors(experiment, by="auc"),
+                compute_scale_factors(experiment, by="mapped_reads"),
+                is_paired_end(experiment),
+            ]
+        for result, want in zip(got, expected):
+            pd.testing.assert_series_equal(result, want, check_exact=True)
+
+    def test_nested_column_data_is_still_converted(self) -> None:
+        biocframe = pytest.importorskip("biocframe")
+        columns = _variant()
+        columns["nested"] = biocframe.BiocFrame({"x": [1, 2, 3, 4]})
+        experiment = _metadata_experiment(columns)
+        with mock.patch.object(
+            biocframe.BiocFrame,
+            "to_pandas",
+            autospec=True,
+            side_effect=biocframe.BiocFrame.to_pandas,
+        ) as converted:
+            compute_scale_factors(experiment, by="auc")
+        converted.assert_called_once()
+
+
+class TestScaleFactorContract:
+    """Messages, numeric types and column choices of the scaling helpers."""
+
+    def test_invalid_arguments_are_reported_exactly(self) -> None:
+        with pytest.raises(ValueError) as raised:
+            compute_scale_factors(_META.copy(), by="rpkm")
+        assert str(raised.value) == (
+            "'by' must be either 'auc' or 'mapped_reads'; got 'rpkm'."
+        )
+        with pytest.raises(TypeError) as raised:
+            compute_scale_factors(_META.copy(), target_read_count="1")
+        assert (
+            str(raised.value) == "target_read_count must be a numeric scalar."
+        )
+        with pytest.raises(TypeError) as raised:
+            compute_scale_factors(_META.copy(), target_read_length_bp=None)
+        assert (
+            str(raised.value)
+            == "target_read_length_bp must be a numeric scalar."
+        )
+
+    def test_unsupported_sources_are_reported_exactly(self) -> None:
+        class _ColumnDataWithoutPandas:
+            col_data = object()
+
+        message = (
+            "Expected a pandas.DataFrame or a SummarizedExperiment-like "
+            "object with `col_data.to_pandas()`."
+        )
+        for function in (compute_scale_factors, is_paired_end):
+            for source in (_ColumnDataWithoutPandas(), [1, 2]):
+                with pytest.raises(TypeError) as raised:
+                    function(source)
+                assert str(raised.value) == message
+
+    @pytest.mark.parametrize("by", ["auc", "mapped_reads"])
+    def test_rational_targets_give_float_factors(self, by: str) -> None:
+        fractions = pytest.importorskip("fractions")
+        factors = compute_scale_factors(
+            _META.copy(),
+            by=by,
+            target_read_count=fractions.Fraction(4 * 10**7),
+            target_read_length_bp=fractions.Fraction(100),
+        )
+        assert factors.dtype == np.float64
+        pd.testing.assert_series_equal(
+            factors, compute_scale_factors(_META.copy(), by=by)
+        )
+
+    def test_inference_uses_the_requested_mapped_length_column(self) -> None:
+        meta = _META.rename(
+            columns={"recount_qc.star.average_mapped_length": "my.mapped"}
+        ).assign(**{"recount_qc.star.average_mapped_length": [999.0] * 3})
+        factors = compute_scale_factors(
+            meta, by="mapped_reads", avg_mapped_read_length_column="my.mapped"
+        )
+        np.testing.assert_allclose(
+            factors.to_numpy(),
+            [
+                4e7 * 100 / (1e6 * 100.0**2),
+                4e7 * 100 * 2 / (2e6 * 200.0**2),
+                4e7 * 100 / (1e6 * 100.0**2),
+            ],
+            rtol=1e-15,
+        )
+
+    def test_paired_end_status_must_be_boolean(self) -> None:
+        with pytest.raises(TypeError, match="bool-like"):
+            compute_scale_factors(
+                _META.copy(), by="mapped_reads", paired_end_status=[2, 0, 1]
+            )
+
+    def test_unresolved_samples_are_logged_exactly(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        meta = pd.DataFrame(
+            {
+                "external_id": ["S1", "S2"],
+                "recount_qc.star.average_mapped_length": [300.0, 100.0],
+                "recount_seq_qc.avg_len": [100.0, 100.0],
+            }
+        )
+        with caplog.at_level(logging.WARNING):
+            is_paired_end(meta)
+        assert caplog.messages == [
+            "Unable to determine if samples are paired-end for 1 sample(s). "
+            "Setting paired_end=NA for those."
+        ]
+
+
+def test_docstring_examples_run() -> None:
+    import doctest
+
+    import recount3.se
+
+    results = doctest.testmod(recount3.se, raise_on_error=False)
+    assert results.attempted > 0
+    assert results.failed == 0
+
+
+@pytest.mark.requires_biocpy
+class TestSampleMetadataColumnReader:
+    """Each column read equals the Series ``to_pandas()`` holds."""
+
+    def test_columns_equal_their_pandas_conversion(self) -> None:
+        from recount3.se import _sample_metadata_columns
+
+        experiment = _metadata_experiment(_METADATA_VARIANTS["arrays"])
+        frame = experiment.col_data.to_pandas()
+        column = _sample_metadata_columns(experiment)
+        for name in frame.columns:
+            pd.testing.assert_series_equal(column(name), frame[name])
+
+    def test_sample_names_win_over_a_rownames_column_in_any_case(self) -> None:
+        experiment = _metadata_experiment(
+            {**_variant(), "RowNames": [1.0, 1.0, 1.0, 1.0]},
+            row_names=["100", "50", "75", "25"],
+        )
+        _same_as_frame(
+            is_paired_end, experiment, avg_read_length_column="rownames"
+        )

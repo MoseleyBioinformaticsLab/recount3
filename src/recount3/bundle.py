@@ -95,6 +95,7 @@ import datetime
 import functools
 import gzip
 import io
+import itertools
 import logging
 import re
 from typing import Any, TYPE_CHECKING
@@ -147,6 +148,11 @@ def _ensure_unique_columns(
 
     Returns:
       A copy of ``df`` with deduplicated, non-empty column names.
+
+    Note:
+        ``O(M)`` amortized for ``M`` columns; the column data is not copied.
+        A base name's suffix counter only ever increases, so the suffixes
+        skipped because a name is taken are bounded by ``M`` in all.
     """
     out = df.copy(deep=False)
     raw_cols = [("" if c is None else str(c)) for c in out.columns]
@@ -215,6 +221,10 @@ def _standardize_metadata_frame(df: pd.DataFrame) -> pd.DataFrame:
 
     Returns:
       A copy of ``df`` with standardized columns.
+
+    Note:
+        ``O(S * M)`` for ``S`` rows and ``M`` columns, the cost of the copy;
+        the key columns are canonicalized in ``O(S)`` each.
     """
     out = df.copy()
     out.columns = [str(col).strip().lower() for col in out.columns]
@@ -445,6 +455,60 @@ def _maybe_relabel_counts_columns_to_external_id(
     return renamed_counts, renamed_col
 
 
+def _row_values(frame: pd.DataFrame, label: Any) -> Sequence[Any]:
+    """Return one column's values as :meth:`pandas.DataFrame.iterrows` gives.
+
+    Sample-level loops need two or three metadata columns, and reading them
+    through ``iterrows()`` builds a full row of every column for every sample.
+    This returns the same values for one column at the cost of that column.
+
+    ``iterrows()`` converts each row to the dtype all columns share: float
+    for an all-numeric frame, object once any column holds text or another
+    extension type. A value can therefore differ in type from the column's
+    own, for example an integer sample ID read as ``12.0``.
+
+    Steps
+
+    1. A missing column reads as ``None`` for every row, as ``row.get`` does.
+    2. A one-column frame converts its column with that column's own default,
+       as ``iterrows()`` does for a single column.
+    3. Otherwise the shared dtype depends on the column dtypes. Convert an
+       empty slice to find that dtype, then cast the requested column. For
+       categoricals in object rows, cast the category values directly so a
+       missing category does not promote integer values to floats.
+
+    Note:
+        ``O(S + M)`` for ``S`` rows and ``M`` columns: ``O(M)`` to find the
+        shared dtype and ``O(S)`` to convert the column. ``iterrows()`` costs
+        ``O(S * M)``.
+
+    Args:
+        frame: Frame with unique column labels.
+        label: Column to read.
+
+    Returns:
+        One value per row, or ``None`` per row when the column is absent.
+
+    Examples:
+        >>> numeric = pd.DataFrame({"external_id": [11, 12], "auc": [1.5, 2.0]})
+        >>> _row_values(numeric, "external_id").tolist()
+        [11.0, 12.0]
+        >>> _row_values(numeric.assign(study="SRP1"), "external_id").tolist()
+        [11, 12]
+        >>> _row_values(numeric, "study")
+        [None, None]
+    """
+    if label not in frame.columns:
+        return [None] * len(frame)
+    column = frame[label]
+    dtype = None if frame.shape[1] == 1 else frame.iloc[:0].to_numpy().dtype
+    if dtype == np.dtype(object) and isinstance(
+        column.dtype, pd.CategoricalDtype
+    ):
+        return column.array.astype(object)
+    return column.to_numpy(dtype=dtype)
+
+
 def _read_rr_table(res: resource.R3Resource) -> pd.DataFrame:
     """Read an RR-style junction coordinate table into a DataFrame.
 
@@ -504,11 +568,27 @@ def _parse_gtf_attributes(attrs: pd.Series) -> pd.DataFrame:
     Repeated keys retain their last value. Missing attribute strings produce
     rows with missing values; the input index is preserved.
 
+    Note:
+        ``O(L + G * K)`` for ``G`` rows, ``L`` characters of attributes and
+        ``K`` distinct keys: the scan reads each character a bounded number
+        of times, and the result has ``G * K`` cells. The scan runs in
+        Python one row at a time, so it dominates the cost of building exon
+        ranges from a large annotation, though no algorithm can read the
+        attributes in less than ``O(L)``.
+
     Args:
       attrs: Series containing raw GTF attribute strings.
 
     Returns:
       DataFrame indexed like attrs, with one column per attribute key.
+
+    Examples:
+        >>> _parse_gtf_attributes(
+        ...     pd.Series(['gene_id "G1"; level 2;', 'gene_name "a;b";'])
+        ... )
+          gene_id level gene_name
+        0      G1     2       NaN
+        1     NaN   NaN       a;b
     """
     rows = []
     for value in attrs.fillna(""):
@@ -620,6 +700,23 @@ def _align_ranges_to_features(
     Duplicate IDs are matched by occurrence when multiplicities agree. An empty
     feature request produces a valid empty range table. Output order always
     follows the requested features.
+
+    Steps
+
+    1. If the annotation lists exactly the requested IDs in the requested
+       order, it is relabeled and returned.
+    2. If either side repeats an ID, the k-th occurrence of an ID is matched
+       to its k-th occurrence on the other side, after checking that both
+       sides repeat it equally often.
+    3. Otherwise each ID is looked up by hashing. IDs still missing are
+       looked up again with Ensembl version suffixes stripped from both
+       sides, provided the stripped annotation IDs do not name conflicting
+       coordinates.
+
+    Note:
+        ``O((G + F) * K)`` for ``G`` annotation rows with ``K`` columns and
+        ``F`` requested features: every step hashes or copies each row a
+        bounded number of times.
 
     Args:
       ranges: DataFrame containing a 'feature_id' column and coordinate columns.
@@ -811,14 +908,21 @@ def _ranges_from_gtf(
         feature type, covered ``bp_length``, nullable phase, and parsed GTF
         attributes. Gene IDs come from ``gene_id``; exon IDs prefer
         ``recount_exon_id`` over ``exon_id``. Missing IDs fall back to
-        coordinate
-        strings. Duplicate IDs with identical ranges retain separate annotation
-        rows. No matching features produces an empty coordinate/ID table.
+        coordinate strings. Duplicate IDs with identical ranges retain separate
+        annotation rows. No matching features produces an empty coordinate/ID
+        table.
 
     Raises:
         KeyError: If a required GTF column is missing.
         ValueError: If coordinates or covered lengths cannot be parsed, or
             duplicate feature IDs describe conflicting genomic ranges.
+
+    Note:
+        ``O(G + L + G_k * K)`` for ``G`` GTF rows, ``G_k`` rows of the
+        requested kind, ``L`` characters of their attributes and ``K``
+        attribute keys. Selecting the rows is one pass; parsing their
+        attributes (:func:`_parse_gtf_attributes`) dominates; the duplicate
+        check hashes the IDs.
     """
     df = gtf.loc[gtf["feature"] == feature_kind].copy()
     if df.empty:
@@ -1102,6 +1206,10 @@ def _to_genomic_ranges(ranges_df: pd.DataFrame) -> genomicranges.GenomicRanges:
       ImportError: If required BiocPy packages cannot be imported.
       KeyError: If a required coordinate column is absent.
       ValueError: If the range constructor rejects the coordinates.
+
+    Note:
+        ``O(F * K)`` for ``F`` ranges and ``K`` metadata columns, plus
+        ``O(k log k)`` for BiocPy to sort the ``k`` distinct sequence names.
     """
     genomic_ranges_cls = _utils.get_genomicranges_class()
     coords = ["seqnames", "starts", "ends", "strand"]
@@ -1134,6 +1242,13 @@ def _numeric_assay(
     Raises:
         ValueError: If counts are nonnumeric, missing, nonfinite, negative,
             not two-dimensional, or use a nonzero sparse fill value.
+
+    Note:
+        ``O(F * S)`` for ``F`` features and ``S`` samples of dense counts.
+        Sparse counts take ``O(N + S)`` for ``N`` stored values: pandas
+        gathers each column's stored values into COO form, SciPy converts
+        that to CSC by counting entries per column, and only the stored
+        values are validated.
     """
     if not isinstance(counts_df, pd.DataFrame) or counts_df.ndim != 2:
         raise ValueError("counts_df must be a 2D DataFrame.")
@@ -1176,6 +1291,10 @@ def _validate_count_frame(frame: pd.DataFrame) -> None:
     Raises:
         ValueError: If a column contains nonnumeric, missing, nonfinite, or
             negative counts, or has a nonzero sparse fill value.
+
+    Note:
+        ``O(F * S)`` for ``F`` features and ``S`` dense columns, and ``O(N)``
+        for the ``N`` stored values of sparse columns.
     """
     for name in frame.columns:
         column = frame[name]
@@ -1217,6 +1336,11 @@ def _experiment_frame(
     Raises:
         ValueError: If metadata length or identifiers do not match the assay.
         ImportError: If BiocFrame is unavailable.
+
+    Note:
+        ``O(n * K)`` for ``n`` rows and ``K`` columns: the identifiers are
+        compared in order, then as sets by hashing, the rows are reordered
+        at most once, and each column is copied once.
     """
     if len(frame) != len(names):
         raise ValueError(
@@ -1268,6 +1392,13 @@ def _construct_summarized_experiment(
         ValueError: If counts are invalid or metadata cannot be aligned.
         TypeError: If the experiment constructor rejects an input type.
         ImportError: If the required BiocPy packages are unavailable.
+
+    Note:
+        The size of the experiment: ``O(F * S)`` for a dense assay of ``F``
+        features and ``S`` samples, or ``O(N + F + S)`` for a sparse assay
+        with ``N`` stored values (see :func:`_numeric_assay`), plus
+        ``O(F * K + S * M)`` for ``K`` feature and ``M`` sample metadata
+        columns (see :func:`_experiment_frame`).
     """
     matrix = _numeric_assay(counts_df)
     rows, cols = list(counts_df.index.map(str)), list(
@@ -1317,6 +1448,11 @@ def _construct_ranged_summarized_experiment(
             invalid or required range columns are absent.
         TypeError: If the experiment constructor rejects an input type.
         ImportError: If the required BiocPy packages are unavailable.
+
+    Note:
+        The cost of :func:`_construct_summarized_experiment` plus
+        ``O(F * K_r)`` to align, validate and convert ``F`` ranges with
+        ``K_r`` columns.
     """
     matrix = _numeric_assay(counts_df)
     rows, cols = list(counts_df.index.map(str)), list(
@@ -1368,6 +1504,9 @@ def _validate_coordinates(frame: pd.DataFrame) -> None:
     Raises:
         KeyError: If a required coordinate column is absent.
         ValueError: If coordinates or strands are missing or invalid.
+
+    Note:
+        ``O(F)`` for ``F`` ranges: a fixed number of vectorized passes.
     """
     if frame[["seqnames", "starts", "ends", "strand"]].isna().any().any():
         raise ValueError(
@@ -1419,10 +1558,69 @@ def _project_key(
     )
 
 
+def _group_by_project(
+    resources: Iterable[resource.R3Resource],
+) -> dict[tuple[str | None, str | None, str | None], list[resource.R3Resource]]:
+    """Group resources by :func:`_project_key` in a single pass.
+
+    Builders handle a bundle one project at a time. Collecting each project's
+    resources with a scan of the whole bundle per project would cost
+    ``O(P * R)`` for ``P`` projects and ``R`` resources, which is quadratic
+    because every project brings its own resources; one pass costs ``O(R)``.
+
+    Args:
+        resources: Resources in bundle order.
+
+    Returns:
+        A mapping from project identity to that project's resources. Keys
+        follow the order in which each project first appears, and each list
+        keeps bundle order.
+    """
+    groups: dict[
+        tuple[str | None, str | None, str | None], list[resource.R3Resource]
+    ] = {}
+    for res in resources:
+        groups.setdefault(_project_key(res), []).append(res)
+    return groups
+
+
+# ---------------------------------------------------------------------------
+# Combining count tables across projects
+# ---------------------------------------------------------------------------
+
+
 def _merge_count_frames(
     frames: Sequence[pd.DataFrame], join_policy: str
 ) -> pd.DataFrame:
     """Combine count tables by feature identity while preserving sample order.
+
+    Each table holds one project's counts, features by samples. The result
+    has one row per feature of the joined feature index and the columns of
+    every table side by side, in input order.
+
+    Steps
+
+    1. Reject a ``join_policy`` other than ``"inner"`` or ``"outer"``.
+    2. Return a single table as a shallow copy, and place tables whose
+       indexes are all equal (same labels in the same order) side by side
+       unchanged. Repeated feature IDs are allowed only in these two cases.
+    3. Otherwise require unique feature IDs within each table and build the
+       joined index with :func:`_join_feature_index`: the IDs every table
+       shares for ``"inner"``, or every ID in first-seen order for
+       ``"outer"``.
+    4. Align each table to the joined index with
+       :func:`_reindex_count_frames`, which fills rows a table never had with
+       zero, and concatenate the aligned tables column-wise.
+
+    Note:
+        With ``P`` tables, ``F`` feature labels in all, ``U`` joined features,
+        ``S`` samples and ``N`` stored values in sparse tables, steps 1 to 3
+        take ``O(P + F)`` for outer joins of text feature IDs. See
+        :func:`_join_feature_index` for other joins. Step 4 takes
+        ``O(F + U + N + S)`` for tables in the junction loader's sparse
+        layout with text feature IDs, and ``O(F + U * S)`` for dense tables.
+        Pandas reindexes other sparse layouts by expanding each column to the
+        target length.
 
     Args:
         frames: Nonempty sequence of validated feature-by-sample count tables.
@@ -1439,6 +1637,18 @@ def _merge_count_frames(
         ValueError: If the join policy is unsupported.
         recount3.errors.CompatibilityError: If duplicate feature IDs prevent
             unambiguous alignment across different feature indices.
+
+    Examples:
+        >>> first = pd.DataFrame({"S1": [1, 2]}, index=["g1", "g2"])
+        >>> second = pd.DataFrame({"S2": [3, 4]}, index=["g2", "g3"])
+        >>> _merge_count_frames([first, second], "outer")
+            S1  S2
+        g1   1   0
+        g2   2   3
+        g3   0   4
+        >>> _merge_count_frames([first, second], "inner")
+            S1  S2
+        g2   2   3
     """
     if join_policy not in ("inner", "outer"):
         raise ValueError("join_policy must be 'inner' or 'outer'.")
@@ -1446,20 +1656,247 @@ def _merge_count_frames(
         return frames[0].copy(deep=False)
     if all(frame.index.equals(frames[0].index) for frame in frames[1:]):
         return pd.concat(frames, axis=1)
-    if any(not frame.index.is_unique for frame in frames):
+    index = _join_feature_index([frame.index for frame in frames], join_policy)
+    return pd.concat(_reindex_count_frames(frames, index), axis=1)
+
+
+def _join_feature_index(
+    indexes: Sequence[pd.Index], join_policy: str
+) -> pd.Index:
+    """Return the feature index that the counts of several projects share.
+
+    The result is exactly what joining the indexes pair by pair with
+    ``Index.intersection(..., sort=False)`` (``"inner"``) or
+    ``Index.union(..., sort=False)`` (``"outer"``) returns, including its
+    dtype and name, but the outer join avoids the cost of the pairwise form.
+
+    Join rules
+
+    * ``"inner"``: intersect pair by pair. Each intersection keeps the order
+      of its left side, so the result lists the shared IDs in the order of
+      the first index.
+    * ``"outer"`` with text indexes of one dtype: keep the first occurrence
+      of each ID using a dictionary for NumPy-backed strings or chunked
+      buffers for Arrow-backed strings. The first index of maximum length
+      represents all indexes equal to it for validation and merging. Other
+      index types are joined pair by pair to keep pandas' dtype and equality
+      rules.
+
+    Note:
+        With ``F`` labels in all and ``P`` indexes, the text outer join
+        takes ``O(P + F)`` time and ``O(P + U)`` space for ``U`` distinct
+        labels. A pairwise union can rehash the growing union for every index,
+        ``O(P * U)``, which is quadratic in the number of projects when each
+        adds new features. Each pairwise intersection costs its left side,
+        which only shrinks, plus the next index. Pandas can sort the matched
+        positions, so the inner join takes ``O(F)`` plus up to ``O(k log k)``
+        per step for ``k`` matches.
+
+    Args:
+        indexes: Feature indexes in project order.
+        join_policy: ``"inner"`` or ``"outer"``.
+
+    Returns:
+        The joined index. It keeps a name only when every index shares it.
+
+    Raises:
+        recount3.errors.CompatibilityError: If an index has repeated labels.
+
+    Examples:
+        >>> indexes = [pd.Index(["a", "b", "c"]), pd.Index(["d", "c", "a"])]
+        >>> _join_feature_index(indexes, "outer").tolist()
+        ['a', 'b', 'c', 'd']
+        >>> _join_feature_index(indexes, "inner").tolist()
+        ['a', 'c']
+    """
+    first = indexes[0]
+    text_outer_join = join_policy == "outer" and all(
+        index.dtype == first.dtype and _is_text_index(index)
+        for index in indexes
+    )
+    contributing_indexes = indexes
+    if text_outer_join:
+        largest_position, largest_index = max(
+            enumerate(indexes), key=lambda entry: len(entry[1])
+        )
+        contributing_indexes = [
+            index
+            for position, index in enumerate(indexes)
+            if position <= largest_position or not index.equals(largest_index)
+        ]
+    if any(_has_duplicate_features(index) for index in contributing_indexes):
         raise errors.CompatibilityError(
             "Cannot align duplicate feature IDs across projects."
         )
-    index = frames[0].index
-    for frame in frames[1:]:
-        index = (
-            index.intersection(frame.index, sort=False)
-            if join_policy == "inner"
-            else index.union(frame.index, sort=False)
+    if text_outer_join:
+        names = {index.name for index in indexes}
+        name = first.name if len(names) == 1 else None
+        if isinstance(first.dtype, pd.StringDtype) and first.dtype.storage in (
+            "pyarrow",
+            "pyarrow_numpy",
+        ):
+            # Arrow concatenation references existing chunks of strings.
+            joined = first.append(list(contributing_indexes[1:]))
+            return pd.Index(joined.array.unique(), name=name, dtype=first.dtype)
+        labels = (
+            index.to_numpy(dtype=object, copy=False)
+            for index in contributing_indexes
         )
-    return pd.concat(
-        [frame.reindex(index, fill_value=0) for frame in frames], axis=1
+        unique = dict.fromkeys(itertools.chain.from_iterable(labels))
+        return pd.Index(list(unique), name=name, dtype=first.dtype)
+    joined = first
+    for index in indexes[1:]:
+        joined = (
+            joined.intersection(index, sort=False)
+            if join_policy == "inner"
+            else joined.union(index, sort=False)
+        )
+    return joined
+
+
+def _is_text_index(index: pd.Index) -> bool:
+    """Return whether an index contains only nonmissing text labels."""
+    if isinstance(index.dtype, pd.StringDtype):
+        # Index.hasnans caches a mask on each input index.
+        return not index.array.isna().any()
+    return index.inferred_type in ("string", "empty")
+
+
+def _has_duplicate_features(index: pd.Index) -> bool:
+    """Check text IDs without retaining a lookup table for each project."""
+    if _is_text_index(index):
+        return len(index.array.unique()) != len(index)
+    return not index.is_unique
+
+
+def _reindex_count_frames(
+    frames: Sequence[pd.DataFrame], index: pd.Index
+) -> list[pd.DataFrame]:
+    """Return each count table reindexed to ``index``, with zeros for new rows.
+
+    Tables with text feature IDs in the junction loader's sparse layout
+    are moved one at a time by :func:`_reindex_sparse_frame`. Pandas handles
+    empty joins and other tables, including those whose index already equals
+    ``index`` and whose storage can be reused.
+
+    Note:
+        Choosing the path costs ``O(F_p + C_p)`` per table, for ``F_p`` labels
+        and ``C_p`` columns. The reindexing itself is described by
+        :func:`_merge_count_frames`.
+
+    Args:
+        frames: Count tables whose indexes have no repeated labels.
+        index: Target feature index.
+
+    Returns:
+        The reindexed tables, in input order.
+    """
+    target_is_text = not index.empty and _is_text_index(index)
+    return [
+        (
+            _reindex_sparse_frame(frame, index)
+            if target_is_text
+            and not frame.index.equals(index)
+            and _is_loader_sparse_frame(frame)
+            and _is_text_index(frame.index)
+            else frame.reindex(index, fill_value=0)
+        )
+        for frame in frames
+    ]
+
+
+_LOADER_SPARSE_SUBTYPES = (np.dtype(np.int64), np.dtype(np.float64))
+
+
+@functools.cache
+def _loader_sparse_dtype(subtype: np.dtype[Any]) -> pd.SparseDtype:
+    """Get the sparse dtype that this pandas version uses for junction counts.
+
+    For float counts, pandas has used 0, NaN, and 0.0 depending on the
+    version.
+    """
+    empty = sparse.csc_matrix((0, 1), dtype=subtype)
+    return pd.DataFrame.sparse.from_spmatrix(empty).dtypes.iloc[0]
+
+
+def _is_loader_sparse_frame(frame: pd.DataFrame) -> bool:
+    """Return whether a table uses the sparse layout of the junction loader.
+
+    That layout is what ``DataFrame.sparse.from_spmatrix`` builds: every
+    column has the same sparse dtype, with an int64 or float64 subtype, a
+    zero fill value of the type ``from_spmatrix`` uses, and integer-kind
+    storage. pandas keeps exactly that dtype when it reindexes such a column
+    with ``fill_value=0``, so :func:`_reindex_sparse_frame` can rebuild the
+    reindexed table with ``from_spmatrix`` and match it.
+    Other subtypes are widened differently by different pandas versions.
+
+    Note:
+        ``O(C)`` for ``C`` columns; no stored value is read.
+
+    Args:
+        frame: Count table to inspect.
+
+    Returns:
+        :data:`True` for a table with at least one column, all in that
+        layout.
+    """
+    if frame.shape[1] == 0:
+        return False
+    subtype = getattr(frame.dtypes.iloc[0], "subtype", None)
+    if subtype not in _LOADER_SPARSE_SUBTYPES:
+        return False
+    expected = _loader_sparse_dtype(subtype)
+    return expected.fill_value == 0 and all(
+        column.dtype == expected
+        and type(column.dtype.fill_value) is type(expected.fill_value)
+        and column.array.kind == "integer"
+        for _, column in frame.items()
     )
+
+
+def _reindex_sparse_frame(frame: pd.DataFrame, index: pd.Index) -> pd.DataFrame:
+    """Align a sparse junction count table to the joined feature index.
+
+    Look up the target row of each source feature. For each sparse column,
+    discard entries outside the join and explicit zeros, as pandas
+    reindexing does. Collect the surviving entries in target row order.
+
+    Note:
+        A single hash table on the target index is shared by all tables.
+        For one table, remapping and sorting the stored entries takes
+        ``O(F + N + S)`` time for ``F`` source features, ``N`` stored values and
+        ``S`` samples. Scratch space holds the feature lookup, the surviving
+        entries and temporary arrays for one source column.
+
+    Args:
+        frame: A table in the junction loader's sparse layout.
+        index: The joined index of text feature IDs.
+
+    Returns:
+        The table on the joined index, with zeros for new feature rows.
+    """
+    target_rows = index.get_indexer(frame.index)
+    if len(index) <= np.iinfo(np.int32).max:
+        target_rows = target_rows.astype(np.int32, copy=False)
+    data, rows, indptr = [], [], [0]
+    for _, column in frame.items():  # noqa: PERF102 - Yield sparse columns.
+        array = column.array
+        values = array.sp_values
+        positions = target_rows[array.sp_index.indices]
+        keep = (positions >= 0) & (values != 0)
+        kept_rows = positions[keep]
+        order = np.argsort(kept_rows, kind="stable")
+        data.append(values[keep][order])
+        rows.append(kept_rows[order])
+        indptr.append(indptr[-1] + len(kept_rows))
+    aligned = sparse.csc_matrix(
+        (np.concatenate(data), np.concatenate(rows), indptr),
+        shape=(len(index), frame.shape[1]),
+    )
+    result = pd.DataFrame.sparse.from_spmatrix(
+        aligned, index=index, columns=frame.columns
+    )
+    return result.__finalize__(frame, method="reindex")
 
 
 def _count_compat_keys(res: resource.R3Resource) -> tuple[str, str]:
@@ -1521,9 +1958,16 @@ def _make_unique_names(
         Names with later occurrences suffixed starting at two. Generated names
         avoid collisions with both original and previously generated names.
 
+    Note:
+        ``O(F)`` amortized for ``F`` names. Each name's occurrence counter
+        only ever increases, so the candidates skipped because a name is
+        taken are bounded by ``F`` in all.
+
     Examples:
         >>> _make_unique_names(["a", "b", "a"])
         ['a', 'b', 'a__dup2']
+        >>> _make_unique_names(["a", "a", "a__dup2"])
+        ['a', 'a__dup3', 'a__dup2']
     """
     seen: collections.Counter[str] = collections.Counter()
     reserved = set(names)
@@ -2347,24 +2791,43 @@ class R3ResourceBundle:
         enforces appropriate compatibility within the gene/exon family or
         the junctions family.
 
+        Steps
+
+        1. Select the count matrices of the unit: gene or exon tables, or
+           junction ``MM`` matrices, which must agree on organism and on
+           annotation or junction format.
+        2. Load each matrix if needed and validate it: unique, nonblank
+           sample and feature IDs, and finite, nonnegative counts.
+        3. Junction matrices from several projects number their rows
+           independently, so each is relabeled with the coordinates of its
+           own project's ``RR`` sidecar (see :meth:`_junction_ranges`). The
+           bundle is grouped by project once for that.
+        4. Combine the tables with :func:`_merge_count_frames`.
+
+        Note:
+            Linear in the bundle and the counts: ``O(R)`` to select and group
+            ``R`` resources, ``O(F * S)`` to validate dense tables of ``F``
+            features and ``S`` samples (``O(N + F + S)`` for sparse tables
+            with ``N`` stored values), plus the merge cost documented on
+            :func:`_merge_count_frames`.
+
         Args:
-          genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
-          join_policy: ``"inner"`` intersects feature rows; ``"outer"`` unions
-          them
-            and fills newly introduced rows with zero.
-          autoload: If :data:`True`, load resources on demand.
+            genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
+            join_policy: ``"inner"`` intersects feature rows; ``"outer"``
+                unions them and fills newly introduced rows with zero.
+            autoload: If :data:`True`, load resources on demand.
 
         Returns:
-          A wide matrix of shape ``(features, samples)`` as a
-          :class:`pandas.DataFrame`.
+            A wide matrix of shape ``(features, samples)`` as a
+            :class:`pandas.DataFrame`.
 
         Raises:
-          ValueError: If no compatible count resources exist or stacking
-            fails, including a required count resource failing to load.
-          recount3.errors.CompatibilityError: If feature spaces are
-          incompatible.
-          recount3.errors.RangesError: If multi-project junction coordinates are
-            missing or ambiguous.
+            ValueError: If no compatible count resources exist or stacking
+                fails, including a required count resource failing to load.
+            recount3.errors.CompatibilityError: If feature spaces are
+                incompatible.
+            recount3.errors.RangesError: If multi-project junction coordinates
+                are missing or ambiguous.
         """
         if join_policy not in ("inner", "outer"):
             raise ValueError("join_policy must be 'inner' or 'outer'.")
@@ -2398,6 +2861,12 @@ class R3ResourceBundle:
                 "or junction formats."
             )
         frames = []
+        keyed_by_coordinates = (
+            unit == "junction" and len(selected.resources) > 1
+        )
+        resources_by_project = (
+            _group_by_project(self.resources) if keyed_by_coordinates else {}
+        )
         for res in selected.resources:
             if not res.is_loaded():
                 if not autoload:
@@ -2426,13 +2895,9 @@ class R3ResourceBundle:
             frame = frame.copy(deep=False)
             frame.index = frame.index.map(str)
             frame.columns = frame.columns.map(str)
-            if unit == "junction" and len(selected.resources) > 1:
+            if keyed_by_coordinates:
                 group = R3ResourceBundle(
-                    [
-                        r
-                        for r in self.resources
-                        if _project_key(r) == _project_key(res)
-                    ]
+                    list(resources_by_project[_project_key(res)])
                 )
                 ranges = group._junction_ranges(frame, autoload=autoload)
                 frame.index = ranges.index
@@ -2447,16 +2912,22 @@ class R3ResourceBundle:
         Loaded sidecars are reused; newly parsed sidecars are cached on their
         resource. Missing and unknown strands are normalized to ``*``.
 
+        Note:
+            ``O(R + F * K)`` for ``R`` resources in the bundle and a sidecar
+            of ``F`` junctions with ``K`` columns: one filter of the bundle,
+            then a constant number of linear passes over the sidecar (parse,
+            validate, build the ``chromosome:start-end:strand`` names and
+            check them for duplicates by hashing).
+
         Args:
             counts: Count table whose row order and length match the matrix's
                 coordinate sidecar.
             autoload: Whether to retrieve the sidecar if it is not cached
-            locally.
+                locally.
 
         Returns:
             Range metadata indexed by ``chromosome:start-end:strand``
-            identities,
-            with one-based inclusive integer coordinates.
+            identities, with one-based inclusive integer coordinates.
 
         Raises:
             recount3.errors.CompatibilityError: If the bundle does not contain
@@ -2464,8 +2935,8 @@ class R3ResourceBundle:
             recount3.errors.MissingRangesError: If exactly one sidecar matching
                 the matrix's project and junction format cannot be identified.
             recount3.errors.RangesCoverageError: If required columns are
-            missing,
-                row counts differ, or junction coordinates are duplicated.
+                missing, row counts differ, or junction coordinates are
+                duplicated.
             ValueError: If coordinates are invalid.
             recount3.errors.DownloadError: If sidecar retrieval fails.
             OSError: If the cached sidecar cannot be read.
@@ -2551,13 +3022,51 @@ class R3ResourceBundle:
         Sample ``file_source`` metadata overrides the source when available;
         each resource's configuration supplies the mirror base URL.
 
+        Steps
+
+        The first two steps run once per bundle. The remaining steps run
+        for each sample.
+
+        1. The count resources are the candidates. The first candidate of each
+           project is indexed by project ID, and a bundle whose candidates all
+           belong to one project designates that project's first candidate as
+           the fallback for samples whose study matches none.
+        2. The ``study`` and ``external_id`` columns are read as
+           :func:`_row_values`, which gives the values ``iterrows()`` gives.
+        3. Takes the candidate of its study, else the fallback. A sample with
+           no candidate, or with a missing or blank ``external_id``, gets no
+           URL.
+        4. Uses the first column whose name ends in ``file_source``, located
+           the first time a sample needs it, to override the data source with
+           the last path component of a text value: ``"s3://bucket/gtex/"``
+           becomes ``"gtex"``.
+        5. Gets the URL of its BigWig file, from the candidate's configuration
+           or the default one, or no URL if organism, source or project is
+           missing.
+
+        For example, with count resources for ``SRP001`` and ``SRP002``::
+
+            study   external_id  ->  BigWigURL
+            SRP002  SRR2             .../sra/base_sums/02/SRP002/R2/
+                                     sra.base_sums.SRP002_SRR2.ALL.bw
+            SRP009  SRR9             None (no resource; two projects)
+            SRP001  ""               None (blank sample ID)
+
+        Note:
+            ``O(R + M + S)`` interpreted steps plus one ``O(S * M)`` block copy
+            of ``col_df``, for ``R`` resources, ``M`` metadata columns and
+            ``S`` samples. Reading rows with ``iterrows()`` and scanning the
+            candidates and columns again for every sample would take
+            ``O(S * (M + R))`` interpreted steps.
+
         Args:
-          col_df: Sample metadata DataFrame with an ``external_id`` column.
+            col_df: Sample metadata DataFrame with an ``external_id`` column
+                and unique column labels.
 
         Returns:
-          A copy of ``col_df`` with a ``BigWigURL`` column appended. If
-          the necessary resource attributes cannot be inferred, the column
-          contains ``None`` for the affected samples.
+            A copy of ``col_df`` with a ``BigWigURL`` column appended. If
+            the necessary resource attributes cannot be inferred, the column
+            contains ``None`` for the affected samples.
         """
         out = col_df.copy()
         count_types = {"count_files_gene_or_exon", "count_files_junctions"}
@@ -2566,28 +3075,44 @@ class R3ResourceBundle:
             for r in self.resources
             if getattr(r.description, "resource_type", None) in count_types
         ]
+        first_by_project: dict[str | None, resource.R3Resource] = {}
+        for res in candidates:
+            first_by_project.setdefault(_description_value(res, "project"), res)
+        only_project = (
+            candidates[0]
+            if len({_project_key(r) for r in candidates}) == 1
+            else None
+        )
+        default_config = functools.cache(r3_config.default_config)
+        source_values: Sequence[Any] | None = None
         urls = []
-        for _, row in out.iterrows():
-            study = row.get("study")
-            matching = [
-                r
-                for r in candidates
-                if pd.notna(study)
-                and _description_value(r, "project") == str(study)
-            ]
-            if not matching and len({_project_key(r) for r in candidates}) == 1:
-                matching = candidates[:1]
-            res = matching[0] if matching else None
-            external = row.get("external_id")
+        for position, (study, external) in enumerate(
+            zip(
+                _row_values(out, "study"),
+                _row_values(out, "external_id"),
+                strict=True,
+            )
+        ):
+            res = None
+            if candidates and pd.notna(study):
+                res = first_by_project.get(str(study))
+            if res is None:
+                res = only_project
             if res is None or pd.isna(external) or not str(external).strip():
                 urls.append(None)
                 continue
             org, source, project = _project_key(res)
-            source_fields = [
-                c for c in out.columns if c.lower().endswith("file_source")
-            ]
-            if source_fields and isinstance(row[source_fields[0]], str):
-                source = row[source_fields[0]].rstrip("/").rsplit("/", 1)[-1]
+            if source_values is None:
+                source_fields = [
+                    c for c in out.columns if c.lower().endswith("file_source")
+                ]
+                source_values = (
+                    _row_values(out, source_fields[0])
+                    if source_fields
+                    else [None] * len(out)
+                )
+            if isinstance(source_values[position], str):
+                source = source_values[position].rstrip("/").rsplit("/", 1)[-1]
             if not all((org, source, project)):
                 urls.append(None)
                 continue
@@ -2598,7 +3123,7 @@ class R3ResourceBundle:
                     data_source=source,
                     project=project,
                     sample=str(external),
-                    config=res.config,
+                    config=res.config or default_config(),
                 )
             )
         out["BigWigURL"] = urls
@@ -2618,6 +3143,31 @@ class R3ResourceBundle:
         remains, matching R's ``read_metadata()``. External and rail
         identifiers must define consistent sample mappings.
 
+        Steps
+
+        1. Load each metadata table, standardize its key columns
+           (``rail_id``, ``external_id``, ``study``), prefix every other
+           column with the table's name, and group the tables by project.
+        2. Within each project, check that ``rail_id`` and ``external_id``
+           map one to one, then merge the tables on the key columns with
+           ``metadata_join``.
+        3. Stack the projects and index every row by both of its
+           identifiers, so a count sample may be named by either. An
+           identifier naming two rows is ambiguous; the first one met,
+           row by row and ``external_id`` before ``rail_id``, is reported.
+        4. Pick the rows of the requested samples in their order. An inner
+           join requires every metadata row to be a counted sample; an outer
+           join keeps samples without metadata, filling ``external_id`` with
+           the sample ID.
+
+        Note:
+            ``O(T * S * M)`` for ``T`` tables per project (at most five in
+            recount3), ``S`` samples and ``M`` metadata columns, because each
+            merge copies the columns merged so far; for recount3's bounded
+            ``T`` that is the ``O(S * M)`` size of the output. The identifier
+            index of step 3 reads only the two identifier columns, ``O(S)``,
+            where reading whole rows would cost ``O(S * M)``.
+
         Args:
             sample_ids: Count sample identifiers in the desired output order.
             autoload: Whether to load metadata resources that are not already
@@ -2628,9 +3178,9 @@ class R3ResourceBundle:
 
         Returns:
             Metadata indexed by selected count sample IDs, with namespaced
-            columns
-            and column provenance in ``attrs``. A metadata-free bundle returns
-            only an ``external_id`` column for all requested samples.
+            columns and column provenance in ``attrs``. A metadata-free
+            bundle returns only an ``external_id`` column for all requested
+            samples.
 
         Raises:
             ValueError: If the join policy is invalid, every supplied table was
@@ -2712,9 +3262,13 @@ class R3ResourceBundle:
             merged_groups.append(merged)
         merged = pd.concat(merged_groups, ignore_index=True)
         lookup = {}
-        for position, row in merged.iterrows():
-            for key in ("external_id", "rail_id"):
-                value = row[key]
+        for position, *identifiers in zip(
+            merged.index,
+            _row_values(merged, "external_id"),
+            _row_values(merged, "rail_id"),
+            strict=True,
+        ):
+            for value in identifiers:
                 if pd.notna(value):
                     name = str(value)
                     if name in lookup and lookup[name] != position:
@@ -2783,10 +3337,34 @@ class R3ResourceBundle:
 
         Resources are selected by genomic unit and annotation, then metadata is
         merged within each project before combining count tables. Sample URLs
-        use
-        each project's source. Duplicate feature occurrences retain their
-        original
-        identifiers in row metadata while receiving unique output names.
+        use each project's source. Duplicate feature occurrences retain their
+        original identifiers in row metadata while receiving unique output
+        names.
+
+        Steps
+
+        1. Select the count resources of the unit (and annotation), which
+           must agree on organism and on annotation or junction format.
+        2. Group the bundle by project in one pass (:func:`_group_by_project`).
+           Each project's group holds its selected counts, its metadata
+           tables and, for junctions, its coordinate sidecars.
+        3. For each project, in the order projects first appear: stack its
+           counts (:meth:`_stack_counts_for`), merge and align its sample
+           metadata (:meth:`_normalize_sample_metadata`), relabel samples by
+           ``external_id`` where that is unambiguous, add BigWig URLs
+           (:meth:`_add_bigwig_urls`), and, when junctions from several
+           projects are combined, key the junction rows by coordinates
+           (:meth:`_junction_ranges`).
+        4. Combine the projects' counts (:func:`_merge_count_frames`) and
+           stack their sample metadata.
+        5. Give repeated feature IDs unique row names, keeping the original
+           IDs in ``feature_id``, and record the provenance.
+
+        Note:
+            Selecting and grouping ``R`` resources takes ``O(R)``. The
+            per-project costs are documented on the methods above. See
+            :func:`_merge_count_frames` for the cost of the feature join and
+            count alignment across projects.
 
         Args:
             genomic_unit: ``"gene"``, ``"exon"``, or ``"junction"``.
@@ -2794,17 +3372,16 @@ class R3ResourceBundle:
             join_policy: ``"inner"`` intersects features; ``"outer"`` unions
                 features and inserts zeros for structural absence.
             metadata_join: ``"inner"`` intersects nonempty metadata tables
-            within
-                each project; ``"outer"`` retains all count samples.
+                within each project; ``"outer"`` retains all count samples.
             autoload: Whether to load missing count/metadata resources and
-            retrieve
-                coordinate sidecars needed for multi-project junction alignment.
+                retrieve coordinate sidecars needed for multi-project junction
+                alignment.
 
         Returns:
             A tuple containing counts, feature metadata, sample metadata,
-            optional
-            aligned multi-project junction ranges, and experiment provenance.
-            Gene/exon ranges are resolved separately by the ranged builder.
+            optional aligned multi-project junction ranges, and experiment
+            provenance. Gene/exon ranges are resolved separately by the
+            ranged builder.
 
         Raises:
             ValueError: If no counts match, count values or sample mappings are
@@ -2814,7 +3391,7 @@ class R3ResourceBundle:
             recount3.errors.RangesError: If multi-project junctions cannot be
                 aligned with their coordinate sidecars.
             recount3.errors.LoadError: If a required metadata resource cannot
-            load.
+                load.
             recount3.errors.DownloadError: If required resource retrieval fails.
         """
         unit = _utils._normalize_genomic_unit(genomic_unit)
@@ -2866,19 +3443,18 @@ class R3ResourceBundle:
             )
         else:
             annotation = annotation_extension_used
-        keys = list(dict.fromkeys(_project_key(r) for r in selected.resources))
+        counts_by_project = _group_by_project(selected.resources)
+        resources_by_project = _group_by_project(self.resources)
+        keys = list(counts_by_project)
         frames, columns, range_frames = [], [], []
         used_resources = []
         for key in keys:
-            selected_counts = [
-                r for r in selected.resources if _project_key(r) == key
-            ]
+            selected_counts = counts_by_project[key]
             chosen = {id(r) for r in selected_counts}
             related = [
                 res
-                for res in self.resources
-                if _project_key(res) == key
-                and getattr(res.description, "resource_type", None)
+                for res in resources_by_project[key]
+                if getattr(res.description, "resource_type", None)
                 in {"metadata_files", "count_files_junctions"}
                 and id(res) not in chosen
                 and getattr(res.description, "junction_extension", None) != "MM"
@@ -3005,6 +3581,18 @@ class R3ResourceBundle:
         :mod:`summarizedexperiment` constructor (version 0.7.1 or newer).
         Sparse count inputs remain sparse in the assay.
 
+        Note:
+            Selecting and grouping ``R`` resources takes ``O(R)``. With
+            recount3's bounded number of metadata tables per project, the
+            work outside the feature index join is linear in the input and
+            output sizes for dense counts and junction-loader sparse counts
+            with matching text index dtypes. Building the outer join on text
+            feature IDs of one dtype takes ``O(L)`` for ``L`` input labels.
+            The default inner join can sort ``k`` matched positions at each
+            pairwise intersection to preserve feature order, adding up to
+            ``O(k log k)`` per intersection. See :func:`_merge_count_frames`
+            for other count layouts.
+
         Args:
           genomic_unit: Genomic unit to summarize, such as ``"gene"``,
             ``"exon"``, or ``"junction"``.
@@ -3086,20 +3674,29 @@ class R3ResourceBundle:
         :data:`True`, a plain :class:`SummarizedExperiment` is returned
         instead.
 
+        Note:
+            The costs of :meth:`to_summarized_experiment`, plus the ranges:
+            for genes and exons ``O(L + G * K)`` to parse an annotation of
+            ``G`` rows, ``L`` characters of attributes and ``K`` attribute
+            keys, then ``O((G + F) * K)`` to align it to ``F`` features; for
+            junctions ``O(F)`` per coordinate sidecar. A repeated build from
+            the same bundle and annotation reuses the aligned ranges.
+            Parsing the annotation's attributes, one row at a time in Python,
+            dominates an exon build because exon annotations are large.
+
         Args:
           genomic_unit: One of ``"gene"``, ``"exon"``, or ``"junction"``.
           annotation_extension: Annotation code for gene/exon
             assays, if desired.
           prefer_rr_junction_coordinates: Whether to use RR sidecars for
-          junction
-            ranges. Junction ranges require these sidecars; disabling this
-            option raises a range error or uses an explicitly enabled SE
-            fallback. Ignored for gene/exon experiments.
+            junction ranges. Junction ranges require these sidecars;
+            disabling this option raises a range error or uses an explicitly
+            enabled SE fallback. Ignored for gene/exon experiments.
           assay_name: Count assay name. The default ``"raw_counts"`` becomes
             ``"counts"`` for junction experiments.
           join_policy: ``"inner"`` intersects features across projects;
-          ``"outer"``
-            unions them and inserts zeros only for structurally absent features.
+            ``"outer"`` unions them and inserts zeros only for structurally
+            absent features.
           metadata_join: ``"inner"`` intersects nonempty metadata tables
             within each project. ``"outer"`` retains all count
             samples. This is independent of the feature ``join_policy``.

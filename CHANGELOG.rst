@@ -27,25 +27,72 @@ Breaking changes
 Changed
 ~~~~~~~
 
-- ``compute_tpm`` is faster and uses less memory. The read length and the
-  kilobase factor cancel when each sample is scaled to one million, so it
-  computes ``1e6 * (coverage / length) / sum(coverage / length)`` per sample
-  with one output-sized allocation. Results match the previous
-  implementation to within 1e-14 relative. On a 63,856-gene by 1,000-sample
-  integer assay it runs about 3.6 times faster with a third of the peak
-  memory.
-- ``compute_tpm`` keeps sparse assays sparse. Time and memory are
-  proportional to the stored values, not to features times samples; in
-  benchmarks with 2 to 10 percent nonzero entries it ran 23 to 75 times
-  faster with 14 to 69 times lower peak memory. Result columns have a fill
-  value of 0 and store only the nonzero values and any NaN entries.
-  Previously every entry was stored, with a fill value of NaN.
-- ``compute_tpm`` and ``compute_read_counts`` read only the read-length
-  column from BiocPy sample metadata instead of converting every metadata
-  column to pandas.
+- ``compute_tpm`` cancels the read-length and kilobase factors when scaling
+  each sample to one million. Sparse results use a fill value of 0 and
+  store nonzero values and NaN entries explicitly.
 - ``compute_tpm`` raises ``ValueError`` with a message giving both counts
   when the number of feature lengths does not match the number of features.
   Previously pandas raised a ``ValueError`` about coercing to a Series.
+- ``compute_tpm`` and ``compute_read_counts`` read the read-length column
+  directly from BiocPy sample metadata. ``compute_scale_factors``,
+  ``is_paired_end``, and ``transform_counts`` read the columns they need
+  directly when the column data uses plain lists or one-dimensional
+  unstructured arrays. Nested frames, ``Factor`` columns, and structured
+  arrays still use pandas conversion for these three functions.
+
+Performance
+~~~~~~~~~~~
+
+- Selecting resources for 800 projects with six resources each uses
+  one-pass grouping. Time went from 3.48 s to 6.64 ms (a 520-fold speedup).
+  Peak RAM went from 0.2 MiB to 0.5 MiB (0.3 MiB higher).
+- Building an outer index of text feature IDs was benchmarked for 40
+  projects with 25,000 IDs each and 512,500 distinct IDs overall. Time went
+  from 3.44 s to 162 ms (a 21-fold speedup). Peak RAM went from 152 MiB to
+  66 MiB (56% lower).
+- Building an outer index of text feature IDs was benchmarked for 160
+  projects sharing all but one of 60,000 IDs. Time went from 1.06 s to
+  42.4 ms (a 25-fold speedup). Peak RAM went from 667 MiB to 10 MiB
+  (98% lower).
+- An outer join of sparse junction counts from 16 projects with 50,000
+  junctions and 20 samples each at 1% density produced 425,000 joined
+  junctions. Time went from 6.24 s to 524 ms (a 12-fold speedup). Peak RAM
+  went from 126 MiB to 116 MiB (8% lower).
+- An inner join of sparse junction counts from 16 projects with 50,000
+  junctions and 20 samples each at 1% density produced 25,000 joined
+  junctions. Time went from 662 ms to 677 ms (roughly unchanged). Peak RAM
+  went from 72.3 MiB to 77.7 MiB (7% higher).
+- BigWig URL generation was benchmarked for 100 projects and 4,000 samples
+  with 200 metadata columns. Time went from 1.46 s to 58.8 ms (a 25-fold
+  speedup). Peak RAM went from 42.6 MiB to 11.3 MiB (73% lower).
+- Sample metadata alignment was benchmarked for one 200-column table and
+  4,000 count samples. Time went from 362 ms to 34.0 ms (an 11-fold
+  speedup). Peak RAM went from 45.7 MiB to 21.3 MiB (53% lower).
+- The AUC method of ``compute_scale_factors`` was benchmarked for 4,000
+  BiocPy samples with 200 metadata columns. Time went from 64.6 ms to
+  6.18 ms (a 10-fold speedup). Peak RAM went from 14.6 MiB to 2.5 MiB
+  (83% lower).
+- Paired-end inference with ``is_paired_end`` was benchmarked for 4,000
+  BiocPy samples with 200 metadata columns. Time went from 55.7 ms to
+  6.67 ms (an 8.4-fold speedup). Peak RAM went from 14.6 MiB to 2.5 MiB
+  (83% lower).
+- The AUC method of ``transform_counts`` was benchmarked for 1,000 features
+  and 4,000 BiocPy samples with 200 metadata columns. Time went from 138 ms
+  to 51.8 ms (a 2.7-fold speedup). Peak RAM went from 94.9 MiB to 93.8 MiB
+  (1% lower).
+- ``compute_read_counts`` was benchmarked for 16 features and 4,000
+  BiocPy samples with 200 metadata columns. Time went from 55.7 ms to
+  5.91 ms (a 9.4-fold speedup). Peak RAM went from 14.2 MiB to 3.63 MiB
+  (74% lower).
+- ``compute_tpm`` was benchmarked on a dense 63,856-gene by 1,000-sample
+  int32 assay. Time went from 2.54 s to 581 ms (a 4.4-fold speedup).
+  Peak RAM went from 1,463 MiB to 488 MiB (67% lower).
+- ``compute_tpm`` was benchmarked on a sparse 20,000-feature by 200-sample
+  CSC assay with 2% nonzero entries. Time went from 369 ms to 4.48 ms
+  (an 83-fold speedup). Peak RAM went from 169 MiB to 2.56 MiB (98% lower).
+- ``compute_tpm`` was benchmarked on a sparse 20,000-feature by 200-sample
+  CSC assay with 10% nonzero entries. Time went from 392 ms to 13.4 ms
+  (a 29-fold speedup). Peak RAM went from 169 MiB to 11.4 MiB (93% lower).
 
 Fixed
 ~~~~~
@@ -96,6 +143,8 @@ Documentation
   ``pyproject.toml`` cite the peer-reviewed package paper in *BMC Genomics*
   (doi: 10.1186/s12864-026-13499-9) in place of the bioRxiv preprint.
 - The README has a DOI badge that links to the *BMC Genomics* paper.
+- The API reference documents the time complexity of the experiment builders
+  and of the scaling, normalization and sample-metadata functions.
 
 Internal
 ~~~~~~~~
@@ -131,6 +180,12 @@ Internal
   SciPy sparse format, sparse storage, output layout, peak memory, and real
   BiocPy experiments. Mutation testing with mutmut kills every mutant of
   ``compute_tpm`` and its helpers except those that cannot change behavior.
+- Tests pin the experiment builders' count merging, project grouping,
+  BigWig URLs and sample alignment, and the scale-factor and paired-end
+  helpers, against verbatim copies of the earlier implementations, over
+  400 randomized dense and sparse merges and real BiocPy experiments, on
+  pandas 2 and 3. Other tests guard against quadratic or column-densifying
+  steps.
 - The test matrix installs Python 3.15 as a stable release. CPython 3.15.1
   is out, so ``actions/setup-python`` no longer needs ``allow-prereleases``.
 - The release workflow's verify jobs test the installed package. The
