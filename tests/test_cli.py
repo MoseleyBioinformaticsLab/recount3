@@ -37,6 +37,7 @@ import io
 import json
 import logging
 import pathlib
+import threading
 from typing import Any
 from unittest import mock
 
@@ -1625,6 +1626,62 @@ class TestCmdDownload:
             m.return_value = {"url": "http://x", "status": "ok", "dest": "/f"}
             code = _cmd_download(args, cfg)
         assert code == 0
+
+    def test_parallel_manifest_downloads_register_shared_cache_entries(
+        self, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        registry = pytest.importorskip("pybiocfilecache")
+        cfg = dataclasses.replace(
+            _make_cfg(tmp_path),
+            cache_backend="pybiocfilecache",
+            cache_disabled=False,
+        )
+        manifest = tmp_path / "manifest.jsonl"
+        manifest.write_text(
+            "\n".join(
+                json.dumps(
+                    {
+                        "resource_type": "count_files_gene_or_exon",
+                        "organism": "human",
+                        "data_source": "sra",
+                        "project": f"SRP000{index}",
+                        "genomic_unit": "gene",
+                        "annotation_extension": "G026",
+                    }
+                )
+                for index in range(4)
+            ),
+            encoding="utf-8",
+        )
+        barrier = threading.Barrier(4, timeout=5)
+
+        def response(url: str, **kwargs: Any) -> io.BytesIO:
+            barrier.wait()
+            return io.BytesIO(url.encode())
+
+        args = self._make_args(
+            manifest=str(manifest), dest=str(tmp_path / "downloads"), jobs=4
+        )
+        with mock.patch("recount3._utils.http_open", side_effect=response):
+            assert _cmd_download(args, cfg) == 0
+
+        events = [
+            json.loads(line) for line in capsys.readouterr().out.splitlines()
+        ]
+        assert len(events) == 4
+        with registry.BiocFileCache(cfg.cache_dir) as cache:
+            for event in events:
+                assert event["status"] == "ok"
+                row = cache.get(rname=event["url"])
+                assert row["rtype"] == "local"
+                assert (
+                    pathlib.Path(row["rpath"]).read_bytes()
+                    == event["url"].encode()
+                )
+                assert (
+                    pathlib.Path(event["dest"]).read_bytes()
+                    == event["url"].encode()
+                )
 
     def test_no_resources_returns_0_with_warning(
         self, tmp_path: pathlib.Path

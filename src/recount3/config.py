@@ -284,7 +284,8 @@ def recount3_cache_rm(
 
     This helper is analogous to the R-side ``recount3_cache_rm()``: it
     walks the cache directory and removes any file for which ``predicate``
-    returns True. Directories are left in place.
+    returns True, including files left by interrupted downloads. Run removal
+    while the cache is idle. Directories are left in place.
 
     Args:
       config: Optional configuration. If None, :func:`default_config` is
@@ -330,14 +331,20 @@ def recount3_cache_rm(
         return predicate(path)
 
     candidates = [p for p in recount3_cache_files(cfg) if _select(p)]
+    shared = cfg.cache_backend == "pybiocfilecache"
+    staged = [
+        p
+        for p in _utils._cache_staging_files(root.resolve() if shared else root)
+        if _select(p)
+    ]
 
-    if dry_run:
-        return candidates
+    if not dry_run:
+        if shared:
+            _utils._remove_biocfilecache_files(root, candidates)
+        else:
+            for path in candidates:
+                path.unlink()
+        for path in staged:
+            path.unlink(missing_ok=True)
 
-    if cfg.cache_backend == "pybiocfilecache":
-        _utils._remove_biocfilecache_files(root, candidates)
-    else:
-        for path in candidates:
-            path.unlink()
-
-    return candidates
+    return sorted(candidates + staged, key=str)

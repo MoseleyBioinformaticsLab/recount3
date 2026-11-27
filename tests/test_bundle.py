@@ -2998,8 +2998,9 @@ class TestR3ResourceBundleDownload:
         b = R3ResourceBundle()
         b.download(max_workers=4)
 
+    @pytest.mark.parametrize("backend", ["filesystem", "pybiocfilecache"])
     def test_parallel_cached_transfers_overlap_and_fill_one_zip(
-        self, local_config: Config, tmp_path: pathlib.Path
+        self, local_config: Config, tmp_path: pathlib.Path, backend: str
     ) -> None:
         """Distinct cached transfers overlap and produce a complete ZIP.
 
@@ -3008,6 +3009,9 @@ class TestR3ResourceBundleDownload:
         archive is then written under a single writer lock, which the ZIP's
         own integrity check confirms.
         """
+        if backend == "pybiocfilecache":
+            pytest.importorskip("pybiocfilecache")
+        local_config = dataclasses.replace(local_config, cache_backend=backend)
         barrier = threading.Barrier(4, timeout=5)
         resources = [
             R3Resource(

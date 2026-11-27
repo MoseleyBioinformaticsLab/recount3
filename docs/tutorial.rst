@@ -1307,59 +1307,66 @@ With ``cache="disable"``, ZIP downloads use temporary files before inserting
 complete members; directory downloads stream to their destinations without
 cache deduplication. Cache-disabled calls do not load pybiocfilecache.
 
-All these locks coordinate threads **within one Python process**. They do not
-coordinate separate CLI jobs, Python processes, R sessions, or cluster nodes.
-Use separate cache and output paths per concurrent process, or provide external
-coordination. Run cache removal, registry maintenance, and external file edits
-only when the cache is idle. Atomic payload replacement alone does not provide
-cross-process deduplication or transactional registry and payload updates.
+Payload and archive locks coordinate threads within one Python process. Use
+separate output paths across processes or coordinate writes to shared output.
+The optional backend also coordinates access to the shared SQLite registry.
+Run cache removal, registry maintenance, and external file edits when the
+cache is idle.
 
 
 Optional shared R/Python cache
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-recount3 already includes a fast URL-hash filesystem cache. It is the default
-and requires no cache extra. Use the optional ``pybiocfilecache`` backend when
-you need to share cached resources with R's BiocFileCache. Its SQLite lookups,
-metadata writes, and local-file checksums add measurable overhead; it is not
-a performance upgrade. Installing the extra alone does not change the default.
+The default ``filesystem`` backend uses URL-hash filenames and requires no
+cache extra. Select ``pybiocfilecache`` to share downloaded files and registry
+entries with R's BiocFileCache. Concurrent Python operations reuse a SQLite
+connection for each shared cache, hash payloads alongside transfers, and
+commit completed registrations in groups of up to 16. A cached download
+returns after its registration is committed. A failure to publish one file
+leaves the other registrations in the batch eligible to commit.
 
-In a controlled WSL2 benchmark (Python 3.14.7, three repetitions, four 1 MiB
-files, 25 ms per loopback HTTP request), median download times were:
+The table reports median wall time over three runs on local Linux ext4 with
+Python 3.14.7, SQLite 3.53.1, and pybiocfilecache 0.7.0. Each worker called
+``R3Resource.download()`` to fill or reuse the cache. The test supplied
+synthetic HTTP response bodies and added 20 ms of delay only to the
+delayed workload. Imports and output materialization were outside the timed
+runs. Cold runs started with an empty cache and warm runs reused those files.
 
-.. list-table:: Native cache versus optional shared cache
+.. list-table:: Cache-only downloads by backend
    :header-rows: 1
-   :widths: 30 15 20 20
+   :widths: 52 15 17 16
 
-   * - Cache state / workers
-     - Native (s)
-     - Shared (s)
-     - Shared/native
-   * - Empty / 1
-     - 0.131
-     - 0.429
-     - 3.3x
-   * - Empty / 4
-     - 0.054
-     - 0.365
-     - 6.8x
-   * - Warm / 1
-     - 0.0015
-     - 0.0382
-     - 26.1x
-   * - Warm / 4
-     - 0.0091
-     - 0.0622
-     - 6.9x
+   * - Workload
+     - Native (ms)
+     - Previous shared (ms)
+     - Updated shared (ms)
+   * - Cold, 128 × 4 KiB with delay, 8 workers
+     - 369.0
+     - 3425.7
+     - 698.3
+   * - Warm, 128 × 4 KiB, 8 workers
+     - 78.6
+     - 1841.3
+     - 382.8
+   * - Warm, 128 × 4 KiB, 1 worker
+     - 9.6
+     - 1801.3
+     - 819.2
+   * - Cold, 12 × 32 MiB, 8 workers
+     - 132.5
+     - 1145.0
+     - 295.8
+   * - Warm, 12 × 32 MiB, 8 workers
+     - 9.6
+     - 819.9
+     - 151.6
 
-The optional backend added roughly 22--25 MiB to peak client RSS in these
-cases. Empty-cache timing includes the optional import and registration;
-warm timing excludes prefill but includes lookups and local-file checksums.
-These figures describe these small controlled workloads, not public-mirror
-throughput or a universal slowdown ratio. Transfer size, network latency,
-registry size, and filesystem performance affect the overhead. The native
-backend is the faster default; shared-cache reuse can still avoid a much more
-expensive download when the file was already obtained from R.
+The updated shared cache was 4.9 times faster in the delayed cold run.
+Checksum reads and access-time updates still add work to warm downloads.
+For the 128 small files with one worker, looking up paths with
+``ensure_cached(download=False)`` took 52.9 ms with the updated backend,
+448.3 ms with the previous backend, and 4.6 ms with the native cache.
+Network latency, file sizes, worker count, and storage affect these timings.
 
 Install and explicitly select it with::
 
@@ -1427,12 +1434,13 @@ directory. For a custom location, point R at that **same directory**::
     info <- BiocFileCache::bfcinfo(bfc)
     BiocFileCache::bfcpath(bfc, rids = info$rid)
 
-The supported pybiocfilecache 0.7.x series maintains R database compatibility.
-Both interfaces use schema version ``0.99.4`` and the same resource columns.
-Sequential interoperability was tested with the supplied R recount3 source
-and BiocFileCache 3.0.0: R can query and use Python-created entries, Python can
-reuse R-created entries, and resource IDs remain unique after interleaved
-additions and deletion. SQL defaults can differ without preventing these reads.
+The supported pybiocfilecache 0.7.x series and R BiocFileCache use schema
+version ``0.99.4``. Python opens existing registries in that format. Registries
+created by recount3 use the same auto-incrementing resource IDs as R. Recount3
+adds an exact URL index when it first commits registrations to a registry.
+With R recount3 1.21.1 and BiocFileCache 3.0.0 on Linux, R and Python reused
+each other's entries and concurrently registered different URLs in the same
+database.
 
 The exact remote URL is the lookup key (``rname``). An existing R record is
 used at its registered path, including relative and web-resource paths.
@@ -1447,25 +1455,37 @@ cached download. R can find them by URL through ``bfcquery`` or ``bfcrpath``.
 R's ``recount3::file_retrieve`` also makes a remote availability check before
 consulting its cache; use ``bfcpath`` to access cached data without that check.
 
-recount3 continues to handle network timeouts, TLS, retries, and atomic
-replacement. It does not delegate transfers to the optional package's web
-downloader. Existing R resource types and relative paths are preserved.
-A Python refresh of an R web record clears the old HTTP validators, because
-the unconditional transfer does not collect replacements. Local records use
-pybiocfilecache's checksum; even warm local-cache downloads recompute it.
+recount3 handles network timeouts, TLS, retries, and atomic replacement.
+The shared backend preserves R resource types and relative paths. A Python
+refresh of an R web record clears the old HTTP validators because the
+unconditional transfer collects no replacements. Cached downloads recompute
+the configured checksum for local files, including on a cache hit. If you only
+need the path of an existing payload, use ``res.ensure_cached(download=False)``
+to resolve it without rehashing the file or updating its registry entry.
+This lookup and ``recount3_cache_files()`` also work on read-only cache snapshots.
 
-Registry operations are serialized per shared database within this Python
-process. Network transfers occur outside that lock. A registry error propagates
-while leaving any completed payload available. Retrying a local cache hit
-repairs its checksum; after an interrupted web refresh, repeat ``update`` to
-reset its validators. Payload replacement and SQLite commits are not one
-transaction, so a process crash may require registry maintenance.
+Python and R coordinate registry access using ``BiocFileCache.sqlite.LOCK``.
+Transfers and checksums run outside this lock. Initialize the shared cache
+before starting concurrent jobs. Python rechecks the destination under the
+registry lock before publishing a download and commits its checksum under the
+same lock. If R registers a different path for the URL during a download,
+Python discards the temporary file and retries at the registered path.
+Coordinate fetches or refreshes of the same payload across processes to avoid
+redundant transfers.
 
-``recount3_cache_files()`` excludes SQLite databases, journals, and R lock
-files. With this backend it includes registered paths outside the cache root and
-registered entries whose payload was removed externally. Patterns filter these
-paths. ``recount3_cache_rm()`` deletes selected payloads inside the cache root
-and removes their registry rows, including stale rows for missing payloads.
+Registry errors propagate. If a batch rolls back, Python restores the payloads
+it replaced in that transaction. A completed local download can be retained
+after an individual registration error. Retrying the local cache hit repairs
+its checksum. After a process crash during a web refresh, repeat ``update`` to
+reset its validators.
+
+``recount3_cache_files()`` excludes SQLite databases, journals, R lock files,
+and staged downloads. With this backend it includes registered paths outside
+the cache root and registered entries whose payload was removed externally.
+Patterns filter these paths. ``recount3_cache_rm()`` deletes selected payloads
+inside the cache root and removes their registry rows, including stale rows
+for missing payloads. It also removes selected staging files left inside the
+cache root by interrupted downloads.
 For registered files outside the cache root, including R's ``action="asis"``
 references, it removes only the registry rows and leaves the files untouched.
 Containment is checked after resolving symlinks. The returned list includes
@@ -1480,18 +1500,12 @@ It does not consult R's registry or maintain its rows. Use the optional backend
 for removal of registered files. Absolute-path local entries require repair if
 the cache is moved; relative R entries remain relative to the shared root.
 
-Inspect the same registry directly from Python with::
+Inspect the same registry directly with pybiocfilecache while the cache is idle::
 
     from pybiocfilecache import BiocFileCache
 
     with BiocFileCache(cfg.cache_dir) as registry:
         records = registry.list_resources()
-
-Shared format does not imply simultaneous-transfer coordination. The thread
-locks in recount3 do not coordinate R sessions or other Python processes.
-Use the shared directory sequentially, or provide external coordination for
-writers, refreshes, and removal.
-
 
 Configuration precedence is, from lowest to highest: library defaults,
 environment variables, an explicit :class:`~recount3.Config` passed to a

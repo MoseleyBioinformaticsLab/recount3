@@ -32,12 +32,20 @@
 from __future__ import annotations
 
 import builtins
+from concurrent import futures
+import contextlib
 import errno
 import gc
+import hashlib
 import io
+import multiprocessing
 import os
 import pathlib
+import runpy
+import sqlite3
 import ssl
+import sys
+import threading
 import types
 from typing import Any
 from unittest import mock
@@ -2122,6 +2130,14 @@ def test_ensure_parquet_engine_tolerates_missing_pandas_internals() -> None:
         assert _utils.ensure_parquet_engine() == "auto"
 
 
+def _fetch(
+    root: pathlib.Path, url: str, *, refresh: bool = False
+) -> pathlib.Path:
+    return _utils._ensure_biocfilecache(
+        url, root, lambda path: path.write_bytes(b"download"), refresh=refresh
+    )
+
+
 _REGISTRY_URL = "https://example.org/a.gz"
 
 
@@ -2198,13 +2214,11 @@ def test_register_biocfilecache_keeps_web_validators_on_a_cache_hit(
             row.fpath = _REGISTRY_URL
             row.etag = "remote-etag"
 
-    _utils._register_biocfilecache(
-        root, _REGISTRY_URL, registered, transferred=False
-    )
+    assert _fetch(root, _REGISTRY_URL) == registered
 
-    with _utils._biocfilecache(root) as cache:
+    with contextlib.closing(sqlite3.connect(root / _utils._BFC_DB_NAME)) as db:
         assert (
-            _utils._biocfilecache_rows(cache, _REGISTRY_URL)[0]["etag"]
+            db.execute("SELECT etag FROM resource").fetchone()[0]
             == "remote-etag"
         )
 
@@ -2230,12 +2244,11 @@ def test_register_biocfilecache_clears_web_validators_after_a_transfer(
             row.fpath = _REGISTRY_URL
             row.etag = "remote-etag"
 
-    _utils._register_biocfilecache(
-        root, _REGISTRY_URL, registered, transferred=True
-    )
+    assert _fetch(root, _REGISTRY_URL, refresh=True) == registered
 
-    with _utils._biocfilecache(root) as cache:
-        row = _utils._biocfilecache_rows(cache, _REGISTRY_URL)[0]
+    with contextlib.closing(sqlite3.connect(root / _utils._BFC_DB_NAME)) as db:
+        db.row_factory = sqlite3.Row
+        row = db.execute("SELECT * FROM resource").fetchone()
     assert row["rtype"] == "web"
     assert row["fpath"] == _REGISTRY_URL
     assert row["etag"] is None
@@ -2253,17 +2266,17 @@ def test_register_biocfilecache_never_reuses_a_rid_after_removal(
     for url in urls[:3]:
         path = _utils._biocfilecache_path(url, root)
         path.write_bytes(url.encode())
-        _utils._register_biocfilecache(root, url, path, transferred=True)
+        assert _fetch(root, url) == path
         paths.append(path)
 
-    _utils._remove_biocfilecache_files(root, [paths[0]])
+    _utils._remove_biocfilecache_files(root, [paths[0], paths[2]])
     last = _utils._biocfilecache_path(urls[3], root)
     last.write_bytes(urls[3].encode())
-    _utils._register_biocfilecache(root, urls[3], last, transferred=True)
+    assert _fetch(root, urls[3]) == last
 
-    with _utils._biocfilecache(root) as cache:
-        rows = _utils._biocfilecache_rows(cache)
-    assert [row["rid"] for row in rows] == ["BFC2", "BFC3", "BFC4"]
+    with contextlib.closing(sqlite3.connect(root / _utils._BFC_DB_NAME)) as db:
+        rows = db.execute("SELECT rid FROM resource ORDER BY id").fetchall()
+    assert rows == [("BFC2",), ("BFC4",)]
 
 
 def test_biocfilecache_paths_reports_payloads_deleted_outside_the_cache(
@@ -2311,6 +2324,703 @@ def test_remove_biocfilecache_files_drops_rows_and_native_payloads(
     assert not native.exists()
     assert kept.exists()
     assert _utils._biocfilecache_paths(root) == [kept]
+
+
+def test_biocfilecache_rejects_an_unsupported_schema(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Opening a future schema does not overwrite its metadata."""
+    pytest.importorskip("pybiocfilecache")
+    _utils._biocfilecache_path(_REGISTRY_URL, tmp_path)
+    database = tmp_path / _utils._BFC_DB_NAME
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        db.execute("UPDATE metadata SET value = 'future'")
+    with pytest.raises(RuntimeError, match="Database version is not"):
+        _utils._biocfilecache_path(_REGISTRY_URL, tmp_path)
+    with contextlib.closing(sqlite3.connect(database)) as db:
+        assert db.execute("SELECT value FROM metadata").fetchone() == (
+            "future",
+        )
+
+
+@pytest.mark.parametrize("read_only_db", [False, True])
+def test_biocfilecache_indexes_an_existing_registry_on_registration(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, read_only_db: bool
+) -> None:
+    """Leave lookups free of index writes and build the index on registration."""
+    source = tmp_path / "source.gz"
+    source.write_bytes(b"cached")
+    root = tmp_path / "cache"
+    payload = _add_relative_record(root, _REGISTRY_URL, source)
+    connect = sqlite3.connect
+
+    def query_only(
+        database: pathlib.Path, **kwargs: object
+    ) -> sqlite3.Connection:
+        db = connect(database, **kwargs)
+        db.execute("PRAGMA query_only = ON")
+        return db
+
+    if read_only_db:
+        monkeypatch.setattr(sqlite3, "connect", query_only)
+
+    query = (
+        "SELECT 1 FROM sqlite_master WHERE type = 'index' "
+        "AND name = 'recount3_resource_rname'"
+    )
+    with _utils._biocfilecache_registry(root):
+        assert _utils._biocfilecache_paths(root) == [payload]
+        assert _utils._biocfilecache_path(_REGISTRY_URL, root) == payload
+        with contextlib.closing(connect(root / _utils._BFC_DB_NAME)) as db:
+            assert db.execute(query).fetchone() is None
+        if read_only_db:
+            with pytest.raises(sqlite3.OperationalError, match="readonly"):
+                _fetch(root, _REGISTRY_URL)
+        else:
+            assert _fetch(root, _REGISTRY_URL) == payload
+    with contextlib.closing(connect(root / _utils._BFC_DB_NAME)) as db:
+        assert (db.execute(query).fetchone() is not None) == (not read_only_db)
+
+
+def test_biocfilecache_recovers_an_unversioned_legacy_registry(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Restore a missing version row without replacing legacy resources."""
+    source = tmp_path / "source.gz"
+    source.write_bytes(b"cached")
+    root = tmp_path / "cache"
+    payload = _add_relative_record(root, _REGISTRY_URL, source)
+    database = root / _utils._BFC_DB_NAME
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        db.execute("DELETE FROM metadata WHERE key = 'schema_version'")
+
+    assert _utils._biocfilecache_path(_REGISTRY_URL, root) == payload
+    assert payload.read_bytes() == b"cached"
+    with contextlib.closing(sqlite3.connect(database)) as db:
+        assert db.execute("SELECT value FROM metadata").fetchone() == (
+            _utils._BFC_SCHEMA_VERSION,
+        )
+
+
+def test_cache_utils_can_load_without_fork_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Load cache utilities on platforms that cannot register fork hooks."""
+    monkeypatch.delattr(os, "register_at_fork", raising=False)
+    utilities = runpy.run_path(_utils.__file__)
+    assert utilities["_BFC_ACTIVE"] == {}
+
+
+def test_cache_fork_hook_retains_only_open_connections(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reset inherited locks and keep an open connection out of child use."""
+    pytest.importorskip("pybiocfilecache")
+    active_lock = threading.Lock()
+    path_lock_guard = threading.Lock()
+    monkeypatch.setattr(_utils, "_BFC_ACTIVE_LOCK", active_lock)
+    monkeypatch.setattr(_utils, "_PATH_LOCKS_GUARD", path_lock_guard)
+    monkeypatch.setattr(_utils, "_BFC_ACTIVE", {})
+    monkeypatch.setattr(_utils, "_PATH_LOCKS", weakref.WeakValueDictionary())
+    monkeypatch.setattr(_utils, "_BFC_INHERITED_CONNECTIONS", [])
+
+    with (
+        _utils._biocfilecache_registry(tmp_path) as active,
+        _utils._biocfilecache_registry(tmp_path / "idle"),
+    ):
+        assert active.lookup(_REGISTRY_URL) is None
+        connection = active._connection
+        payload = tmp_path / "payload"
+        with _utils._path_lock_for_path(payload) as acquired:
+            assert acquired
+            _utils._reset_cache_locks_after_fork()
+        assert not _utils._BFC_ACTIVE
+        assert not _utils._PATH_LOCKS
+        assert _utils._BFC_ACTIVE_LOCK is not active_lock
+        assert _utils._PATH_LOCKS_GUARD is not path_lock_guard
+        assert _utils._BFC_INHERITED_CONNECTIONS == [connection]
+        assert connection.execute("SELECT 1").fetchone() == (1,)
+    active.close()
+
+
+def test_biocfilecache_read_only_unc_uri(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pass UNC paths to SQLite through a URI with a local authority."""
+    pytest.importorskip("pybiocfilecache")
+    _utils._biocfilecache_path(_REGISTRY_URL, tmp_path)
+    connect = mock.Mock(
+        return_value=sqlite3.connect(tmp_path / _utils._BFC_DB_NAME)
+    )
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    monkeypatch.setattr(
+        pathlib.Path,
+        "as_uri",
+        lambda path: "file://server/share/BiocFileCache.sqlite",
+    )
+    registry = _utils._BiocFileCacheRegistry(tmp_path)
+    with contextlib.closing(registry._connect(read_only=True)) as db:
+        assert db.execute("SELECT value FROM metadata").fetchone() == (
+            _utils._BFC_SCHEMA_VERSION,
+        )
+    connect.assert_called_once_with(
+        "file:////server/share/BiocFileCache.sqlite?mode=ro",
+        uri=True,
+        check_same_thread=False,
+    )
+
+
+@pytest.mark.parametrize(
+    ("write", "error_number"), [(True, errno.EACCES), (False, errno.EIO)]
+)
+def test_biocfilecache_propagates_lock_errors_without_a_read_only_fallback(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    write: bool,
+    error_number: int,
+) -> None:
+    """Surface failed writes and unexpected read lock errors."""
+    pytest.importorskip("pybiocfilecache")
+    lock = mock.Mock(side_effect=OSError(error_number, "lock failure"))
+    monkeypatch.setattr(_utils, "_biocfilecache_file_lock", lock)
+    with (
+        _utils._biocfilecache_registry(tmp_path) as registry,
+        pytest.raises(OSError, match="lock failure"),
+        registry._database(write=write),
+    ):
+        pytest.fail("Opened a registry without acquiring its lock")
+    lock.assert_called_once_with(tmp_path / _utils._BFC_LOCK_NAME, write=True)
+
+
+def test_biocfilecache_propagates_an_unexpected_index_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Allow lookup and report an index creation failure on registration."""
+    pytest.importorskip("pybiocfilecache")
+    path = _utils._biocfilecache_path(_REGISTRY_URL, tmp_path)
+    path.touch()
+    with _utils._biocfilecache_registry(tmp_path) as registry:
+        with registry._database(write=True) as db, db:
+            db.execute("CREATE TABLE recount3_resource_rname (name TEXT)")
+        assert _utils._biocfilecache_path(_REGISTRY_URL, tmp_path) == path
+        with pytest.raises(sqlite3.OperationalError, match="already a table"):
+            _fetch(tmp_path, _REGISTRY_URL)
+
+
+@pytest.mark.parametrize("has_staged_file", [False, True])
+def test_biocfilecache_verifies_the_payload_before_hashing(
+    tmp_path: pathlib.Path, has_staged_file: bool
+) -> None:
+    """Retry a vanished cache hit and report a vanished staged download."""
+    pytest.importorskip("pybiocfilecache")
+    payload = tmp_path / "missing"
+    with _utils._biocfilecache_registry(tmp_path) as registry:
+        assert registry.lookup(_REGISTRY_URL) is None
+        if has_staged_file:
+            staged = tmp_path / "staged"
+            with pytest.raises(FileNotFoundError):
+                registry.register(_REGISTRY_URL, payload, None, staged=staged)
+        else:
+            assert not registry.register(_REGISTRY_URL, payload, None)
+
+
+def test_biocfilecache_does_not_keep_a_download_over_a_changed_payload(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Preserve a newer payload when trying to retain an unregistered file."""
+    pytest.importorskip("pybiocfilecache")
+    payload = _fetch(tmp_path, _REGISTRY_URL)
+    staged = tmp_path / "staged"
+    staged.write_bytes(b"abandoned download")
+    version = _utils._payload_version(payload)
+    payload.write_bytes(b"newer payload")
+    with _utils._biocfilecache_registry(tmp_path) as registry:
+        previous = registry.lookup(_REGISTRY_URL)
+        registry.keep_download(
+            _REGISTRY_URL, payload, previous, version, staged
+        )
+    assert payload.read_bytes() == b"newer payload"
+    assert staged.read_bytes() == b"abandoned download"
+
+
+def test_cache_staging_files_excludes_non_staging_entries(
+    tmp_path: pathlib.Path,
+) -> None:
+    """List files directly inside staging directories."""
+    prefix = _utils._BFC_STAGING_PREFIX
+    (tmp_path / (prefix + "file")).touch()
+    directory = tmp_path / (prefix + "directory")
+    directory.mkdir()
+    (directory / "nested").mkdir()
+    staged = directory / "staged"
+    staged.touch()
+    assert list(_utils._cache_staging_files(tmp_path)) == [staged]
+
+
+@pytest.mark.skipif(
+    "fork" not in multiprocessing.get_all_start_methods(),
+    reason="requires the fork start method",
+)
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded, use of fork:DeprecationWarning"
+)
+def test_biocfilecache_forked_worker_uses_fresh_registry_and_payload_locks(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A child can use the same cache while the parent's locks are held."""
+    pytest.importorskip("pybiocfilecache")
+    payload = _fetch(tmp_path, _REGISTRY_URL)
+    with _utils._biocfilecache_registry(tmp_path) as registry:
+        assert registry.lookup(_REGISTRY_URL) is not None
+
+        def fetch_in_child() -> None:
+            with _utils._biocfilecache_registry(tmp_path) as child_registry:
+                assert child_registry is not registry
+                assert _fetch(tmp_path, _REGISTRY_URL) == payload
+
+        child = multiprocessing.get_context("fork").Process(
+            target=fetch_in_child
+        )
+        with registry._db_lock, _utils._path_lock_for_path(payload):
+            child.start()
+            try:
+                child.join(5)
+                assert child.exitcode == 0
+            finally:
+                if child.is_alive():
+                    child.kill()
+                    child.join()
+                child.close()
+        assert registry.lookup(_REGISTRY_URL) is not None
+
+
+@pytest.mark.parametrize("failure", [None, errno.EDEADLK, errno.EBADF])
+def test_biocfilecache_windows_lock_uses_r_byte(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, failure: int | None
+) -> None:
+    """Lock byte zero and retry only when the Windows contention wait expires."""
+    path = tmp_path / _utils._BFC_LOCK_NAME
+    path.write_bytes(b"existing")
+    fds = []
+
+    def lock(fd: int, operation: int, length: int) -> None:
+        assert operation == 17 and length == 1
+        assert os.lseek(fd, 0, os.SEEK_CUR) == 0
+        fds.append(fd)
+        if failure is not None and len(fds) == 1:
+            raise OSError(failure, "locking error")
+
+    monkeypatch.setattr(_utils, "os", types.SimpleNamespace(name="nt"))
+    monkeypatch.setitem(
+        sys.modules, "msvcrt", types.SimpleNamespace(locking=lock, LK_LOCK=17)
+    )
+    if failure == errno.EBADF:
+        with (
+            pytest.raises(OSError, match="locking error"),
+            _utils._biocfilecache_file_lock(path, write=False),
+        ):
+            pytest.fail("Acquired a lock with an invalid descriptor")
+        assert len(fds) == 1
+    else:
+        with _utils._biocfilecache_file_lock(path, write=False):
+            assert os.fstat(fds[0]).st_size == 8
+        assert len(fds) == (2 if failure else 1)
+    with pytest.raises(OSError):
+        os.fstat(fds[0])
+
+
+@pytest.mark.parametrize("split_batch", [False, True])
+def test_biocfilecache_batches_writes_and_isolates_failed_registrations(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    split_batch: bool,
+) -> None:
+    """Reject a single registration while committing the rest of the batch."""
+    pytest.importorskip("pybiocfilecache")
+    database = tmp_path / _utils._BFC_DB_NAME
+    urls = [f"https://example.org/{i}" for i in range(3)]
+    _utils._biocfilecache_path(urls[0], tmp_path)
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        db.executescript("""
+            CREATE TRIGGER reject_fixture BEFORE UPDATE OF rid ON resource
+            WHEN NEW.rname = 'https://example.org/1'
+            BEGIN SELECT RAISE(ABORT, 'fixture rejected'); END;
+            """)
+
+    barrier = threading.Barrier(3, timeout=5)
+    monkeypatch.setattr(_utils, "_BFC_BATCH_WAIT", 5)
+    if split_batch:
+        monkeypatch.setattr(_utils, "_BFC_BATCH_SIZE", 2)
+        monkeypatch.setattr(
+            _utils._BiocFileCacheRegistry,
+            "_batch_ready",
+            lambda registry: len(registry._pending) == 3,
+        )
+
+    def transfer(path: pathlib.Path) -> None:
+        path.write_bytes(b"transferred")
+        barrier.wait()
+
+    with futures.ThreadPoolExecutor(3) as pool:
+        pending = [
+            pool.submit(
+                _utils._ensure_biocfilecache,
+                url,
+                tmp_path,
+                transfer,
+                refresh=False,
+            )
+            for url in urls
+        ]
+        assert pending[0].exception(timeout=10) is None
+        with pytest.raises(sqlite3.IntegrityError, match="fixture rejected"):
+            pending[1].result(timeout=10)
+        assert pending[2].exception(timeout=10) is None
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        rows = db.execute(
+            "SELECT rname FROM resource ORDER BY rname"
+        ).fetchall()
+        assert rows == [(urls[0],), (urls[2],)]
+        db.execute("DROP TRIGGER reject_fixture")
+    monkeypatch.undo()
+    for url in urls:
+        transfer = mock.Mock()
+        path = _utils._ensure_biocfilecache(
+            url, tmp_path, transfer, refresh=False
+        )
+        assert path.read_bytes() == b"transferred"
+        transfer.assert_not_called()
+    assert len(_utils._biocfilecache_paths(tmp_path)) == 3
+    assert not _utils._BFC_ACTIVE
+
+
+def test_biocfilecache_failed_publish_preserves_other_web_refreshes(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A filesystem error rolls back validators only for the blocked path."""
+    pytest.importorskip("pybiocfilecache")
+    urls = [f"https://example.org/{name}.gz" for name in ("good", "blocked")]
+    good, blocked = tmp_path / "good.gz", tmp_path / "blocked.gz"
+    good.write_bytes(b"original")
+    blocked.mkdir()
+    _utils._biocfilecache_path(urls[0], tmp_path)
+    database = tmp_path / _utils._BFC_DB_NAME
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        db.executemany(
+            """INSERT INTO resource (rname, rpath, rtype, etag)
+            VALUES (?, ?, 'web', 'original')""",
+            zip(urls, [good.name, blocked.name], strict=True),
+        )
+
+    barrier = threading.Barrier(2, timeout=5)
+    monkeypatch.setattr(_utils, "_BFC_BATCH_WAIT", 5)
+
+    def transfer(path: pathlib.Path) -> None:
+        path.write_bytes(b"refreshed")
+        barrier.wait()
+
+    with futures.ThreadPoolExecutor(2) as pool:
+        ready, failing = [
+            pool.submit(
+                _utils._ensure_biocfilecache,
+                url,
+                tmp_path,
+                transfer,
+                refresh=True,
+            )
+            for url in urls
+        ]
+        assert ready.result(timeout=10) == good
+        with pytest.raises(errors.DownloadError, match="Failed to publish"):
+            failing.result(timeout=10)
+
+    assert good.read_bytes() == b"refreshed"
+    assert blocked.is_dir()
+    with contextlib.closing(sqlite3.connect(database)) as db:
+        rows = db.execute("SELECT etag FROM resource ORDER BY id").fetchall()
+        assert rows == [(None,), ("original",)]
+
+
+@pytest.mark.parametrize(
+    ("previous", "split_batch"),
+    [("missing", False), ("file", False), ("copy", False), ("file", True)],
+)
+def test_biocfilecache_batch_rollback_restores_prior_payloads(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    previous: str,
+    split_batch: bool,
+) -> None:
+    """A SQLite rollback restores publications from the failed transaction."""
+    pytest.importorskip("pybiocfilecache")
+    urls = [f"https://example.org/{name}.gz" for name in ("first", "second")]
+    first, second = tmp_path / "first.gz", tmp_path / "second.gz"
+    if previous != "missing":
+        first.write_bytes(b"original")
+    second.write_bytes(b"original")
+    if previous == "copy":
+        monkeypatch.setattr(
+            os, "link", mock.Mock(side_effect=OSError(errno.ENOTSUP, "link"))
+        )
+    _utils._biocfilecache_path(urls[0], tmp_path)
+    database = tmp_path / _utils._BFC_DB_NAME
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        db.executemany(
+            """INSERT INTO resource (rname, rpath, rtype, etag)
+            VALUES (?, ?, 'web', 'original')""",
+            zip(urls, [first.name, second.name], strict=True),
+        )
+        db.executescript("""
+            CREATE TRIGGER abort_batch BEFORE UPDATE OF etag ON resource
+            WHEN OLD.rname = 'https://example.org/second.gz'
+            BEGIN SELECT RAISE(ROLLBACK, 'batch rolled back'); END;
+            """)
+
+    first_enqueued = threading.Event()
+    second_started = threading.Event()
+
+    def ready(registry):
+        first_enqueued.set()
+        return len(registry._pending) == 2
+
+    def transfer_first(path):
+        assert second_started.wait(5)
+        path.write_bytes(b"refreshed")
+
+    def transfer_second(path):
+        second_started.set()
+        assert first_enqueued.wait(5)
+        path.write_bytes(b"refreshed")
+
+    monkeypatch.setattr(_utils, "_BFC_BATCH_WAIT", 5)
+    if split_batch:
+        monkeypatch.setattr(_utils, "_BFC_BATCH_SIZE", 1)
+    monkeypatch.setattr(_utils._BiocFileCacheRegistry, "_batch_ready", ready)
+    with futures.ThreadPoolExecutor(2) as pool:
+        pending = [
+            pool.submit(
+                _utils._ensure_biocfilecache,
+                url,
+                tmp_path,
+                transfer,
+                refresh=True,
+            )
+            for url, transfer in zip(
+                urls, [transfer_first, transfer_second], strict=True
+            )
+        ]
+        if split_batch:
+            assert pending[0].result(timeout=10) == first
+        for request in pending[1 if split_batch else 0 :]:
+            with pytest.raises(
+                sqlite3.IntegrityError, match="batch rolled back"
+            ):
+                request.result(timeout=10)
+
+    if split_batch:
+        assert first.read_bytes() == b"refreshed"
+    elif previous == "missing":
+        assert not first.exists()
+    else:
+        assert first.read_bytes() == b"original"
+    assert second.read_bytes() == b"original"
+    assert not list(tmp_path.glob(_utils._BFC_STAGING_PREFIX + "*"))
+    with contextlib.closing(sqlite3.connect(database)) as db:
+        assert db.execute(
+            "SELECT etag FROM resource ORDER BY id"
+        ).fetchall() == [
+            (None if split_batch else "original",),
+            ("original",),
+        ]
+
+
+def test_biocfilecache_batch_rollback_restores_a_symlink(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Restoring an overwritten cache path preserves the symlink itself."""
+    original = tmp_path / "original"
+    original.write_bytes(b"original")
+    path = tmp_path / "payload"
+    path.symlink_to(original.name)
+    staged = tmp_path / "staged"
+    staged.write_bytes(b"refreshed")
+
+    with contextlib.ExitStack() as undo:
+        _utils._BiocFileCacheRegistry._publish(
+            _REGISTRY_URL, staged, path, undo
+        )
+        assert path.read_bytes() == b"refreshed"
+
+    assert path.readlink() == pathlib.Path(original.name)
+    assert path.read_bytes() == b"original"
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+def test_biocfilecache_checksum_matches_payload_after_concurrent_replace(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, refresh: bool
+) -> None:
+    """Replace the destination after hashing and before taking the DB lock."""
+    pytest.importorskip("pybiocfilecache")
+    path = _fetch(tmp_path, _REGISTRY_URL)
+    competing = tmp_path / "competing"
+    competing.write_bytes(b"other process")
+    commit = _utils._BiocFileCacheRegistry._commit
+
+    def replace_then_commit(registry, batch):
+        if competing.exists():
+            competing.replace(path)
+        commit(registry, batch)
+
+    def transfer(destination: pathlib.Path) -> None:
+        assert refresh
+        destination.write_bytes(b"refreshed")
+
+    monkeypatch.setattr(
+        _utils._BiocFileCacheRegistry, "_commit", replace_then_commit
+    )
+    assert (
+        _utils._ensure_biocfilecache(
+            _REGISTRY_URL, tmp_path, transfer, refresh=refresh
+        )
+        == path
+    )
+    expected = b"refreshed" if refresh else b"other process"
+    assert path.read_bytes() == expected
+    with contextlib.closing(
+        sqlite3.connect(tmp_path / _utils._BFC_DB_NAME)
+    ) as db:
+        assert db.execute("SELECT etag FROM resource").fetchone() == (
+            hashlib.md5(expected).hexdigest(),
+        )
+
+
+def test_biocfilecache_warm_registration_tolerates_output_hardlinks(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Adding an output hardlink after hashing leaves the checksum valid."""
+    pytest.importorskip("pybiocfilecache")
+    path = _fetch(tmp_path, _REGISTRY_URL)
+    commit = _utils._BiocFileCacheRegistry._commit
+    links = []
+
+    def link_then_commit(registry, batch):
+        link = tmp_path / f"output-{len(links)}"
+        os.link(path, link)
+        links.append(link)
+        commit(registry, batch)
+
+    monkeypatch.setattr(
+        _utils._BiocFileCacheRegistry, "_commit", link_then_commit
+    )
+    assert _fetch(tmp_path, _REGISTRY_URL) == path
+    assert len(links) == 1
+    assert links[0].samefile(path)
+
+
+def test_biocfilecache_adopts_an_entry_registered_during_a_transfer(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A newly registered R destination wins over the native fallback."""
+    pytest.importorskip("pybiocfilecache")
+    other = tmp_path / "registered.gz"
+
+    def transfer(path: pathlib.Path) -> None:
+        path.write_bytes(b"native")
+        other.write_bytes(b"from R")
+        with (
+            contextlib.closing(
+                sqlite3.connect(tmp_path / _utils._BFC_DB_NAME)
+            ) as db,
+            db,
+        ):
+            db.execute(
+                """INSERT INTO resource (rname, rpath, rtype, fpath)
+                VALUES (?, ?, 'web', ?)""",
+                (_REGISTRY_URL, other.name, _REGISTRY_URL),
+            )
+
+    assert (
+        _utils._ensure_biocfilecache(
+            _REGISTRY_URL, tmp_path, transfer, refresh=False
+        )
+        == other
+    )
+    assert other.read_bytes() == b"from R"
+    _utils._remove_biocfilecache_files(tmp_path, [other])
+    fallback = tmp_path / _utils._cache_key_for_url(_REGISTRY_URL)
+    assert not fallback.exists()
+    assert _fetch(tmp_path, _REGISTRY_URL) == fallback
+    assert fallback.read_bytes() == b"download"
+
+
+def test_biocfilecache_rechecksums_when_a_web_entry_becomes_local(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A changed type triggers another lookup before a checksum can be saved."""
+    root = tmp_path / "cache"
+    source = tmp_path / "source"
+    source.write_bytes(b"web")
+    path = _add_relative_record(root, _REGISTRY_URL, source)
+    database = root / _utils._BFC_DB_NAME
+    with contextlib.closing(sqlite3.connect(database)) as db, db:
+        db.execute("UPDATE resource SET rtype = 'web'")
+
+    def transfer(destination: pathlib.Path) -> None:
+        destination.write_bytes(b"download")
+        with contextlib.closing(sqlite3.connect(database)) as db, db:
+            db.execute("UPDATE resource SET rtype = 'local'")
+
+    assert (
+        _utils._ensure_biocfilecache(
+            _REGISTRY_URL, root, transfer, refresh=True
+        )
+        == path
+    )
+    with contextlib.closing(sqlite3.connect(database)) as db:
+        assert db.execute("SELECT rtype, etag FROM resource").fetchone() == (
+            "local",
+            hashlib.md5(b"download").hexdigest(),
+        )
+
+
+def test_biocfilecache_duplicate_discovered_before_commit(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A duplicate added during transfer still surfaces the ambiguity."""
+    pytest.importorskip("pybiocfilecache")
+
+    def transfer(path: pathlib.Path) -> None:
+        path.write_bytes(b"download")
+        with (
+            contextlib.closing(
+                sqlite3.connect(tmp_path / _utils._BFC_DB_NAME)
+            ) as db,
+            db,
+        ):
+            db.executemany(
+                "INSERT INTO resource (rname) VALUES (?)",
+                [(_REGISTRY_URL,), (_REGISTRY_URL,)],
+            )
+
+    with pytest.raises(ValueError, match="Multiple BiocFileCache"):
+        _utils._ensure_biocfilecache(
+            _REGISTRY_URL, tmp_path, transfer, refresh=False
+        )
+
+
+def test_biocfilecache_reports_a_continuously_changing_entry(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A conflicting registry stays bounded by a small number of attempts."""
+    pytest.importorskip("pybiocfilecache")
+    with (
+        mock.patch.object(
+            _utils._BiocFileCacheRegistry, "register", return_value=False
+        ) as register,
+        pytest.raises(RuntimeError, match="entry changed during download"),
+    ):
+        _fetch(tmp_path, _REGISTRY_URL)
+    assert register.call_count == 3
 
 
 # ===========================================================================

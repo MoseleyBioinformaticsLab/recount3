@@ -271,6 +271,8 @@ setting), the default directory matches R's recount3 cache: normally
 An explicit ``--cache-dir`` or ``RECOUNT3_CACHE_DIR`` still takes precedence.
 The ``filesystem`` default remains ``~/.cache/recount3/files``. See
 :ref:`cache-and-configuration` for platform paths and shared-cache examples.
+With ``download --jobs``, shared-cache workers can overlap transfers and
+checksums and commit several completed registry updates together.
 
 Logging
 -------

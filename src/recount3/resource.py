@@ -94,6 +94,7 @@ import contextlib
 import csv
 import dataclasses
 import errno
+import functools
 import gzip
 import inspect
 import pathlib
@@ -213,27 +214,24 @@ def _ensure_cached_url(
     Returns:
         The absolute path pointing to the locally cached file.
     """
-    cache_path = (
-        _utils._biocfilecache_path(url, cache_root)
-        if cfg.cache_backend == "pybiocfilecache"
-        else _utils._cache_path(url, cache_root)
+    transfer = functools.partial(
+        _utils.download_to_file,
+        url,
+        chunk_size=chunk_size,
+        timeout=cfg.timeout,
+        insecure_ssl=cfg.insecure_ssl,
+        user_agent=cfg.user_agent,
+        attempts=cfg.max_retries,
     )
+    if cfg.cache_backend == "pybiocfilecache":
+        return _utils._ensure_biocfilecache(
+            url, cache_root, transfer, refresh=refresh
+        )
+
+    cache_path = _utils._cache_path(url, cache_root)
     with _utils._path_lock_for_path(cache_path):
-        transferred = refresh or not cache_path.exists()
-        if transferred:
-            _utils.download_to_file(
-                url,
-                cache_path,
-                chunk_size=chunk_size,
-                timeout=cfg.timeout,
-                insecure_ssl=cfg.insecure_ssl,
-                user_agent=cfg.user_agent,
-                attempts=cfg.max_retries,
-            )
-        if cfg.cache_backend == "pybiocfilecache":
-            _utils._register_biocfilecache(
-                cache_root, url, cache_path, transferred=transferred
-            )
+        if refresh or not cache_path.exists():
+            transfer(cache_path)
     return cache_path
 
 
@@ -474,8 +472,11 @@ class R3Resource:
         cfg = self.config or r3_config.default_config()
         return pathlib.Path(cfg.cache_dir)
 
-    def _cached_path(self) -> pathlib.Path:
+    def _cached_path(self, *, require_exists: bool = False) -> pathlib.Path:
         """Compute the local cache file path for this specific resource.
+
+        Args:
+            require_exists: Check that the payload is present.
 
         Returns:
             The fully resolved absolute path indicating exactly where this
@@ -485,9 +486,14 @@ class R3Resource:
         cfg = self.config or r3_config.default_config()
         if cfg.cache_backend == "pybiocfilecache":
             return _utils._biocfilecache_path(
-                self.url or "", self._cache_root()
+                self.url or "",
+                self._cache_root(),
+                require_exists=require_exists,
             )
-        return _utils._cache_path(self.url or "", self._cache_root())
+        path = _utils._cache_path(self.url or "", self._cache_root())
+        if require_exists:
+            path.stat()
+        return path
 
     def _ensure_cached(
         self, *, mode: r3_types.CacheMode, chunk_size: int
@@ -561,22 +567,18 @@ class R3Resource:
 
                 path = res.ensure_cached(download=False)
         """
-        path: pathlib.Path | None
         try:
-            path = self._cached_path()
-            cached = path.exists()
+            return self._cached_path(require_exists=True)
+        except FileNotFoundError as exc:
+            filename = exc.filename
         except Exception:
-            path = None
-            cached = False
-
-        if cached and path is not None:
-            return path
+            filename = None
 
         if not download:
             raise FileNotFoundError(
                 errno.ENOENT,
                 "Resource is not cached and downloading is disabled",
-                str(path) if path is not None else (self.url or ""),
+                filename or self.url or "",
             )
 
         self.download(path=None, cache_mode="enable")

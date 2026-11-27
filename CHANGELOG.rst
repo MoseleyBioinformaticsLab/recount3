@@ -43,6 +43,11 @@ Changed
 Performance
 ~~~~~~~~~~~
 
+- The optional ``pybiocfilecache`` backend reuses SQLite connections,
+  overlaps checksums with transfers, and batches registry updates while
+  coordinating SQLite access with R BiocFileCache. In a local ext4 benchmark
+  with eight workers, 128 simulated downloads with 20 ms of latency went
+  from 3.43 s to 698 ms, and 12 warm 32 MiB files went from 820 ms to 152 ms.
 - Selecting resources for 800 projects with six resources each uses
   one-pass grouping. Time went from 3.48 s to 6.64 ms (a 520-fold speedup).
   Peak RAM went from 0.2 MiB to 0.5 MiB (0.3 MiB higher).
@@ -97,6 +102,9 @@ Performance
 Fixed
 ~~~~~
 
+- The shared R/Python cache stages downloads until registration and restores
+  replaced files if the registry transaction rolls back. Cache lookup and
+  listing also work on read-only snapshots.
 - ``compute_read_counts``, ``transform_counts``, and ``compute_tpm`` sum
   duplicate entries in a sparse CSC or CSR assay, as SciPy defines them.
   pandas does not sum them when building a sparse DataFrame, so they were

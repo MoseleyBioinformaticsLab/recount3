@@ -33,7 +33,7 @@
 
 The module is organized into four sections:
 
-1. Caching Utilities: URL-based cache key generation and path management
+1. Caching Utilities: URL-based paths, payload locks, and the shared registry
 2. Filesystem Utilities: Directory management and atomic file operations
 3. HTTP Utilities: Network requests with retries, streaming, and ZIP handling
 4. Optional Dependency Management: lazy import helpers for BiocPy packages
@@ -64,7 +64,9 @@ Attributes:
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
+import concurrent.futures
 import contextlib
+import dataclasses
 import datetime
 import errno
 import functools
@@ -76,7 +78,9 @@ import os
 import pathlib
 import re
 import shutil
+import sqlite3
 import ssl
+import tempfile
 import threading
 import time
 import types
@@ -94,7 +98,6 @@ from recount3 import errors
 if TYPE_CHECKING:  # pragma: no cover
     import biocframe  # type: ignore[import-not-found]
     import genomicranges  # type: ignore[import-not-found]
-    import pybiocfilecache  # type: ignore[import-not-found]
     import summarizedexperiment  # type: ignore[import-not-found]
 
 _PATH_LOCKS_GUARD = threading.Lock()
@@ -182,152 +185,646 @@ def _zip_lock_for_path(zip_path: pathlib.Path) -> _WeakRefLock:
     return _path_lock_for_path(zip_path)
 
 
+_BFC_DB_NAME = "BiocFileCache.sqlite"
+_BFC_LOCK_NAME = _BFC_DB_NAME + ".LOCK"
+_BFC_STAGING_PREFIX = ".recount3-cache-staging-"
+_BFC_SCHEMA_VERSION = "0.99.4"
+_BFC_SCHEMA = """
+    BEGIN IMMEDIATE;
+    CREATE TABLE IF NOT EXISTS metadata (key TEXT UNIQUE NOT NULL, value TEXT);
+    INSERT INTO metadata VALUES ('schema_version', '0.99.4');
+    CREATE TABLE IF NOT EXISTS resource (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rid TEXT,
+        rname TEXT,
+        create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        access_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        rpath TEXT,
+        rtype TEXT,
+        fpath TEXT,
+        last_modified_time DATETIME DEFAULT NA,
+        etag TEXT DEFAULT NA,
+        expires DATETIME DEFAULT NA
+    );
+    COMMIT;
+"""
+_BFC_BATCH_SIZE = 16
+_BFC_BATCH_WAIT = 0.002
+_BFC_ACTIVE_LOCK = threading.Lock()
+_BFC_ACTIVE: dict[str, _BiocFileCacheRegistry] = {}
+_BFC_INHERITED_CONNECTIONS: list[sqlite3.Connection] = []
+
+
+def _reset_cache_locks_after_fork() -> None:
+    """Give the child fresh locks and keep inherited connections dormant.
+
+    Retain references to inherited SQLite connections for the lifetime of
+    the child to avoid closing them after the fork.
+    """
+    global _BFC_ACTIVE_LOCK, _PATH_LOCKS_GUARD  # noqa: PLW0603
+    _BFC_ACTIVE_LOCK = threading.Lock()
+    _PATH_LOCKS_GUARD = threading.Lock()
+    _PATH_LOCKS.clear()
+    _BFC_INHERITED_CONNECTIONS.extend(
+        registry._connection
+        for registry in _BFC_ACTIVE.values()
+        if registry._connection is not None
+    )
+    _BFC_ACTIVE.clear()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_cache_locks_after_fork)
+
+
 @contextlib.contextmanager
-def _biocfilecache(
-    root: pathlib.Path,
-) -> Iterator[pybiocfilecache.BiocFileCache]:
-    """Open the optional shared R/Python registry under a process-local lock.
+def _biocfilecache_file_lock(
+    path: pathlib.Path, *, write: bool
+) -> Iterator[None]:
+    """Acquire the same byte-range lock as R's BiocFileCache.
 
-    Network transfers must take place outside this context. Separate processes
-    and R sessions require external coordination when mutating the same cache.
+    On Unix, R relies on POSIX record locks with SQLite's ``unix-none`` VFS.
+    Closing the lock file releases the lock, including on error.
+    On Windows, retry when ``LK_LOCK`` exhausts its attempts on a busy lock.
+
+    Args:
+        path: Registry lock file.
+        write: Request an exclusive lock on Unix. Windows always uses an
+            exclusive lock on the first byte.
+
+    Yields:
+        Control while the lock is held.
     """
-    module = import_optional_module("pybiocfilecache")
-    root = root.expanduser().resolve()
-    with _path_lock_for_path(root / "BiocFileCache.sqlite"):
-        with module.BiocFileCache(root) as cache:
-            yield cache
+    with path.open("a+b" if write else "rb") as file:
+        if os.name == "nt":
+            import msvcrt
+
+            file.seek(0)
+            while True:
+                try:
+                    msvcrt.locking(file.fileno(), msvcrt.LK_LOCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno != errno.EDEADLK:
+                        raise
+        else:
+            import fcntl
+
+            operation = fcntl.LOCK_EX if write else fcntl.LOCK_SH
+            fcntl.lockf(file.fileno(), operation)
+        yield
 
 
-def _biocfilecache_rows(
-    cache: pybiocfilecache.BiocFileCache, url: str | None = None
-) -> list[dict]:
-    """Read records without the upstream get() wait for missing payloads."""
-    model = import_optional_module("pybiocfilecache.models").Resource
-    with cache.get_session() as session:
-        query = session.query(model)
-        if url is not None:
-            query = query.filter(model.rname == url)
-        return [row.to_dict() for row in query.all()]
+def _payload_version(path: pathlib.Path | int) -> tuple[int, ...] | None:
+    """Identify a payload without using timestamps changed by reads or links."""
+    try:
+        info = os.fstat(path) if isinstance(path, int) else path.stat()
+    except FileNotFoundError:
+        return None
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+    )
 
 
-def _biocfilecache_path(url: str, root: pathlib.Path) -> pathlib.Path:
-    """Resolve an R- or Python-registered URL, or its native cache destination.
+@dataclasses.dataclass(frozen=True, slots=True)
+class _BiocFileCacheEntry:
+    id: int
+    rpath: str
+    rtype: str
 
-    Relative database paths are resolved against the cache root, including R's
-    web records. Missing payloads retain their registered destination for
-    atomic repair. Duplicate URL names are ambiguous and raise ValueError.
-    """
-    with _biocfilecache(root) as cache:
-        rows = _biocfilecache_rows(cache, url)
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _BiocFileCacheWrite:
+    url: str
+    path: pathlib.Path
+    previous: _BiocFileCacheEntry | None
+    checksum: str | None
+    version: tuple[int, ...] | None
+    staged: pathlib.Path | None
+    result: concurrent.futures.Future[bool] = dataclasses.field(
+        default_factory=concurrent.futures.Future, init=False
+    )
+
+
+class _BiocFileCacheRegistry:
+    """Share a connection among active callers for one canonical cache root."""
+
+    def __init__(self, root: pathlib.Path) -> None:
+        self.root = root
+        self._connection: sqlite3.Connection | None = None
+        self._url_index_checked = False
+        self._db_lock = threading.Lock()
+        self._condition = threading.Condition()
+        self._pending: list[_BiocFileCacheWrite] = []
+        self._users = 0
+
+    def _connect(self, *, read_only: bool = False) -> sqlite3.Connection:
+        """Open a registry and validate its schema version.
+
+        Writable opens can finish legacy initialization if the tables exist
+        but the schema version is missing. Read-only opens use a SQLite URI
+        with a local authority, including for Windows UNC paths.
+
+        Args:
+            read_only: Open the database in read-only mode.
+
+        Returns:
+            A connection to the validated registry.
+
+        Raises:
+            RuntimeError: The registry lacks a supported schema version.
+        """
+        path = self.root / _BFC_DB_NAME
+        database: str | pathlib.Path = path
+        if read_only:
+            uri_path = path.as_uri().removeprefix("file://")
+            if not uri_path.startswith("/"):
+                uri_path = "//" + uri_path
+            database = f"file://{uri_path}?mode=ro"
+        with contextlib.ExitStack() as stack:
+            db = sqlite3.connect(
+                database, uri=read_only, check_same_thread=False
+            )
+            stack.callback(db.close)
+            has_metadata = db.execute(
+                "SELECT 1 FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'metadata'"
+            ).fetchone()
+            row = None
+            if has_metadata:
+                row = db.execute(
+                    "SELECT value FROM metadata WHERE key = 'schema_version'"
+                ).fetchone()
+            if row is None and not read_only:
+                db.executescript(_BFC_SCHEMA)
+            elif row != (_BFC_SCHEMA_VERSION,):
+                raise RuntimeError(
+                    f"Database version is not {_BFC_SCHEMA_VERSION}."
+                )
+            stack.pop_all()
+            return db
+
+    @contextlib.contextmanager
+    def _database(self, *, write: bool = False) -> Iterator[sqlite3.Connection]:
+        """Hold the registry lock while a caller uses the connection.
+
+        Read-only snapshots can lack R's lock file. When the lock file exists,
+        open it for reading if write access is unavailable.
+
+        Args:
+            write: Require a writable connection and an exclusive lock.
+
+        Yields:
+            The registry connection.
+        """
+        lock = self.root / _BFC_LOCK_NAME
+        with self._db_lock, contextlib.ExitStack() as stack:
+            if self._connection is None:
+                dependency = import_optional_module("pybiocfilecache")
+                self._hash_algorithm = dependency.CacheConfig(
+                    self.root
+                ).hash_algorithm
+                self.root.mkdir(parents=True, exist_ok=True)
+            try:
+                stack.enter_context(
+                    _biocfilecache_file_lock(
+                        lock, write=write or self._connection is None
+                    )
+                )
+            except OSError as exc:
+                if write or exc.errno not in (
+                    errno.EACCES,
+                    errno.EPERM,
+                    errno.EROFS,
+                ):
+                    raise
+                with contextlib.suppress(FileNotFoundError):
+                    stack.enter_context(
+                        _biocfilecache_file_lock(lock, write=False)
+                    )
+                with contextlib.closing(self._connect(read_only=True)) as db:
+                    yield db
+                return
+            if self._connection is None:
+                self._connection = self._connect()
+            yield self._connection
+
+    def close(self) -> None:
+        """Release the connection when the final caller leaves."""
+        if self._connection is not None:
+            self._connection.close()
+
+    @staticmethod
+    def _lookup(db: sqlite3.Connection, url: str) -> _BiocFileCacheEntry | None:
+        rows = db.execute(
+            "SELECT id, rpath, rtype FROM resource WHERE rname = ? LIMIT 2",
+            (url,),
+        ).fetchall()
         if len(rows) > 1:
             raise ValueError(f"Multiple BiocFileCache entries for URL: {url}")
-        if rows:
-            return (cache.config.cache_dir / rows[0]["rpath"]).resolve()
-        return _cache_path(url, cache.config.cache_dir)
+        return _BiocFileCacheEntry(*rows[0]) if rows else None
 
+    def lookup(self, url: str) -> _BiocFileCacheEntry | None:
+        """Return the one registered entry for the exact URL."""
+        with self._database() as db:
+            return self._lookup(db, url)
 
-def _register_biocfilecache(
-    root: pathlib.Path,
-    url: str,
-    path: pathlib.Path,
-    *,
-    transferred: bool = False,
-) -> None:
-    """Register a complete payload while preserving R resource paths/types.
+    def payload(
+        self, url: str, entry: _BiocFileCacheEntry | None
+    ) -> pathlib.Path:
+        """Use the registered destination, or the native URL-hash filename."""
+        if entry is None:
+            return self.root / _cache_key_for_url(url)
+        return (self.root / entry.rpath).resolve()
 
-    Callers hold the payload lock. Local records use the optional package's
-    checksum implementation. A refreshed web record loses old HTTP validators,
-    because recount3's unconditional transfer does not collect new validators.
-    The registry and payload are not a single cross-process transaction.
-    """
-    model = import_optional_module("pybiocfilecache.models").Resource
-    utilities = import_optional_module("pybiocfilecache.utils")
-    with _biocfilecache(root) as cache:
-        rows = _biocfilecache_rows(cache, url)
-        if not rows:
-            record = cache.add(
-                rname=url, fpath=path.resolve(), rtype="local", action="asis"
+    def register(
+        self,
+        url: str,
+        path: pathlib.Path,
+        previous: _BiocFileCacheEntry | None,
+        *,
+        staged: pathlib.Path | None = None,
+    ) -> bool:
+        """Publish the payload and wait for its transaction to commit.
+
+        The first ready writer waits briefly for other callers to join the
+        batch. Each caller holds its payload lock through the commit.
+
+        Args:
+            url: Exact URL used as the registry key.
+            path: Final payload path.
+            previous: Entry observed before the transfer or cache hit.
+            staged: Temporary file containing a completed download.
+
+        Returns:
+            True if the registration committed, or False if a registry
+            change requires another attempt.
+        """
+        checksum = None
+        version = None
+        if previous is None or previous.rtype != "web":
+            digest = hashlib.new(self._hash_algorithm, usedforsecurity=False)
+            try:
+                with (staged or path).open("rb") as file:
+                    if staged is None:
+                        version = _payload_version(file.fileno())
+                    for chunk in iter(lambda: file.read(256 * 1024), b""):
+                        digest.update(chunk)
+            except FileNotFoundError:
+                if staged is not None:
+                    raise
+                return False
+            checksum = digest.hexdigest()
+
+        request = _BiocFileCacheWrite(
+            url, path, previous, checksum, version, staged
+        )
+        with self._condition:
+            leader = not self._pending
+            self._pending.append(request)
+            if leader:
+                try:
+                    self._condition.wait_for(self._batch_ready, _BFC_BATCH_WAIT)
+                    for start in range(0, len(self._pending), _BFC_BATCH_SIZE):
+                        self._commit(
+                            self._pending[start : start + _BFC_BATCH_SIZE]
+                        )
+                except BaseException as exc:
+                    for pending in self._pending:
+                        if not pending.result.done():
+                            pending.result.set_exception(exc)
+                finally:
+                    self._pending.clear()
+            else:
+                self._condition.notify()
+        return request.result.result()
+
+    def _batch_ready(self) -> bool:
+        with _BFC_ACTIVE_LOCK:
+            return len(self._pending) >= min(self._users, _BFC_BATCH_SIZE)
+
+    def _commit(self, batch: list[_BiocFileCacheWrite]) -> None:
+        """Commit a batch and resolve each caller's result.
+
+        Build the URL index during registration and retain the ability to undo
+        published files until SQLite commits.
+
+        Args:
+            batch: Pending registrations to apply in one transaction.
+        """
+        results: list[bool | Exception] = []
+        with self._database(write=True) as db, contextlib.ExitStack() as undo:
+            with db:
+                db.execute("BEGIN IMMEDIATE")
+                if not self._url_index_checked:
+                    db.execute(
+                        "CREATE INDEX IF NOT EXISTS recount3_resource_rname "
+                        "ON resource (rname)"
+                    )
+                for request in batch:
+                    db.execute("SAVEPOINT registration")
+                    try:
+                        outcome = self._apply(db, request)
+                        if outcome and request.staged is not None:
+                            self._publish(
+                                request.url, request.staged, request.path, undo
+                            )
+                    except (
+                        errors.DownloadError,
+                        OSError,
+                        sqlite3.IntegrityError,
+                        ValueError,
+                    ) as exc:
+                        if not db.in_transaction:
+                            raise
+                        db.execute("ROLLBACK TO registration")
+                        results.append(exc)
+                    else:
+                        results.append(outcome)
+                    db.execute("RELEASE registration")
+            self._url_index_checked = True
+            undo.pop_all()
+        for request, outcome in zip(batch, results, strict=True):
+            if isinstance(outcome, Exception):
+                request.result.set_exception(outcome)
+            else:
+                request.result.set_result(outcome)
+
+    def _apply(
+        self, db: sqlite3.Connection, request: _BiocFileCacheWrite
+    ) -> bool:
+        """Apply one registration if it still matches the registry.
+
+        A concurrent writer can register the same payload or switch the URL
+        to an R-managed path. Access times use naive local time to match the
+        shared registry.
+
+        Args:
+            db: Connection inside the current write transaction.
+            request: Registration and its pre-transfer registry entry.
+
+        Returns:
+            True if the update was applied, or False if the caller needs to
+            look up the new path or compute a checksum.
+        """
+        entry = self._lookup(db, request.url)
+        if entry != request.previous:
+            if (
+                request.path.resolve()
+                != self.payload(request.url, entry).resolve()
+            ):
+                return False
+            if (entry is None or entry.rtype != "web") and (
+                request.checksum is None
+            ):
+                return False
+        if request.version is not None and (
+            _payload_version(request.path) != request.version
+        ):
+            return False
+        now = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .astimezone()
+            .replace(tzinfo=None)
+            .isoformat(" ")
+        )
+        if entry is None:
+            path = str(
+                request.path.resolve()
+                if request.staged is None
+                else request.path.parent.resolve() / request.path.name
             )
-            expected_rid = f"BFC{record['id']}"
-            if record["rid"] != expected_rid:
-                with cache.get_session() as session:
-                    session.query(model).filter(
-                        model.id == record["id"]
-                    ).update({"rid": expected_rid}, synchronize_session=False)
-            return
-        record = rows[0]
-        values = {
-            # Match the shared registry's naive local timestamp.
-            "access_time": datetime.datetime.now(),  # noqa: DTZ005
-            "last_modified_time": record["last_modified_time"],
-        }
-        if record["rtype"] == "web":
-            if transferred:
-                values.update(etag=None, last_modified_time=None, expires=None)
+            cursor = db.execute(
+                """INSERT INTO resource
+                (rname, rpath, rtype, fpath, etag, last_modified_time, expires)
+                VALUES (?, ?, 'local', ?, ?, NULL, NULL)""",
+                (request.url, path, path, request.checksum),
+            )
+            db.execute(
+                "UPDATE resource SET rid = ? WHERE id = ?",
+                (f"BFC{cursor.lastrowid}", cursor.lastrowid),
+            )
+        elif entry.rtype != "web":
+            db.execute(
+                "UPDATE resource SET access_time = ?, etag = ? WHERE id = ?",
+                (now, request.checksum, entry.id),
+            )
+        elif request.staged is not None:
+            db.execute(
+                """UPDATE resource SET access_time = ?, etag = NULL,
+                last_modified_time = NULL, expires = NULL WHERE id = ?""",
+                (now, entry.id),
+            )
         else:
-            values["etag"] = utilities.calculate_file_hash(
-                path, cache.config.hash_algorithm
+            db.execute(
+                "UPDATE resource SET access_time = ? WHERE id = ?",
+                (now, entry.id),
             )
-        with cache.get_session() as session:
-            session.query(model).filter(model.id == record["id"]).update(
-                values, synchronize_session=False
+        return True
+
+    @staticmethod
+    def _publish(
+        url: str,
+        staged: pathlib.Path,
+        path: pathlib.Path,
+        undo: contextlib.ExitStack,
+    ) -> None:
+        """Replace a payload with a way to undo it if SQLite rolls back."""
+        backup = None
+        try:
+            is_symlink = path.is_symlink()
+            if is_symlink or path.exists():
+                backup = staged.with_name(staged.name + ".previous")
+                if is_symlink:
+                    shutil.copy2(path, backup, follow_symlinks=False)
+                else:
+                    try:
+                        os.link(path, backup)
+                    except OSError:
+                        shutil.copy2(path, backup)
+            _atomic_replace(staged, path)
+        except OSError as exc:
+            raise errors.DownloadError(
+                f"Failed to publish {url!r} to {str(path)!r}"
+            ) from exc
+        if backup is None:
+            undo.callback(path.unlink, missing_ok=True)
+        else:
+            undo.callback(_atomic_replace, backup, path)
+
+    def keep_download(
+        self,
+        url: str,
+        path: pathlib.Path,
+        previous: _BiocFileCacheEntry | None,
+        version: tuple[int, ...] | None,
+        staged: pathlib.Path,
+    ) -> None:
+        """Keep a completed download whose checksum can be repaired on a hit."""
+        if (previous is None or previous.rtype != "web") and staged.exists():
+            with self._database(write=True) as db:
+                if (
+                    self._lookup(db, url) == previous
+                    and _payload_version(path) == version
+                ):
+                    _atomic_replace(staged, path)
+
+    def paths(self) -> list[pathlib.Path]:
+        """List registered paths, including missing payloads."""
+        with self._database() as db:
+            rows = db.execute("SELECT rpath FROM resource").fetchall()
+        return [(self.root / path).resolve() for (path,) in rows]
+
+    def remove(self, paths: list[pathlib.Path]) -> None:
+        """Remove registry entries and unlink only cache-owned paths."""
+        selected = {path.resolve() for path in paths}
+        with self._database(write=True) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute("SELECT id, rpath FROM resource").fetchall()
+            db.executemany(
+                "DELETE FROM resource WHERE id = ?",
+                [
+                    (id_,)
+                    for id_, path in rows
+                    if (self.root / path).resolve() in selected
+                ],
             )
+            for path in selected:
+                if path.is_relative_to(self.root):
+                    path.unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
+def _biocfilecache_registry(
+    root: pathlib.Path,
+) -> Iterator[_BiocFileCacheRegistry]:
+    """Keep the registry open until the active operations complete."""
+    root = root.expanduser().resolve()
+    key = os.path.normcase(_strip_extended_prefix(str(root)))
+    with _BFC_ACTIVE_LOCK:
+        registry = _BFC_ACTIVE.get(key)
+        if registry is None:
+            registry = _BiocFileCacheRegistry(root)
+            _BFC_ACTIVE[key] = registry
+        registry._users += 1
+    try:
+        yield registry
+    finally:
+        with _BFC_ACTIVE_LOCK:
+            if _BFC_ACTIVE.get(key) is registry:
+                registry._users -= 1
+                if registry._users == 0:
+                    del _BFC_ACTIVE[key]
+                    registry.close()
+
+
+def _biocfilecache_path(
+    url: str, root: pathlib.Path, *, require_exists: bool = False
+) -> pathlib.Path:
+    """Resolve a registered or native path without transferring or hashing.
+
+    Check existence under the registry lock because publication can be
+    rolled back until the transaction commits.
+
+    Args:
+        url: Exact URL used as the registry key.
+        root: Cache directory.
+        require_exists: Verify that the resolved payload exists.
+
+    Returns:
+        Path to the registered payload or its native destination.
+
+    Raises:
+        FileNotFoundError: The payload is required and its path is missing.
+    """
+    with _biocfilecache_registry(root) as registry:
+        with registry._database() as db:
+            path = registry.payload(url, registry._lookup(db, url))
+            if require_exists:
+                path.stat()
+            return path
+
+
+def _ensure_biocfilecache(
+    url: str,
+    root: pathlib.Path,
+    transfer: Callable[[pathlib.Path], None],
+    *,
+    refresh: bool,
+) -> pathlib.Path:
+    """Transfer under the payload lock and register the completed file."""
+    with _biocfilecache_registry(root) as registry:
+        for _ in range(3):
+            entry = registry.lookup(url)
+            path = registry.payload(url, entry)
+            with _path_lock_for_path(path):
+                version = _payload_version(path)
+                if not refresh and version is not None:
+                    if registry.register(url, path, entry):
+                        return path
+                    continue
+
+                _ensure_dir(path.parent)
+                with tempfile.TemporaryDirectory(
+                    dir=path.parent, prefix=_BFC_STAGING_PREFIX
+                ) as temp:
+                    staged = pathlib.Path(temp) / path.name
+                    transfer(staged)
+                    try:
+                        if registry.register(url, path, entry, staged=staged):
+                            return path
+                    except (OSError, sqlite3.Error):
+                        with contextlib.suppress(
+                            OSError, sqlite3.Error, ValueError
+                        ):
+                            registry.keep_download(
+                                url, path, entry, version, staged
+                            )
+                        raise
+        raise RuntimeError(
+            f"BiocFileCache entry changed during download: {url}"
+        )
 
 
 def _biocfilecache_paths(root: pathlib.Path) -> list[pathlib.Path]:
-    """List registered paths, including payloads removed outside the cache."""
-    if not (root / "BiocFileCache.sqlite").exists():
+    """List registry paths without creating an absent database."""
+    if not (root / _BFC_DB_NAME).exists():
         return []
-    with _biocfilecache(root) as cache:
-        return [
-            (cache.config.cache_dir / row["rpath"]).resolve()
-            for row in _biocfilecache_rows(cache)
-        ]
-
-
-def _cache_owned(path: pathlib.Path, root: pathlib.Path) -> bool:
-    """Report whether the cache owns this payload and may delete it.
-
-    R registers external files with ``action="asis"`` and leaves them in place
-    on ``bfcremove``; only payloads inside the cache directory are owned.
-    """
-    path = path.resolve()
-    root = root.resolve()
-    return path == root or root in path.parents
+    with _biocfilecache_registry(root) as registry:
+        return registry.paths()
 
 
 def _remove_biocfilecache_files(
     root: pathlib.Path, paths: list[pathlib.Path]
 ) -> None:
-    """Remove selected payloads and registry rows while the cache is idle.
+    """Remove selected entries and cache-owned files while the cache is idle."""
+    with _biocfilecache_registry(root) as registry:
+        registry.remove(paths)
 
-    Relative R paths are resolved against the cache root before unlinking.
-    Native, unregistered payloads are also removed. Database files are retained.
-    Registered files outside the cache directory keep R's ``asis`` semantics:
-    their rows are dropped, but the external payloads are never deleted.
-    """
-    model = import_optional_module("pybiocfilecache.models").Resource
-    with _biocfilecache(root) as cache:
-        cache_dir = cache.config.cache_dir
-        selected = {path.resolve() for path in paths}
-        with cache.get_session() as session:
-            for row in session.query(model).all():
-                path = (cache_dir / row.rpath).resolve()
-                if path in selected:
-                    if _cache_owned(path, cache_dir):
-                        path.unlink(missing_ok=True)
-                    session.delete(row)
-            for path in paths:
-                if _cache_owned(path, cache_dir):
-                    path.unlink(missing_ok=True)
+
+def _cache_staging_files(root: pathlib.Path) -> Iterator[pathlib.Path]:
+    """Yield files from interrupted downloads for idle-cache removal."""
+    for directory in root.rglob(_BFC_STAGING_PREFIX + "*"):
+        if not directory.is_symlink() and directory.is_dir():
+            for path in directory.iterdir():
+                if path.is_symlink() or path.is_file():
+                    yield path
 
 
 def _cache_internal(path: pathlib.Path, root: pathlib.Path) -> bool:
-    """Identify SQLite databases, journals, and R's database lock file."""
+    """Identify registry and download staging files inside the cache."""
+    if path.is_relative_to(root) and any(
+        part.startswith(_BFC_STAGING_PREFIX)
+        for part in path.relative_to(root).parts[:-1]
+    ):
+        return True
     return path.parent.resolve() == root.resolve() and (
-        path.name == "BiocFileCache.sqlite"
-        or path.name.startswith("BiocFileCache.sqlite-")
-        or path.name == "BiocFileCache.sqlite.LOCK"
+        path.name == _BFC_DB_NAME
+        or path.name.startswith(_BFC_DB_NAME + "-")
+        or path.name == _BFC_LOCK_NAME
     )
 
 
@@ -1121,8 +1618,6 @@ _OPTIONAL_DEPENDENCY_INSTALL_COMMANDS = types.MappingProxyType(
             "  conda install -c conda-forge -c bioconda pybigwig"
         ),
         "pybiocfilecache": 'pip install "recount3[pybiocfilecache]"',
-        "pybiocfilecache.models": 'pip install "recount3[pybiocfilecache]"',
-        "pybiocfilecache.utils": 'pip install "recount3[pybiocfilecache]"',
         "pyarrow": 'pip install "recount3[parquet]"',
         "anndata": 'pip install "recount3[anndata]"',
         "delayedarray": 'pip install "recount3[anndata]"',

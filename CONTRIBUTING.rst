@@ -266,7 +266,7 @@ Global ignores
   explained in the surrounding code.
 * ``SIM117`` (nested context managers). Separate blocks make the resource
   lifetimes clear when one context depends on another. For example,
-  ``_biocfilecache`` acquires a path lock before opening the SQLite
+  the shared cache acquires the R-compatible lock before accessing the SQLite
   registry, and archive copying opens a member through an open archive.
 * ``SLF001`` (private member access). Package modules share internal
   implementation details, such as ``R3Resource._cached_path`` and helpers
@@ -303,9 +303,7 @@ The following rules are enabled. Their existing exceptions use a targeted
 * ``ARG001``. ``_coerce_gtf_bp_length`` accepts coordinate keywords for
   call compatibility. It derives covered length from the GTF score
   because a feature's genomic span can differ from its covered bases.
-* ``DTZ005``. The shared SQLite cache follows pybiocfilecache's naive
-  local access timestamps. Generated manifest filenames use local
-  wall-clock time.
+* ``DTZ005``. Generated manifest filenames use local wall-clock time.
 * ``PD101``. Metadata reconciliation counts distinct partner IDs within
   each sample group. A comparison against one constant value across the
   series would not detect the same conflicts.

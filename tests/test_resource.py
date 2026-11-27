@@ -35,6 +35,7 @@ from __future__ import annotations
 from concurrent import futures
 import contextlib
 import dataclasses
+import errno
 import gzip
 import hashlib
 import inspect
@@ -42,6 +43,7 @@ import io
 import pathlib
 import shutil
 import threading
+from typing import Any
 from unittest import mock
 import warnings
 
@@ -644,7 +646,7 @@ class TestEnsureCached:
         real_path = res._cached_path()
         calls = {"n": 0}
 
-        def flaky_cached_path(_self: R3Resource) -> pathlib.Path:
+        def flaky_cached_path(_self: R3Resource, **_kw: object) -> pathlib.Path:
             calls["n"] += 1
             if calls["n"] == 1:
                 raise RuntimeError("malformed resource")
@@ -1915,8 +1917,9 @@ def test_ensure_cached_url_lets_distinct_destinations_overlap(
 
 @pytest.mark.parametrize("refresh", [False, True])
 @pytest.mark.parametrize("fail", [False, True])
+@pytest.mark.parametrize("backend", ["filesystem", "pybiocfilecache"])
 def test_ensure_cached_url_same_destination_waits_and_recovers(
-    cfg: Config, refresh: bool, fail: bool
+    cfg: Config, refresh: bool, fail: bool, backend: str
 ) -> None:
     """A confirmed waiter deduplicates misses or performs its own refresh.
 
@@ -1925,6 +1928,9 @@ def test_ensure_cached_url_same_destination_waits_and_recovers(
     forced refresh always transfers, and a failed first transfer leaves nothing
     to reuse.
     """
+    if backend == "pybiocfilecache":
+        pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend=backend)
     entered = threading.Event()
     waiting = threading.Event()
     release = threading.Event()
@@ -2044,6 +2050,106 @@ def test_ensure_cached_url_refresh_rechecksums_the_registry_entry(
         assert len(registry) == 1
 
 
+@pytest.mark.parametrize("has_lock", [False, True])
+def test_read_only_biocfilecache_supports_lookups_and_listing(
+    cfg: Config, monkeypatch: pytest.MonkeyPatch, has_lock: bool
+) -> None:
+    """Read an existing cache when its lock file cannot be opened for writing."""
+    module = pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    res = _counts_resource(cfg)
+    path = _cache_path(res.url, cfg.cache_dir)
+    path.write_bytes(b"cached")
+    with module.BiocFileCache(cfg.cache_dir) as cache:
+        cache.add(rname=res.url, fpath=path, rtype="local", action="asis")
+    lock = cfg.cache_dir / _utils_module._BFC_LOCK_NAME
+    if has_lock:
+        lock.touch()
+
+    open_path = pathlib.Path.open
+
+    def read_only(
+        path: pathlib.Path, mode: str = "r", *args: Any, **kwargs: Any
+    ):
+        if path == lock and mode == "a+b":
+            raise PermissionError(errno.EACCES, "read-only cache", str(path))
+        return open_path(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "open", read_only)
+    assert res.ensure_cached(download=False) == path
+    assert recount3_cache_files(cfg) == [path]
+    assert lock.exists() == has_lock
+
+
+def test_biocfilecache_checks_payload_presence_under_the_registry_lock(
+    cfg: Config, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checking a cache hit must wait for the writer's commit or rollback."""
+    pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    res = _counts_resource(cfg)
+    path = res._cached_path()
+    path.write_bytes(b"cached")
+    stat = pathlib.Path.stat
+    checked = False
+
+    with _utils_module._biocfilecache_registry(cfg.cache_dir) as registry:
+
+        def check_lock(candidate: pathlib.Path, **kwargs: Any):
+            nonlocal checked
+            if candidate == path:
+                assert registry._db_lock.locked()
+                checked = True
+            return stat(candidate, **kwargs)
+
+        monkeypatch.setattr(pathlib.Path, "stat", check_lock)
+        assert res.ensure_cached(download=False) == path
+    assert checked
+
+
+def test_biocfilecache_listing_hides_staging_files(cfg: Config) -> None:
+    """Both default and exact-name listings expose only published files."""
+    pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    path = _cache_path(_CACHE_URL, cfg.cache_dir)
+
+    def transfer(staged: pathlib.Path) -> None:
+        staged.write_bytes(b"downloaded")
+        assert recount3_cache_files(cfg) == []
+        assert recount3_cache_files(cfg, pattern=path.name) == []
+
+    assert (
+        _utils_module._ensure_biocfilecache(
+            _CACHE_URL, cfg.cache_dir, transfer, refresh=False
+        )
+        == path
+    )
+    assert recount3_cache_files(cfg, pattern=path.name) == [path]
+
+
+def test_biocfilecache_removes_selected_staging_files(cfg: Config) -> None:
+    """Cache removal can find files left by an interrupted download."""
+    pytest.importorskip("pybiocfilecache")
+    cfg = dataclasses.replace(cfg, cache_backend="pybiocfilecache")
+    staging = cfg.cache_dir / (_utils_module._BFC_STAGING_PREFIX + "fixture")
+    staging.mkdir(parents=True)
+    partial = staging / "file.downloading"
+    backup = staging / "file.previous"
+    partial.touch()
+    backup.touch()
+
+    assert recount3_cache_files(cfg) == []
+    assert recount3_cache_rm(config=cfg, dry_run=True) == [partial, backup]
+    assert partial.exists() and backup.exists()
+    assert recount3_cache_rm(config=cfg, predicate=lambda p: p == partial) == [
+        partial
+    ]
+    assert not partial.exists()
+    assert backup.exists()
+    assert recount3_cache_rm(config=cfg) == [backup]
+    assert not backup.exists()
+
+
 def test_ensure_cached_url_recovers_after_the_cache_is_emptied(
     cfg: Config,
 ) -> None:
@@ -2075,7 +2181,9 @@ def test_ensure_cached_url_registry_failure_keeps_the_payload(
         "recount3._utils.http_open", return_value=io.BytesIO(b"good")
     ):
         with mock.patch.object(
-            _utils_module, "_register_biocfilecache", side_effect=OSError
+            _utils_module._BiocFileCacheRegistry,
+            "register",
+            side_effect=OSError,
         ):
             with pytest.raises(OSError):
                 _fetch(cfg)
@@ -2096,7 +2204,7 @@ def test_ensure_cached_url_repairs_a_failed_refresh_on_the_next_hit(
     ):
         _fetch(cfg)
     with mock.patch.object(
-        _utils_module, "_register_biocfilecache", side_effect=OSError
+        _utils_module._BiocFileCacheRegistry, "register", side_effect=OSError
     ):
         with mock.patch(
             "recount3._utils.http_open", return_value=io.BytesIO(b"new")
