@@ -9,6 +9,13 @@ Add
 
 - Add ``compute_fpkm()`` and ``compute_fpkm_uq()`` to ``recount3.compute``.
 
+Change
+~~~~~~
+
+- Improve CLI diagnostics with actionable errors, manifest paths and line
+  numbers, consistent exit codes, and tracebacks under ``--verbose``. Report
+  readable download progress on stderr while preserving stdout formats.
+
 Internal
 ~~~~~~~~
 
