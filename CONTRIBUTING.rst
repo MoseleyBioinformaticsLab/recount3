@@ -21,6 +21,7 @@ Contents
 * `Ruff exceptions`_
 * `Documentation`_
 * `Changelog`_
+* `TODO`_
 * `Commit messages`_
 * `Pull requests`_
 * `Releases`_
@@ -358,12 +359,31 @@ A change to public behaviour requires a corresponding documentation change:
 Changelog
 ~~~~~~~~~
 
-``CHANGELOG.rst`` follows the Keep a Changelog convention. Add an entry under
-the ``Unreleased`` heading, in the appropriate category (``Added``,
-``Changed``, ``Fixed``, ``Removed``). State what changed and why it matters to
-a user, and note explicitly whether existing code remains source-compatible.
-Released sections are headed ``<version> (<YYYY-MM-DD>)`` and are not edited
-after release.
+``CHANGELOG.rst`` follows Keep a Changelog by grouping entries by version and
+type of change. In reStructuredText, underline version headings with hyphens
+and category headings with tildes. Use dashes for bullets.
+
+Add an entry under ``Unreleased`` in the appropriate category, such as
+``Added``, ``Changed``, ``Fixed``, or ``Removed``. This project also uses
+categories such as ``Breaking changes`` and ``Internal``. State what changed
+and why it matters to a user, and note explicitly whether existing code
+remains source-compatible.
+
+List released versions newest first with headings in the form
+``<version> (<YYYY-MM-DD>)``. Leave released sections as published.
+
+
+TODO
+~~~~
+
+Follow the `Changelog`_ structure, category conventions, and markup in
+``TODO.rst``. Use forward-looking wording wherever the changelog uses past
+tense. For example, use ``Add`` where the changelog uses ``Added``. Begin each
+TODO entry with an imperative verb.
+
+Use undated target versions such as ``1.5.0`` in the TODO and list the nearest
+release first. Keep items without a target release under ``Unscheduled`` at
+the end.
 
 
 Commit messages
