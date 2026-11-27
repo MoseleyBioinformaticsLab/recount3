@@ -9,6 +9,7 @@ v1.5.0
   imports), and ``_export.py`` (AnnData and Parquet). Move count assay
   selection to ``compute.py``, genomic-unit validation to ``bundle.py``,
   and junction sidecar URL construction to ``resource.py``.
+* Add ``compute_fpkm()`` and ``compute_fpkm_uq()`` to ``recount3.compute``.
 
 v2.0.0
 ------
