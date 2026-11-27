@@ -52,6 +52,7 @@ Registered resource types
   ``"bigwig_files"``                          :class:`R3BigWig`
   ``"data_sources"``                          :class:`R3DataSources`
   ``"data_source_metadata"``                  :class:`R3DataSourceMetadata`
+  ``"collection_metadata"``                   :class:`R3CollectionMetadata`
   ==========================================  ============================
 
 Valid values for the ``organism`` and ``data_source`` fields are exposed as
@@ -162,6 +163,7 @@ class _R3CommonFields:
         junction_type: Junction category selector (e.g., "ALL").
         junction_extension: Junction file format tag (e.g., "MM", "ID", "RR").
         table_name: Metadata table name (e.g., "recount_qc").
+        collection: Collection name for collection-scoped resources.
     """
 
     resource_type: str
@@ -174,6 +176,7 @@ class _R3CommonFields:
     junction_type: str | None = None
     junction_extension: str | None = None
     table_name: str | None = None
+    collection: str | None = dataclasses.field(default=None, kw_only=True)
 
 
 class R3ResourceDescription:
@@ -578,4 +581,40 @@ class R3DataSourceMetadata(_R3CommonFields, R3ResourceDescription):
         return (
             f"{self.organism}/data_sources/{self.data_source}/metadata/"
             f"{self.data_source}.recount_project.MD.gz"
+        )
+
+
+@R3ResourceDescription.register_type("collection_metadata")
+@dataclasses.dataclass(slots=True)
+class R3CollectionMetadata(_R3CommonFields, R3ResourceDescription):
+    """Descriptor for per-collection metadata tables.
+
+    Required fields:
+      - organism
+      - collection
+      - table_name
+
+    Duffel layout:
+      {organism}/collections/{collection}/metadata/
+        {collection}.{table_name}.gz
+
+    The table name is ``"recount_project"`` for membership or ``"custom"``
+    for curator-supplied metadata.
+    """
+
+    def __post_init__(self) -> None:
+        self._require("organism", "collection", "table_name")
+        self._check_organism()
+        if self.collection in {".", ".."} or any(
+            char in "/\\?#%" or char.isspace() or ord(char) < 32
+            for char in str(self.collection)
+        ):
+            raise ValueError(f"Invalid collection: {self.collection!r}")
+        if self.table_name not in {"recount_project", "custom"}:
+            raise ValueError(f"Invalid collection table: {self.table_name!r}")
+
+    def url_path(self) -> str:
+        return (
+            f"{self.organism}/collections/{self.collection}/metadata/"
+            f"{self.collection}.{self.table_name}.gz"
         )

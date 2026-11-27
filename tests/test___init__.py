@@ -77,6 +77,7 @@ def test_core_classes_are_exported() -> None:
         "R3BigWig",
         "R3DataSources",
         "R3DataSourceMetadata",
+        "R3CollectionMetadata",
     ):
         obj = getattr(recount3, name)
         assert isinstance(obj, type), f"{name} should be a class"
@@ -93,6 +94,8 @@ def test_search_functions_are_callable() -> None:
         "search_bigwig_files",
         "search_data_sources",
         "search_data_source_metadata",
+        "search_collections",
+        "search_collection",
         "samples_for_project",
         "available_samples",
         "available_projects",

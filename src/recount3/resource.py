@@ -99,6 +99,7 @@ import gzip
 import inspect
 import pathlib
 from typing import Any
+import urllib.error
 import urllib.parse
 
 import pandas as pd
@@ -411,6 +412,9 @@ class R3Resource:
     _cached_data: object | None = dataclasses.field(
         default=None, init=False, repr=False, compare=False
     )
+    _unpublished_metadata: bool = dataclasses.field(
+        default=False, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         """Initialize derived fields after dataclass instantiation."""
@@ -708,6 +712,34 @@ class R3Resource:
         self.filepath = str(dest_path)
         return str(dest_path)
 
+    def _is_unpublished_collection_metadata(self, exc: Exception) -> bool:
+        """Recognize an absent optional metadata file in a collection.
+
+        Args:
+            exc: Retrieval failure, possibly wrapped in ``DownloadError``.
+
+        Returns:
+            True for missing study or custom metadata, when the mirror
+            reports HTTP 404 or 410 or a local file is absent.
+        """
+        desc = self.description
+        if getattr(desc, "collection", None) is None:
+            return False
+        if not (
+            desc.resource_type == "metadata_files"
+            or (
+                desc.resource_type == "collection_metadata"
+                and getattr(desc, "table_name", None) == "custom"
+            )
+        ):
+            return False
+        cause = exc.__cause__ if isinstance(exc, errors.DownloadError) else exc
+        if isinstance(cause, urllib.error.HTTPError):
+            return cause.code in {404, 410}
+        return isinstance(cause, urllib.error.URLError) and isinstance(
+            cause.reason, FileNotFoundError
+        )
+
     def load(self, *, force: bool = False) -> object:
         """Parse the resource into an appropriate in-memory Python object.
 
@@ -721,9 +753,9 @@ class R3Resource:
                 data directly from disk.
 
         Returns:
-            The parsed object. Tabular and junction counts return a
-            `pandas.DataFrame`. BigWig files return a
-            `recount3._bigwig.BigWigFile` instance.
+            The parsed object. Tabular counts and metadata return a
+            :class:`pandas.DataFrame`, homes indexes return a list of lines,
+            and BigWig files return a :class:`~recount3._bigwig.BigWigFile`.
 
         Raises:
             FileNotFoundError: The file is missing from the cache post-download.
@@ -863,22 +895,32 @@ class R3Resource:
                 f"for {mm_cached.name!r}."
             )
 
-        self.download(path=None, cache_mode="enable")
+        self._unpublished_metadata = False
+        try:
+            self.download(path=None, cache_mode="enable")
+        except (errors.DownloadError, OSError) as exc:
+            self._unpublished_metadata = (
+                self._is_unpublished_collection_metadata(exc)
+            )
+            raise
         cached = self._cached_path()
         if not cached.exists():
             raise FileNotFoundError(str(cached))
 
         name = cached.name.lower()
-        if name.endswith((".tsv", ".tsv.gz", ".md.gz")):
+        if rtype == "collection_metadata" or name.endswith(
+            (".tsv", ".tsv.gz", ".md.gz")
+        ):
             obj = _read_metadata_table(cached)
-            self._cached_data = obj
-            return obj
-
-        resource_type = getattr(self.description, "resource_type", None)
-        raise errors.LoadError(
-            "Unsupported load() for resource type "
-            f"{resource_type!r} with file {cached.name!r}"
-        )
+        elif rtype == "data_sources" and name.endswith("homes_index"):
+            obj = cached.read_text(encoding="utf-8").splitlines()
+        else:
+            raise errors.LoadError(
+                f"Unsupported load() for resource type {rtype!r} "
+                f"with file {cached.name!r}"
+            )
+        self._cached_data = obj
+        return obj
 
     def is_loaded(self) -> bool:
         """Check if the resource currently holds a parsed in-memory object.
@@ -907,6 +949,7 @@ class R3Resource:
                 obj.close()
         finally:
             self._cached_data = None
+            self._unpublished_metadata = False
 
     def __repr__(self) -> str:
         """Return a string representation of the instance."""

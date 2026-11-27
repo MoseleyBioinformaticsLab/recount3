@@ -43,9 +43,11 @@ centralizes that skipping logic. Each optional stack gets one marker.
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import os
 import pathlib
+import shutil
 
 import pytest
 
@@ -181,3 +183,40 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         for name, skip_mark in skip_marks.items():
             if name in item.keywords:
                 item.add_marker(skip_mark)
+
+
+@pytest.fixture
+def collection_mirror(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> pathlib.Path:
+    """Extend the local test mirror with a two-study collection."""
+    mirror = tmp_path / "mirror"
+    shutil.copytree(_REPO_ROOT / "tests/data/recount3_mirror/recount3", mirror)
+    index = mirror / "human" / "homes_index"
+    with index.open("a", encoding="utf-8") as stream:
+        stream.write("collections/curated\n")
+    metadata = mirror / "human" / "collections" / "curated" / "metadata"
+    metadata.mkdir(parents=True)
+    with gzip.open(
+        metadata / "curated.recount_project.gz", "wt", encoding="utf-8"
+    ) as stream:
+        stream.write(
+            "rail_id\texternal_id\tstudy\tproject\torganism\tfile_source\t"
+            "metadata_source\tdate_processed\n"
+            "985131\tSRR527082\tSRP014565\tSRP014565\tHomo sapiens\t"
+            "data_sources/sra\tcollections/curated\t2019-10-01\n"
+            "148552\tDRR057224\tDRP004088\tDRP004088\tHomo sapiens\t"
+            "data_sources/sra\tcollections/curated\t2019-10-01\n"
+        )
+    with gzip.open(
+        metadata / "curated.custom.gz", "wt", encoding="utf-8"
+    ) as stream:
+        stream.write(
+            "rail_id\texternal_id\tstudy\tgroup\n"
+            "148552\tDRR057224\tDRP004088\tcase\n"
+            "985131\tSRR527082\tSRP014565\tcontrol\n"
+        )
+    monkeypatch.setenv("RECOUNT3_URL", mirror.as_uri() + "/")
+    monkeypatch.setenv("RECOUNT3_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("RECOUNT3_MAX_RETRIES", "1")
+    return mirror

@@ -1338,6 +1338,65 @@ class TestCmdSearchProject:
         assert kwargs["junction_type"] == "ALL"
 
 
+class TestCmdSearchCollection:
+    def test_collection_cli_manifest_preserves_scope(
+        self,
+        collection_mirror: pathlib.Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("RECOUNT3_URL", _BASE_URL)
+        with pytest.raises(SystemExit) as exit_info:
+            main(
+                [
+                    "--base-url",
+                    collection_mirror.as_uri(),
+                    "search",
+                    "collection",
+                    "organism=human",
+                    "collection=curated",
+                    "project=DRP004088",
+                    "genomic_unit=gene",
+                ]
+            )
+        assert exit_info.value.code == 0
+        lines = capsys.readouterr().out.splitlines()
+        manifest = [json.loads(line) for line in lines]
+        assert all(
+            row["url"].startswith(collection_mirror.as_uri())
+            for row in manifest
+        )
+        resources = [R3Resource.from_mapping(row) for row in manifest]
+        (counts,) = [
+            res
+            for res in resources
+            if res.description.resource_type == "count_files_gene_or_exon"
+        ]
+        assert counts.description.collection == "curated"
+        assert counts.description.project == "DRP004088"
+        assert counts.arcname.startswith("human/data_sources/sra/")
+        assert any(
+            res.arcname.endswith("curated.custom.gz") for res in resources
+        )
+        assert any(
+            res.arcname.endswith("curated.recount_project.gz")
+            for res in resources
+        )
+
+    def test_cli_collection_listing_tsv(
+        self,
+        collection_mirror: pathlib.Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            main(["search", "collections", "organism=human", "--format=tsv"])
+        assert exit_info.value.code == 0
+        header, row = capsys.readouterr().out.splitlines()
+        fields = dict(zip(header.split("\t"), row.split("\t"), strict=True))
+        assert fields["collection"] == "curated"
+        assert fields["table_name"] == "recount_project"
+
+
 class TestCmdSearchUnknownMode:
 
     def test_unknown_mode_raises_value_error(
@@ -1769,6 +1828,37 @@ class TestCmdDownload:
         ):
             code = _cmd_download(args, cfg)
         assert code == 3
+
+    def test_cli_collection_download_skips_unpublished_custom_metadata(
+        self,
+        collection_mirror: pathlib.Path,
+        tmp_path: pathlib.Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        custom = (
+            collection_mirror
+            / "human/collections/curated/metadata/curated.custom.gz"
+        )
+        custom.unlink()
+        with pytest.raises(SystemExit) as exit_info:
+            main(
+                [
+                    "download",
+                    "--dest",
+                    str(tmp_path / "downloads"),
+                    "--inline",
+                    json.dumps(
+                        {
+                            "resource_type": "collection_metadata",
+                            "organism": "human",
+                            "collection": "curated",
+                            "table_name": "custom",
+                        }
+                    ),
+                ]
+            )
+        assert exit_info.value.code == 0
+        assert json.loads(capsys.readouterr().out)["status"] == "skipped"
 
 
 class TestCmdBundleStackCounts:

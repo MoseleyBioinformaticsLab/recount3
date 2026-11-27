@@ -32,6 +32,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import pathlib
 import shutil
@@ -66,6 +67,8 @@ from recount3.search import project_homes
 from recount3.search import samples_for_project
 from recount3.search import search_annotations
 from recount3.search import search_bigwig_files
+from recount3.search import search_collection
+from recount3.search import search_collections
 from recount3.search import search_count_files_gene_or_exon
 from recount3.search import search_count_files_junctions
 from recount3.search import search_data_source_metadata
@@ -995,7 +998,7 @@ class TestAvailableProjects:
         assert row_srp1["n_samples"] == 2
 
     def test_blank_key_cells_still_count_samples(self) -> None:
-        """Sample keys join their columns as text, blank cells included."""
+        """Projects with missing keys still count their samples."""
         samples = pd.DataFrame(
             {
                 "external_id": ["SRR1", "SRR2", "SRR3"],
@@ -1567,6 +1570,132 @@ class TestSearchProjectAll:
         }
         assert "exon" in genomic_units_found
         assert "gene" not in genomic_units_found
+
+
+class TestCollectionDiscovery:
+    def test_collection_inventory(
+        self, collection_mirror: pathlib.Path
+    ) -> None:
+        (listing,) = search_collections()
+        assert listing.arcname == (
+            "human/collections/curated/metadata/curated.recount_project.gz"
+        )
+        assert search_collections(organism="mouse") == []
+        (collection_mirror / "human" / "homes_index").unlink()
+        assert [res.arcname for res in search_collections()] == [
+            listing.arcname
+        ]
+
+        samples = available_samples(collection="curated")
+        assert samples["external_id"].tolist() == ["SRR527082", "DRR057224"]
+        assert samples["project_type"].tolist() == [
+            "collections",
+            "collections",
+        ]
+        assert samples["file_source"].tolist() == ["sra", "sra"]
+        projects = available_projects(collection="curated")
+        assert projects["project"].tolist() == ["SRP014565", "DRP004088"]
+        assert projects["n_samples"].tolist() == [1, 1]
+        homes = project_homes(collection="curated")
+        assert homes["project_home"].tolist() == ["collections/curated"]
+        assert homes["n_projects"].tolist() == [2]
+
+    @pytest.mark.parametrize(
+        ("organism", "expected"),
+        [
+            ("human", ["ccle", "geuvadis_smartseq", "gtex_geuvadis"]),
+            ("mouse", []),
+        ],
+    )
+    def test_upstream_test_mirror_catalog(
+        self, cfg: Config, organism: str, expected: list[str]
+    ) -> None:
+        cfg = dataclasses.replace(
+            cfg, base_url="https://snaptron.cs.jhu.edu/data/temp/recount3/"
+        )
+        assert [
+            res.description.collection
+            for res in search_collections(organism=organism, config=cfg)
+        ] == expected
+
+    def test_collection_inventory_rejects_conflicting_and_missing_inputs(
+        self,
+        collection_mirror: pathlib.Path,
+    ) -> None:
+        with pytest.raises(
+            ValueError, match="either data_sources or collection"
+        ):
+            available_samples(data_sources="sra", collection="curated")
+        with pytest.raises(RuntimeError, match="Failed to load any collection"):
+            available_samples(collection="missing")
+
+    def test_collection_search_selects_member_bigwigs(
+        self,
+        collection_mirror: pathlib.Path,
+    ) -> None:
+        options = {"collection": "curated", "genomic_units": "gene"}
+        resources = search_collection(**options, include_bigwig=True)
+        coverage = [
+            res.description.sample
+            for res in resources
+            if res.description.resource_type == "bigwig_files"
+        ]
+        assert coverage == ["SRR527082", "DRR057224"]
+        with pytest.raises(ValueError, match="No projects found"):
+            search_collection(**options, project="SRP009615")
+
+    @pytest.mark.parametrize(
+        ("table", "error", "message"),
+        [
+            (None, TypeError, "Expected a collection membership table"),
+            (pd.DataFrame(), ValueError, "membership is missing columns"),
+            (
+                pd.DataFrame(
+                    {
+                        "project": [None],
+                        "file_source": [""],
+                        "external_id": ["S1"],
+                        "rail_id": [4],
+                    }
+                ),
+                ValueError,
+                "Missing collection project",
+            ),
+            (
+                pd.DataFrame(
+                    {
+                        "project": ["P1"],
+                        "file_source": ["collections/foo"],
+                        "external_id": ["S1"],
+                        "rail_id": [4],
+                    }
+                ),
+                ValueError,
+                "Invalid collection source home",
+            ),
+            (
+                pd.DataFrame(
+                    {
+                        "project": ["P1"],
+                        "study": ["P2"],
+                        "file_source": ["data_sources/sra"],
+                        "external_id": ["S1"],
+                        "rail_id": [4],
+                    }
+                ),
+                ValueError,
+                "Collection project and study columns differ",
+            ),
+        ],
+    )
+    def test_collection_search_validates_membership(
+        self, table: pd.DataFrame | None, error: type[Exception], message: str
+    ) -> None:
+        with mock.patch.object(R3Resource, "load", return_value=table):
+            with pytest.raises(error, match=message):
+                search_collection(collection="curated")
+            with pytest.raises(error, match=message):
+                available_samples(collection="curated")
 
 
 class TestAnnotationLabel:

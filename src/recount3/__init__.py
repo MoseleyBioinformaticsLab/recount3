@@ -87,6 +87,7 @@ from recount3 import se as se
 from recount3._bigwig import BigWigFile
 from recount3._descriptions import R3Annotations
 from recount3._descriptions import R3BigWig
+from recount3._descriptions import R3CollectionMetadata
 from recount3._descriptions import R3DataSourceMetadata
 from recount3._descriptions import R3DataSources
 from recount3._descriptions import R3GeneOrExonCounts
@@ -121,6 +122,8 @@ from recount3.search import project_homes
 from recount3.search import samples_for_project
 from recount3.search import search_annotations
 from recount3.search import search_bigwig_files
+from recount3.search import search_collection
+from recount3.search import search_collections
 from recount3.search import search_count_files_gene_or_exon
 from recount3.search import search_count_files_junctions
 from recount3.search import search_data_source_metadata
@@ -166,6 +169,7 @@ __all__ = [  # noqa: RUF022 - Exports are grouped by API role.
     "R3JunctionCounts",
     "R3ProjectMetadata",
     "R3GeneOrExonCounts",
+    "R3CollectionMetadata",
     "R3DataSourceMetadata",
     "R3ResourceDescription",
     # Core
@@ -181,9 +185,11 @@ __all__ = [  # noqa: RUF022 - Exports are grouped by API role.
     "annotation_ext",
     "annotation_label",
     "available_samples",
+    "search_collection",
     "annotation_options",
     "available_projects",
     "search_annotations",
+    "search_collections",
     "search_project_all",
     "samples_for_project",
     "search_bigwig_files",

@@ -37,6 +37,7 @@ import gzip
 import io
 import logging
 import pathlib
+import shutil
 import threading
 from typing import Any
 from unittest.mock import MagicMock
@@ -6568,6 +6569,337 @@ class TestConstructionStaysLinear:
         ):
             out = bmod._merge_count_frames([first, second], "outer")
         assert list(out.index) == ["G1", "G2", "G3"]
+
+
+class TestCollectionBundle:
+    def test_collection_downloads_study_files_and_custom_metadata(
+        self, collection_mirror: pathlib.Path, tmp_path: pathlib.Path
+    ) -> None:
+        """Download collection files when a study metadata table is absent."""
+        bundle = R3ResourceBundle.discover_collection(
+            collection="curated", genomic_units="gene"
+        )
+        dest = tmp_path / "downloads"
+        source = (
+            collection_mirror / "human" / "data_sources" / "sra" / "metadata"
+        )
+        (source / "88/DRP004088/sra.recount_seq_qc.DRP004088.MD.gz").unlink()
+        bundle.download(dest=dest, max_workers=2)
+        assert (dest / "curated.custom.gz").is_file()
+        assert (dest / "curated.recount_project.gz").is_file()
+        assert (dest / "sra.gene_sums.SRP014565.G026.gz").is_file()
+        assert (dest / "sra.gene_sums.DRP004088.G026.gz").is_file()
+        assert (
+            len(bundle.filter(resource_type="collection_metadata").resources)
+            == 2
+        )
+
+    @pytest.mark.requires_biocpy
+    @pytest.mark.parametrize(
+        "unit,junction_exts",
+        [("gene", ()), ("exon", ()), ("junction", ("MM", "RR"))],
+    )
+    def test_collection_experiment_uses_only_curated_samples(
+        self,
+        collection_mirror: pathlib.Path,
+        unit: str,
+        junction_exts: tuple[str, ...],
+    ) -> None:
+        bundle = R3ResourceBundle.discover_collection(
+            collection="curated",
+            genomic_units=(unit,),
+            annotations=("G026",),
+            junction_exts=junction_exts,
+        )
+        if unit == "gene":
+            experiment = bundle.to_summarized_experiment(genomic_unit=unit)
+        else:
+            experiment = bundle.to_ranged_summarized_experiment(
+                genomic_unit=unit
+            )
+        assert list(experiment.get_column_names()) == ["SRR527082", "DRR057224"]
+        metadata = experiment.get_column_data()
+        assert list(metadata["custom__group"]) == ["control", "case"]
+        assert (
+            experiment.get_metadata()["project_home"] == "collections/curated"
+        )
+
+    @pytest.mark.requires_biocpy
+    @pytest.mark.parametrize("include_metadata", [True, False])
+    def test_collection_membership_survives_missing_custom_metadata(
+        self,
+        collection_mirror: pathlib.Path,
+        include_metadata: bool,
+    ) -> None:
+        metadata = collection_mirror / "human/collections/curated/metadata"
+        (metadata / "curated.custom.gz").unlink()
+        bundle = R3ResourceBundle.discover_collection(
+            collection="curated",
+            project="DRP004088",
+            genomic_units="gene",
+            include_metadata=include_metadata,
+        )
+        assert (bundle.organism, bundle.data_source, bundle.project) == (
+            "human",
+            "sra",
+            "DRP004088",
+        )
+        assert bundle.samples() == ["DRR057224"]
+        bundle.only_counts().load()
+        bundle.only_metadata().load()
+        experiment = bundle.to_summarized_experiment(
+            genomic_unit="gene", metadata_join="outer", autoload=False
+        )
+        assert list(experiment.get_column_names()) == ["DRR057224"]
+        assert any(
+            url.endswith("curated.recount_project.gz")
+            for url in experiment.get_metadata()["resource_urls"]
+        )
+
+    def test_collection_assembly_propagates_metadata_access_errors(
+        self,
+        local_config: Config,
+    ) -> None:
+        custom = R3Resource.from_mapping(
+            {
+                "resource_type": "collection_metadata",
+                "organism": "human",
+                "collection": "curated",
+                "table_name": "custom",
+            },
+            config=local_config,
+        )
+        failure = DownloadError("Failed to download custom metadata")
+        failure.__cause__ = urllib.error.HTTPError(
+            custom.url, 403, "Forbidden", {}, None
+        )
+        with (
+            patch.object(R3Resource, "download", side_effect=failure),
+            pytest.raises(
+                DownloadError, match="Failed to download custom metadata"
+            ),
+        ):
+            _load_optional_metadata(custom, autoload=True)
+
+    @pytest.mark.requires_biocpy
+    def test_collection_custom_rows_extend_only_membership(
+        self,
+        collection_mirror: pathlib.Path,
+    ) -> None:
+        custom = (
+            collection_mirror
+            / "human/collections/curated/metadata/curated.custom.gz"
+        )
+        with gzip.open(custom, "wt", encoding="utf-8") as stream:
+            stream.write(
+                "rail_id\texternal_id\tstudy\tgroup\n"
+                "148551\tDRR057223\tDRP004088\toutside\n"
+                "985131\t SRR527082 \tSRP014565\tcontrol\n"
+            )
+        bundle = R3ResourceBundle.discover_collection(
+            collection="curated", genomic_units="gene"
+        )
+        experiment = bundle.to_summarized_experiment(genomic_unit="gene")
+        assert list(experiment.get_column_names()) == ["SRR527082", "DRR057224"]
+        first, second = experiment.get_column_data()["custom__group"]
+        assert first == "control"
+        assert pd.isna(second)
+
+    @pytest.mark.requires_biocpy
+    def test_two_collections_can_select_disjoint_samples_from_one_study(
+        self,
+        collection_mirror: pathlib.Path,
+    ) -> None:
+        other = collection_mirror / "human/collections/others/metadata"
+        other.mkdir(parents=True)
+        with gzip.open(
+            other / "others.recount_project.gz", "wt", encoding="utf-8"
+        ) as stream:
+            stream.write(
+                "rail_id\texternal_id\tproject\tfile_source\n"
+                "148551\tDRR057223\tDRP004088\tdata_sources/sra\n"
+            )
+        options = {
+            "project": "DRP004088",
+            "genomic_units": "exon",
+            "include_metadata": False,
+        }
+        curated = R3ResourceBundle.discover_collection(
+            collection="curated", **options
+        )
+        others = R3ResourceBundle.discover_collection(
+            collection="others", **options
+        )
+        bundle = R3ResourceBundle(curated.resources + others.resources)
+        assert (
+            bundle.filter(collection="curated").resources
+            == curated.filter(collection="curated").resources
+        )
+        filtered = bundle.filter(collection="curated")
+        scoped = filtered.to_ranged_summarized_experiment(genomic_unit="exon")
+        assert list(scoped.get_column_names()) == ["DRR057224"]
+        experiment = bundle.to_ranged_summarized_experiment(genomic_unit="exon")
+        assert list(experiment.get_column_names()) == ["DRR057224", "DRR057223"]
+        assert experiment.get_metadata()["project_home"] == [
+            "collections/curated",
+            "collections/others",
+        ]
+        assert bundle.samples(
+            organism="human", data_source="sra", project="DRP004088"
+        ) == ["DRR057223", "DRR057224"]
+
+    @pytest.mark.requires_biocpy
+    def test_same_named_collections_keep_membership_on_their_mirrors(
+        self,
+        collection_mirror: pathlib.Path,
+        local_config: Config,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        other = tmp_path / "other-mirror"
+        shutil.copytree(collection_mirror, other)
+        membership = (
+            other
+            / "human/collections/curated/metadata/curated.recount_project.gz"
+        )
+        with gzip.open(membership, "wt", encoding="utf-8") as stream:
+            stream.write(
+                "rail_id\texternal_id\tproject\tfile_source\n"
+                "148551\tDRR057223\tDRP004088\tdata_sources/sra\n"
+            )
+        options = {
+            "collection": "curated",
+            "project": "DRP004088",
+            "genomic_units": "gene",
+            "include_metadata": False,
+        }
+        original = R3ResourceBundle.discover_collection(**options)
+        second = R3ResourceBundle.discover_collection(
+            **options,
+            config=dataclasses.replace(
+                local_config, base_url=other.as_uri() + "/"
+            ),
+        )
+        bundle = R3ResourceBundle(original.resources + second.resources)
+        experiment = bundle.to_summarized_experiment(genomic_unit="gene")
+        assert list(experiment.get_column_names()) == ["DRR057224", "DRR057223"]
+        urls = list(experiment.get_column_data()["BigWigURL"])
+        assert urls[0].startswith(collection_mirror.as_uri() + "/")
+        assert urls[1].startswith(other.as_uri() + "/")
+        assert bundle.samples(
+            organism="human", data_source="sra", project="DRP004088"
+        ) == ["DRR057223", "DRR057224"]
+
+    def test_collection_assembly_requires_membership_in_manifest(
+        self,
+        collection_mirror: pathlib.Path,
+    ) -> None:
+        bundle = R3ResourceBundle.discover_collection(
+            collection="curated", genomic_units="gene"
+        )
+        with pytest.raises(
+            ValueError, match="requires its membership resource"
+        ):
+            bundle.exclude_metadata()._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=True,
+            )
+
+    def test_collection_download_requires_membership_on_the_mirror(
+        self,
+        collection_mirror: pathlib.Path,
+        tmp_path: pathlib.Path,
+    ) -> None:
+        bundle = R3ResourceBundle.discover_collection(collection="curated")
+        (
+            collection_mirror
+            / "human/collections/curated/metadata/curated.recount_project.gz"
+        ).unlink()
+        with pytest.raises(DownloadError):
+            bundle.download(dest=tmp_path / "downloads", cache="disable")
+
+    @pytest.mark.parametrize(
+        ("table_name", "content", "message"),
+        [
+            (
+                "recount_project",
+                "rail_id\texternal_id\tproject\tfile_source\n"
+                "148552\tDRR057224\tDRP004088\tdata_sources/sra\n"
+                "148552\tDRR057224\tDRP004088\tdata_sources/sra\n",
+                "Duplicate collection sample keys",
+            ),
+            (
+                "custom",
+                "group\ncase\n",
+                "Missing custom metadata keys",
+            ),
+        ],
+    )
+    def test_collection_assembly_rejects_invalid_sample_keys(
+        self,
+        collection_mirror: pathlib.Path,
+        table_name: str,
+        content: str,
+        message: str,
+    ) -> None:
+        table = (
+            collection_mirror
+            / "human/collections/curated/metadata"
+            / f"curated.{table_name}.gz"
+        )
+        with gzip.open(table, "wt", encoding="utf-8") as stream:
+            stream.write(content)
+        bundle = R3ResourceBundle.discover_collection(collection="curated")
+        with pytest.raises(ValueError, match=message):
+            bundle._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=True,
+            )
+
+    @pytest.mark.parametrize("autoload", [False, True])
+    def test_collection_checks_membership_when_assembling_manifest(
+        self,
+        collection_mirror: pathlib.Path,
+        autoload: bool,
+    ) -> None:
+        bundle = R3ResourceBundle.discover_collection(
+            collection="curated",
+            genomic_units="gene",
+            include_metadata=False,
+        )
+        (membership,) = bundle.only_metadata().resources
+        counts = dataclasses.replace(
+            bundle.only_counts().resources[0],
+            description=R3ResourceDescription(
+                "count_files_gene_or_exon",
+                organism="human",
+                data_source="sra",
+                project="SRP009615",
+                collection="curated",
+                genomic_unit="gene",
+                annotation_extension="G026",
+            ),
+            url=None,
+        )
+        rehydrated = R3ResourceBundle([dataclasses.replace(membership), counts])
+        message = (
+            "No members in collection"
+            if autoload
+            else "membership is not loaded"
+        )
+        with pytest.raises(ValueError, match=message):
+            rehydrated._prepare_experiment(
+                genomic_unit="gene",
+                annotation_extension=None,
+                join_policy="inner",
+                metadata_join="inner",
+                autoload=autoload,
+            )
 
 
 def test_docstring_examples_run() -> None:

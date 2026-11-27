@@ -85,6 +85,7 @@ def test_registry_contains_expected_types() -> None:
         "bigwig_files",
         "data_sources",
         "data_source_metadata",
+        "collection_metadata",
     }
     assert set(registry.keys()) == expected
 
@@ -160,6 +161,15 @@ def test_registry_contains_expected_types() -> None:
                 "data_source": "sra",
             },
             recount3._descriptions.R3DataSourceMetadata,
+        ),
+        (
+            "collection_metadata",
+            {
+                "organism": "human",
+                "collection": "curated",
+                "table_name": "recount_project",
+            },
+            recount3._descriptions.R3CollectionMetadata,
         ),
     ],
 )
@@ -343,6 +353,26 @@ def test_validation_rejects_invalid_enum_values(
 
 
 @pytest.mark.parametrize(
+    ("collection", "table_name", "message"),
+    [
+        ("../escape", "custom", "Invalid collection"),
+        ("...", "unknown", "Invalid collection table"),
+        ("..", "custom", "Invalid collection"),
+    ],
+)
+def test_collection_metadata_rejects_invalid_paths(
+    collection: str, table_name: str, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        recount3._descriptions.R3ResourceDescription(
+            resource_type="collection_metadata",
+            organism="human",
+            collection=collection,
+            table_name=table_name,
+        )
+
+
+@pytest.mark.parametrize(
     "resource_type,kwargs,expected_path",
     [
         (
@@ -425,6 +455,24 @@ def test_validation_rejects_invalid_enum_values(
                 "data_source": "sra",
             },
             "human/data_sources/sra/metadata/sra.recount_project.MD.gz",
+        ),
+        (
+            "collection_metadata",
+            {
+                "organism": "human",
+                "collection": "curated",
+                "table_name": "recount_project",
+            },
+            "human/collections/curated/metadata/curated.recount_project.gz",
+        ),
+        (
+            "collection_metadata",
+            {
+                "organism": "human",
+                "collection": "curated",
+                "table_name": "custom",
+            },
+            "human/collections/curated/metadata/curated.custom.gz",
         ),
     ],
 )

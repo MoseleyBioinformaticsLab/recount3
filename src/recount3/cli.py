@@ -275,6 +275,10 @@ def _build_parser() -> argparse.ArgumentParser:
             "               include_bigwig=true|false)\n"
             "  sources:     organism\n"
             "  source-meta: organism, data_source\n"
+            "  collections: organism\n"
+            "  collection:  organism, collection\n"
+            "               (optional: project and project mode options;\n"
+            "               junction files are requested explicitly)\n"
             "\nFilter value reference:\n"
             "  organism:             human | mouse\n"
             "  data_source:          sra | gtex | tcga\n"
@@ -314,12 +318,14 @@ def _build_parser() -> argparse.ArgumentParser:
             "project",
             "sources",
             "source-meta",
+            "collections",
+            "collection",
         ),
         metavar="MODE",
         help=(
             "Resource family to search. Choices: "
             "annotations, gene-exon, junctions, metadata, "
-            "bigwig, project, sources, source-meta."
+            "bigwig, project, sources, source-meta, collections, collection."
         ),
     )
     p_search.add_argument(
@@ -817,7 +823,7 @@ def _build_config_from_env_and_flags(
         cache_backend=getattr(args, "cache_backend", None)
     )
 
-    base_url = args.base_url or base.base_url
+    base_url = (args.base_url or base.base_url).rstrip("/") + "/"
     cache_dir = (
         pathlib.Path(args.cache_dir) if args.cache_dir else base.cache_dir
     )
@@ -895,6 +901,13 @@ def _parse_filters(tokens: Iterable[str]) -> dict[str, str]:
 
 _PROJECT_SELECTORS = frozenset({"organism", "data_source", "project"})
 _JUNCTION_SELECTORS = frozenset({"junction_type", "junction_extension"})
+_PROJECT_OPTIONS = _JUNCTION_SELECTORS | {
+    "genomic_unit",
+    "annotation",
+    "annotation_extension",
+    "include_metadata",
+    "include_bigwig",
+}
 
 _SEARCH_MODE_FILTERS: Mapping[str, frozenset[str]] = types.MappingProxyType(
     {
@@ -906,17 +919,12 @@ _SEARCH_MODE_FILTERS: Mapping[str, frozenset[str]] = types.MappingProxyType(
         "junctions": _PROJECT_SELECTORS | _JUNCTION_SELECTORS,
         "metadata": _PROJECT_SELECTORS | {"table_name"},
         "bigwig": _PROJECT_SELECTORS | {"sample"},
-        "project": _PROJECT_SELECTORS
-        | _JUNCTION_SELECTORS
-        | {
-            "genomic_unit",
-            "annotation",
-            "annotation_extension",
-            "include_metadata",
-            "include_bigwig",
-        },
+        "project": _PROJECT_SELECTORS | _PROJECT_OPTIONS,
         "sources": frozenset({"organism"}),
         "source-meta": frozenset({"organism", "data_source"}),
+        "collections": frozenset({"organism"}),
+        "collection": frozenset({"organism", "collection", "project"})
+        | _PROJECT_OPTIONS,
     }
 )
 
@@ -1009,8 +1017,8 @@ def _write_jsonl(
 ) -> None:
     """Write one JSON object per line describing each resource.
 
-    The JSON schema contains all dataclass fields from the description plus
-    derived ``url`` and ``arcname`` fields so the manifest is self-contained.
+    Each record includes the description fields and the derived ``url`` and
+    ``arcname``. The ``collection`` field is included for collection resources.
 
     Args:
       resources: Iterable of resources to serialize.
@@ -1033,6 +1041,8 @@ def _write_jsonl(
                 if dataclasses.is_dataclass(desc)
                 else {}
             )
+            if body.get("collection") is None:
+                body.pop("collection", None)
             body["url"] = res.url
             body["arcname"] = res.arcname  # type: ignore[attr-defined]
             sink.write(json.dumps(body, ensure_ascii=False) + "\n")
@@ -1042,20 +1052,24 @@ def _write_jsonl(
 
 
 def _write_tsv(
-    resources: Iterable[resource.R3Resource], output_path: pathlib.Path | None
+    resources: Iterable[resource.R3Resource],
+    output_path: pathlib.Path | None,
+    *,
+    include_collection: bool = False,
 ) -> None:
     """Write a TSV manifest with a stable column ordering.
 
     Columns:
       resource_type, organism, data_source, genomic_unit, project, sample,
       table_name, junction_type, annotation_extension,
-      junction_extension, url, arcname
+      junction_extension, url, arcname, collection (when requested)
 
     Missing fields are left blank.
 
     Args:
       resources: Iterable of resources to serialize.
       output_path: Optional file path; when ``None``, writes to stdout.
+      include_collection: Include the collection name column.
     """
     order = [
         "resource_type",
@@ -1071,6 +1085,8 @@ def _write_tsv(
         "url",
         "arcname",
     ]
+    if include_collection:
+        order.append("collection")
 
     sink: Any
     close = False
@@ -1187,6 +1203,8 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
       project       : Validate a project and enumerate all related files.
       sources       : List available data sources for an organism.
       source-meta   : Data-source-level metadata tables.
+      collections   : Collection membership tables on the configured mirror.
+      collection    : Files for a collection or one study in it.
 
     Project mode filters:
       Required: organism, data_source, project
@@ -1283,8 +1301,11 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
                 sample=filters["sample"],
             )
 
-        case "project":
-            _require("organism", "data_source", "project")
+        case "project" | "collection":
+            if mode == "project":
+                _require("organism", "data_source", "project")
+            else:
+                _require("organism", "collection")
 
             def _as_bool(s: str | None, *, default: bool = False) -> bool:
                 if s is None:
@@ -1307,21 +1328,41 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
             # (see search._resolve_annotation_exts).
             annotations = filters.get("annotation", "default")
             ann_ext = _csv_or_default(filters.get("annotation_extension"), ())
-            jext = _csv_or_default(filters.get("junction_extension"), ("MM",))
+            jext = _csv_or_default(
+                filters.get("junction_extension"),
+                ("MM",) if mode == "project" else (),
+            )
             jtype = filters.get("junction_type", "ALL")
             inc_meta = _as_bool(filters.get("include_metadata"), default=True)
             inc_bw = _as_bool(filters.get("include_bigwig"), default=False)
 
-            found = search.search_project_all(
-                organism=filters["organism"],
-                data_source=filters["data_source"],
-                project=filters["project"],
-                genomic_units=gu,
-                annotations=ann_ext or annotations,
-                junction_type=jtype,
-                junction_extension=jext,
-                include_metadata=inc_meta,
-                include_bigwig=inc_bw,
+            options = {
+                "organism": filters["organism"],
+                "genomic_units": gu,
+                "annotations": ann_ext or annotations,
+                "junction_type": jtype,
+                "junction_extension": jext,
+                "include_metadata": inc_meta,
+                "include_bigwig": inc_bw,
+            }
+            if mode == "project":
+                found = search.search_project_all(
+                    data_source=filters["data_source"],
+                    project=filters["project"],
+                    **options,
+                )
+            else:
+                found = search.search_collection(
+                    collection=filters["collection"],
+                    project=filters.get("project"),
+                    config=cfg,
+                    **options,
+                )
+
+        case "collections":
+            _require("organism")
+            found = search.search_collections(
+                organism=filters["organism"], config=cfg
             )
 
         case "sources":
@@ -1338,7 +1379,14 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
         case _:
             raise ValueError(f"Unknown search mode: {mode!r}")
 
-    configured = [dataclasses.replace(r, config=cfg) for r in found]
+    configured = [
+        (
+            res
+            if res.config is cfg
+            else dataclasses.replace(res, url=None, config=cfg)
+        )
+        for res in found
+    ]
 
     out_path: pathlib.Path | None
     if args.output:
@@ -1355,7 +1403,11 @@ def _cmd_search(args: argparse.Namespace, cfg: r3_config.Config) -> int:
     if args.format == "jsonl":
         _write_jsonl(configured, out_path)
     else:
-        _write_tsv(configured, out_path)
+        _write_tsv(
+            configured,
+            out_path,
+            include_collection=mode in {"collections", "collection"},
+        )
 
     if out_path is None:
         logging.info("Emitted %d resources to stdout.", len(configured))
@@ -1411,6 +1463,9 @@ def _download_one(
             )
             status = "ok"
     except Exception as exc:
+        if res._is_unpublished_collection_metadata(exc):
+            logging.warning("Skipping unpublished metadata: %s", res.url)
+            return {"url": res.url, "status": "skipped", "dest": None}
         return {
             "url": res.url,
             "status": "error",

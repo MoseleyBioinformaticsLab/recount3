@@ -42,7 +42,7 @@ Tier 1: Type-specific search wrappers
   * :func:`search_count_files_junctions`: junction count files (MM/ID/RR)
   * :func:`search_metadata_files`: per-project metadata tables
   * :func:`search_bigwig_files`: per-sample BigWig coverage files
-  * :func:`search_data_sources`: organism-level data-source index
+  * :func:`search_data_sources`: organism-level homes index
   * :func:`search_data_source_metadata`: data-source metadata listings
   * :func:`search_project_all`: convenience orchestrator that calls all of
     the above for a given project and returns a combined resource list
@@ -52,11 +52,13 @@ Tier 2: Discovery helpers
   All are part of the public top-level surface (re-exported from
   :mod:`recount3`):
 
-  * :func:`available_samples`: DataFrame of samples available across data
-    sources
+  * :func:`available_samples`: DataFrame of samples from data sources or a
+    collection
   * :func:`available_projects`: DataFrame of projects with sample counts
   * :func:`project_homes`: DataFrame mapping projects to their data-source
-    home URLs
+    or collection homes
+  * :func:`search_collections`: membership tables advertised by a mirror
+  * :func:`search_collection`: resources for a collection or a member study
   * :func:`samples_for_project`: sample IDs for a specific project
   * :func:`create_sample_project_lists`: build per-data-source sample/project
     lists (backs the ``ids`` CLI command)
@@ -102,13 +104,19 @@ Typical usage example::
 from __future__ import annotations
 
 from collections.abc import Iterable
+import dataclasses
 import itertools
+import pathlib
 import posixpath
-from typing import Final
+from typing import cast, Final
+import urllib.parse
+import urllib.request
 
 import pandas as pd
 
 from recount3 import _descriptions
+from recount3 import _utils
+from recount3 import config as r3_config
 from recount3 import resource
 from recount3 import types as r3_types
 
@@ -518,7 +526,7 @@ def search_data_sources(
     """Return data-source index :class:`~recount3.R3Resource` objects.
 
     Each resource resolves to the ``homes_index`` file for one organism,
-    which lists the available data sources for that organism.
+    which lists the data sources and any collections for that organism.
 
     Args:
         organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).
@@ -569,6 +577,97 @@ def search_data_source_metadata(
         data_source=data_source,
     )
     return _make_resources(grid, strict=strict, deduplicate=deduplicate)
+
+
+def _collection_table(
+    organism: str,
+    collection: str,
+    table_name: str,
+    config: r3_config.Config | None,
+) -> resource.R3Resource:
+    """Construct a resource for a collection's membership or custom table."""
+    return resource.R3Resource(
+        _descriptions.R3ResourceDescription(
+            resource_type="collection_metadata",
+            organism=organism,
+            collection=collection,
+            table_name=table_name,
+        ),
+        config=config,
+    )
+
+
+def search_collections(
+    *,
+    organism: str = "human",
+    config: r3_config.Config | None = None,
+) -> list[resource.R3Resource]:
+    """Return collection membership :class:`~recount3.R3Resource` objects.
+
+    Each resource points to the ``recount_project`` table for one
+    collection advertised in the organism's ``homes_index``. A local mirror
+    without an index uses its collection directories. The Snaptron test
+    mirror uses the collection catalog from the upstream R package.
+
+    Args:
+        organism: Organism to query (``"human"`` or ``"mouse"``).
+        config: Optional :class:`~recount3.config.Config` for the mirror
+            and cache.
+
+    Returns:
+        A list of :class:`~recount3.resource.R3Resource` objects, one per
+        collection in index order. An index containing only data sources
+        yields an empty list.
+
+    Raises:
+        ValueError: If the organism or a listed collection name is invalid.
+        recount3.errors.DownloadError: If the mirror's index cannot be
+            retrieved.
+    """
+    org = _normalize_organism_name(organism)
+    cfg = config or r3_config.default_config()
+    base = urllib.parse.urlsplit(cfg.base_url.rstrip("/"))
+    if (
+        base.netloc == "snaptron.cs.jhu.edu"
+        and base.path == "/data/temp/recount3"
+    ):
+        homes = (
+            [
+                "collections/ccle",
+                "collections/geuvadis_smartseq",
+                "collections/gtex_geuvadis",
+            ]
+            if org == "human"
+            else []
+        )
+    else:
+        index_resource = resource.R3Resource(
+            _descriptions.R3ResourceDescription(
+                resource_type="data_sources", organism=org
+            ),
+            config=cfg,
+        )
+        root = (
+            pathlib.Path(urllib.request.url2pathname(base.path)) / org
+            if base.scheme == "file"
+            else None
+        )
+        if root is not None and not (root / "homes_index").is_file():
+            homes = [
+                f"collections/{directory.name}"
+                for directory in sorted((root / "collections").glob("*"))
+                if directory.is_dir()
+            ]
+        else:
+            homes = cast("list[str]", index_resource.load())
+    return [
+        _collection_table(org, name, "recount_project", cfg)
+        for name in dict.fromkeys(
+            _posix_basename(home)
+            for home in map(str.strip, homes)
+            if _posix_dirname(home) == "collections"
+        )
+    ]
 
 
 def create_sample_project_lists(
@@ -715,18 +814,19 @@ def available_samples(
     *,
     organism: str = "human",
     data_sources: r3_types.StringOrIterable | None = None,
+    collection: str | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
     """Return a sample overview similar to recount3::available_samples().
 
-    This reads per-data-source ``*.recount_project.MD.gz`` tables and
-    returns a normalized DataFrame describing all samples for the requested
-    organism.
+    Read source or collection membership tables and normalize their columns.
 
     Args:
       organism: Organism to query ("human" or "mouse").
       data_sources: Optional subset of data sources to include (for example,
         "sra", "gtex", "tcga"). By default all known data sources are used.
+      collection: Read a named collection's membership on the configured
+        mirror. Mutually exclusive with ``data_sources``.
       strict: If True, raise a ValueError when no metadata can be found.
         If False, return an empty DataFrame instead.
 
@@ -751,10 +851,18 @@ def available_samples(
     """
     org = _normalize_organism_name(organism)
 
-    if data_sources is None:
-        selected_sources = sorted(_descriptions.VALID_DATA_SOURCES)
+    if collection is not None:
+        if data_sources is not None:
+            raise ValueError("Specify either data_sources or collection.")
+        resources = [
+            _collection_table(org, collection, "recount_project", None)
+        ]
     else:
-        selected_sources = list(_normalize_to_tuple(data_sources))
+        selected_sources = (
+            sorted(_descriptions.VALID_DATA_SOURCES)
+            if data_sources is None
+            else list(_normalize_to_tuple(data_sources))
+        )
         invalid = [
             source
             for source in selected_sources
@@ -768,26 +876,25 @@ def available_samples(
             )
             raise ValueError(msg)
 
-    if not selected_sources:
-        if strict:
-            raise ValueError("No data_sources specified.")
-        return pd.DataFrame()
+        if not selected_sources:
+            if strict:
+                raise ValueError("No data_sources specified.")
+            return pd.DataFrame()
+        resources = search_data_source_metadata(
+            organism=org,
+            data_source=tuple(selected_sources),
+            strict=strict,
+            deduplicate=True,
+        )
 
-    resources = search_data_source_metadata(
-        organism=org,
-        data_source=tuple(selected_sources),
-        strict=strict,
-        deduplicate=True,
-    )
-
-    if not resources:
-        if strict:
-            msg = (
-                "No data-source metadata resources found for organism "
-                f"{org!r} and data_sources {tuple(selected_sources)!r}."
-            )
-            raise ValueError(msg)
-        return pd.DataFrame()
+        if not resources:
+            if strict:
+                msg = (
+                    "No data-source metadata resources found for organism "
+                    f"{org!r} and data_sources {tuple(selected_sources)!r}."
+                )
+                raise ValueError(msg)
+            return pd.DataFrame()
 
     frames: list[pd.DataFrame] = []
     load_errors: list[tuple[str | None, Exception]] = []
@@ -799,14 +906,17 @@ def available_samples(
             load_errors.append((res.url, exc))
             continue
 
-        if isinstance(obj, pd.DataFrame):
+        if collection is not None:
+            frames.append(_normalize_collection_members(obj, url=res.url))
+        elif isinstance(obj, pd.DataFrame):
             frames.append(_strip_metadata_column_prefix(obj))
 
     if not frames:
         if load_errors:
             first_url, first_exc = load_errors[0]
+            origin = "collection" if collection is not None else "data-source"
             msg = (
-                "Failed to load any data-source metadata table. "
+                f"Failed to load any {origin} metadata table. "
                 f"First error: {first_exc!r} (while loading {first_url!r})."
             )
             raise RuntimeError(msg) from first_exc
@@ -853,6 +963,9 @@ def available_samples(
         samples["project_home"] = samples["metadata_source"]
         samples = samples.drop(columns=["metadata_source"])
 
+    if collection is not None:
+        samples["project_home"] = f"collections/{collection}"
+
     if "project_home" in samples.columns:
         samples["project_type"] = (
             samples["project_home"].map(str).map(_posix_dirname)
@@ -881,6 +994,7 @@ def available_projects(
     *,
     organism: str = "human",
     data_sources: r3_types.StringOrIterable | None = None,
+    collection: str | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
     """Return a project overview like recount3::available_projects().
@@ -891,6 +1005,7 @@ def available_projects(
     Args:
       organism: Organism to query ("human" or "mouse").
       data_sources: Optional subset of data sources to include.
+      collection: Optional collection name, passed to :func:`available_samples`.
       strict: Passed through to :func:`available_samples`.
 
     Returns:
@@ -909,6 +1024,7 @@ def available_projects(
     samples = available_samples(
         organism=organism,
         data_sources=data_sources,
+        collection=collection,
         strict=strict,
     )
 
@@ -932,34 +1048,25 @@ def available_projects(
     if "project_type" in df.columns:
         df = df.drop(columns=["project_type"])
 
-    key_cols = [
-        col
-        for col in ("project", "organism", "project_home")
-        if col in df.columns
-    ]
+    fields = ["project", "organism", "project_home"]
+    if collection is not None:
+        fields.append("file_source")
+    key_cols = [col for col in fields if col in df.columns]
 
     if key_cols:
-        projects = (
-            df.groupby(key_cols, as_index=False, dropna=False)
-            .first()
-            .reset_index(drop=True)
+        grouped = df.groupby(
+            key_cols, as_index=False, dropna=False, sort=collection is None
         )
+        projects = grouped.first().reset_index(drop=True)
+        projects["n_samples"] = grouped.size()["size"].astype("Int64")
     else:
         projects = df.drop_duplicates().reset_index(drop=True)
+        projects["n_samples"] = pd.Series(dtype="Int64")
 
     if "project_home" in projects.columns:
         projects["project_type"] = (
             projects["project_home"].map(str).map(_posix_dirname)
         )
-
-    if key_cols:
-        sample_keys = df[key_cols].map(str).agg("_".join, axis=1)
-        counts = sample_keys.value_counts()
-
-        project_keys = projects[key_cols].map(str).agg("_".join, axis=1)
-        projects["n_samples"] = project_keys.map(counts).astype("Int64")
-    else:
-        projects["n_samples"] = pd.Series(dtype="Int64")
 
     preferred = [
         "project",
@@ -979,6 +1086,7 @@ def project_homes(
     *,
     organism: str = "human",
     data_sources: r3_types.StringOrIterable | None = None,
+    collection: str | None = None,
     strict: bool = True,
 ) -> pd.DataFrame:
     """Return a project home summary similar to recount3::project_homes().
@@ -989,11 +1097,12 @@ def project_homes(
     Args:
       organism: Organism to query ("human" or "mouse").
       data_sources: Optional subset of data sources to include.
+      collection: Collection name, passed to :func:`available_projects`.
       strict: Passed through to :func:`available_projects`.
 
     Returns:
-      A DataFrame with one row per project home and at least the
-      following columns:
+      A DataFrame with one row per organism, project home, and file source
+      and at least the following columns:
 
       * ``project_home``: recount3 project home path.
       * ``project_type``: High-level project type (for example,
@@ -1007,6 +1116,7 @@ def project_homes(
     projects = available_projects(
         organism=organism,
         data_sources=data_sources,
+        collection=collection,
         strict=strict,
     )
 
@@ -1412,3 +1522,148 @@ def search_project_all(
         )
 
     return sorted(found, key=_sort_key)
+
+
+def _collection_members(
+    membership: resource.R3Resource, *, autoload: bool = True
+) -> pd.DataFrame:
+    """Load collection membership with canonical sample and source keys."""
+    if not autoload and not membership.is_loaded():
+        raise ValueError(
+            f"Collection membership is not loaded: {membership.url}"
+        )
+    return _normalize_collection_members(membership.load(), url=membership.url)
+
+
+def _normalize_collection_members(
+    table: object, *, url: str | None
+) -> pd.DataFrame:
+    """Validate and normalize the membership table for all collection users."""
+    if not isinstance(table, pd.DataFrame):
+        raise TypeError(f"Expected a collection membership table: {url}")
+    members = _strip_metadata_column_prefix(table)
+    identifiers = ["project", "rail_id", "external_id"]
+    required = {*identifiers, "file_source"}
+    if missing := required.difference(members.columns):
+        raise ValueError(
+            "Collection membership is missing columns "
+            f"{sorted(missing)!r}: {url}"
+        )
+    if "study" not in members.columns:
+        members["study"] = members["project"]
+    for col in (*identifiers, "study"):
+        values = _utils.canonical_identifier_series(members[col]).str.strip()
+        if not values.fillna("").ne("").all():
+            raise ValueError(f"Missing collection {col}: {url}")
+        members[col] = values
+    if not members["project"].equals(members["study"]):
+        raise ValueError(f"Collection project and study columns differ: {url}")
+
+    homes = members["file_source"].astype("string").str.strip().str.rstrip("/")
+    if not homes.isin(
+        [
+            f"data_sources/{source}"
+            for source in _descriptions.VALID_DATA_SOURCES
+        ]
+    ).all():
+        raise ValueError(f"Invalid collection source home: {url}")
+    members["file_source"] = homes.str.rsplit("/", n=1).str[-1]
+    return members
+
+
+def search_collection(
+    *,
+    collection: str,
+    organism: str = "human",
+    project: str | None = None,
+    genomic_units: r3_types.StringOrIterable = ("gene", "exon"),
+    annotations: r3_types.StringOrIterable = "default",
+    junction_type: str = "ALL",
+    junction_extension: r3_types.StringOrIterable = (),
+    include_metadata: bool = True,
+    include_bigwig: bool = False,
+    config: r3_config.Config | None = None,
+) -> list[resource.R3Resource]:
+    """Enumerate resources for a collection or one project within it.
+
+    The membership table resolves each project to its original data source
+    and supplies the sample IDs used during assembly. The result includes
+    the membership table and, when requested, one custom metadata table.
+
+    Args:
+      collection: Collection name as listed by :func:`search_collections`.
+      organism: ``"human"`` or ``"mouse"``.
+      project: Optional study identifier. By default include all projects.
+      genomic_units: Expression levels to include (``"gene"``, ``"exon"``).
+      annotations: Annotation selection as in :func:`search_project_all`.
+      junction_type: Junction type, typically ``"ALL"``.
+      junction_extension: Junction artifacts to include (``"MM"``, ``"RR"``,
+        ``"ID"``). Defaults to an empty tuple.
+      include_metadata: If :data:`True`, include study metadata and the
+        collection's custom table.
+      include_bigwig: If :data:`True`, include per-sample BigWig files for
+        the selected members.
+      config: Optional :class:`~recount3.config.Config` for the mirror and
+        cache.
+
+    Returns:
+      A list of :class:`~recount3.resource.R3Resource` objects for the
+      selected collection and projects.
+
+    Raises:
+      ValueError: If the query is invalid, the membership table is invalid,
+        or the requested project is absent.
+      recount3.errors.DownloadError: If the membership table cannot be
+        retrieved.
+    """
+    cfg = config or r3_config.default_config()
+    org = _normalize_organism_name(organism)
+    membership = _collection_table(org, collection, "recount_project", cfg)
+    members = _collection_members(membership)
+    if project is not None:
+        members = members.loc[members["project"].eq(project)]
+    if members.empty:
+        raise ValueError(
+            f"No projects found in collection {collection!r} for {project!r}."
+        )
+    units = _normalize_to_tuple(genomic_units)
+    extensions = _normalize_to_tuple(junction_extension)
+    annotations = (
+        _normalize_to_tuple(annotations)
+        if not isinstance(annotations, str)
+        else annotations
+    )
+    found = {membership.url: membership}
+    for (source, study), samples in members.groupby(
+        ["file_source", "project"], sort=False
+    ):
+        files = search_project_all(
+            organism=org,
+            data_source=str(source),
+            project=str(study),
+            genomic_units=units,
+            annotations=annotations,
+            junction_type=junction_type,
+            junction_extension=extensions,
+            include_metadata=include_metadata,
+        )
+        if include_bigwig:
+            files.extend(
+                search_bigwig_files(
+                    organism=org,
+                    data_source=str(source),
+                    project=str(study),
+                    sample=tuple(samples["external_id"].unique()),
+                )
+            )
+        for res in files:
+            description = dataclasses.replace(
+                res.description, collection=collection
+            )
+            configured = resource.R3Resource(description, config=cfg)
+            found.setdefault(configured.url, configured)
+
+    if include_metadata:
+        custom = _collection_table(org, collection, "custom", cfg)
+        found[custom.url] = custom
+    return list(found.values())

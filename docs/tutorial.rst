@@ -1,12 +1,13 @@
 Tutorial
 ========
 
-This tutorial walks through the ``recount3`` Python API end-to-end: finding
-projects and samples, downloading the files behind them, assembling
+This tutorial walks through the ``recount3`` Python API from discovery to
+analysis. You'll find projects, samples, and curated collections, download
+their files, and assemble
 :class:`~summarizedexperiment.SummarizedExperiment` and
-:class:`~summarizedexperiment.RangedSummarizedExperiment` objects, merging
-sample metadata, normalizing and scaling counts, reading BigWig coverage, and
-managing the on-disk cache.
+:class:`~summarizedexperiment.RangedSummarizedExperiment` objects. Later
+sections cover sample metadata, count normalization and scaling, BigWig
+coverage, and the on-disk cache.
 
 For the ``recount3`` command-line tool, see :doc:`cli`. For full per-symbol
 documentation, see :doc:`api`.
@@ -124,12 +125,12 @@ interactive discovery, open the `recount3 study explorer
 the study table by organism or ``project_home``, search study titles and
 abstracts, and select a project.
 
-Bring the selected row's ``project`` and ``organism`` into the Python calls
-below. Set ``data_source`` to the last component of ``project_home`` (for
-example, ``data_sources/sra`` becomes ``sra``), and use the selected annotation
-as ``annotation_label`` for gene or exon counts. The explorer also generates
-R code; the Python equivalent is :func:`~recount3.create_rse` as shown in the
-quick start.
+Use the selected row's ``project`` and ``organism`` in Python. For a home such
+as ``data_sources/sra``, pass ``data_source="sra"`` to
+:func:`~recount3.create_rse` and use the explorer's annotation as
+``annotation_label`` for gene or exon counts. The explorer also generates R
+code. For a home under ``collections/``, use the name after the slash in the
+:ref:`collection workflow <collections>`.
 
 For programmatic discovery, start from the source-level metadata: these
 calls read and parse the mirror's own project and sample tables, so what
@@ -168,6 +169,157 @@ Keep the distinction in mind while reading the rest of this tutorial: the
 discovery calls on this page read metadata, whereas the resource and bundle
 layers below mostly *construct* candidate URLs from the parameters you give
 them. A constructed URL is not evidence that the file exists.
+
+
+.. _collections:
+
+Working with curated collections
+--------------------------------
+
+A collection selects samples from one or more studies and can add metadata
+for those samples. In this example, you'll use the ``geuvadis_smartseq``
+collection to build a gene-level experiment for its samples from study
+``ERP110066``.
+
+Use the Snaptron test mirror for this example. Set the mirror in a separate
+shell, then start Python from that shell so it reads the same setting. The
+assembly step requires the ``biocpy`` extra.
+
+.. code:: bash
+
+   export RECOUNT3_URL=https://snaptron.cs.jhu.edu/data/temp/recount3/
+
+Finding the collection's samples
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+List the human collections on the mirror. Then use the collection name in
+``available_projects`` and ``available_samples`` to see which studies and
+samples it includes:
+
+.. code:: python
+
+   import recount3 as r3
+
+   organism = "human"
+   collection = "geuvadis_smartseq"
+   project = "ERP110066"
+
+   listings = r3.search_collections(organism=organism)
+   print("Collections:", [res.description.collection for res in listings])
+
+   projects = r3.available_projects(organism=organism, collection=collection)
+   selected = projects.loc[projects["project"].eq(project)]
+   columns = ["project", "file_source", "n_samples"]
+   print(selected[columns].to_string(index=False))
+
+   samples = r3.available_samples(organism=organism, collection=collection)
+   members = samples.loc[samples["project"].eq(project)]
+   member_ids = members["external_id"].tolist()
+   print("Collection samples:", member_ids)
+
+Output::
+
+   Collections: ['ccle', 'geuvadis_smartseq', 'gtex_geuvadis']
+     project file_source  n_samples
+   ERP110066         sra          1
+   Collection samples: ['ERR2713106']
+
+The collection's membership table supplies the study's data source and its
+selected samples. Here ``file_source`` identifies SRA as the source of the
+study files, and ``n_samples`` counts the study's samples in this collection.
+
+Assembling a gene-level experiment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Pass the same collection and project to
+:meth:`~recount3.R3ResourceBundle.discover_collection`. Request gene counts
+with ``G026``, the file extension for GENCODE v26. Then build a
+:class:`~summarizedexperiment.RangedSummarizedExperiment` (RSE) and compare
+its sample names with the membership list:
+
+.. code:: python
+
+   bundle = r3.R3ResourceBundle.discover_collection(
+       organism=organism,
+       collection=collection,
+       project=project,
+       genomic_units=("gene",),
+       annotations=("G026",),
+   )
+   rse = bundle.to_ranged_summarized_experiment(genomic_unit="gene")
+
+   sample_names = list(rse.get_column_names())
+   print("Features x samples:", rse.shape)
+   print("Samples:", sample_names)
+   assert set(sample_names) == set(member_ids)
+
+Output::
+
+   Features x samples: (63856, 1)
+   Samples: ['ERR2713106']
+
+The RSE has one column for the collection member. Assembly reads the original
+study count file, which can include samples outside the collection. The
+optional custom metadata table adds columns prefixed with ``custom__``.
+For this collection, inspect the curator's sequencing type with
+``rse.get_column_data()["custom__sequencing_type"]``.
+
+Assembly downloads the files it needs into the cache. To save copies of the
+raw files in a directory, call ``bundle.download(dest="./geuvadis-files")``.
+You may see a warning that Snaptron is missing the study's sequencing QC
+table. Assembly uses the metadata tables the mirror provides.
+
+Running the same workflow from the command line
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Back in the shell where you set ``RECOUNT3_URL``, list the collections and
+write a JSONL manifest for this study. Use that manifest to download the raw
+files and save the experiment to a pickle file:
+
+.. code:: bash
+
+   recount3 search collections organism=human --format=tsv
+   recount3 search collection organism=human collection=geuvadis_smartseq \
+       project=ERP110066 genomic_unit=gene annotation_extension=G026 \
+       --output=collection.jsonl
+   recount3 download --from=collection.jsonl --dest=./geuvadis-files
+   recount3 bundle rse --from=collection.jsonl --genomic-unit=gene \
+       --out=geuvadis-ERP110066.pkl
+
+You can run ``bundle rse`` directly after writing the manifest if you only
+want the experiment. It fetches any files it needs. See :doc:`cli` for
+download and output options.
+
+Adapting the example
+~~~~~~~~~~~~~~~~~~~~
+
+Omit ``project`` from ``discover_collection`` to discover all member studies.
+The default ``join_policy="inner"`` keeps features shared by the selected
+studies. If you combine bundles, use ``bundle.filter(collection=collection)``
+to select one collection with its membership table and annotations. Each
+assembled experiment requires unique sample IDs.
+
+The membership table, ``<name>.recount_project.gz``, stays in the bundle
+with ``include_metadata=False``. With metadata enabled, assembly adds fields
+from ``<name>.custom.gz`` when published, joining by ``rail_id``,
+``external_id``, and ``study``. If a study metadata table is missing rows for
+some collection members, pass ``metadata_join="outer"`` to the Python builder
+to retain those members when their count columns are present.
+
+To work with exon counts, use ``genomic_units=("exon",)`` in discovery and
+``genomic_unit="exon"`` in assembly. For junctions, use a mirror that supplies
+the count, coordinate, and sample ID files for the study. Set
+``genomic_units=()`` and ``junction_exts=("MM", "RR", "ID")`` in discovery and
+``genomic_unit="junction"`` in assembly. Pass ``include_bigwig=True`` to include
+coverage files for collection members.
+
+For another mirror, set ``RECOUNT3_URL`` before starting Python and run
+``search_collections`` again. Mirrors can list collections in the organism's
+``homes_index``. On a local mirror, recount3 can also list collection
+directories when the index is absent.
+See :ref:`cache-and-configuration` for other ways to select a mirror and the
+`upstream raw-file documentation <https://rna.recount.bio/docs/raw-files.html#data-source-vs-collection>`_
+for the file layout.
 
 
 The three layers of the API
@@ -388,11 +540,11 @@ shape does not fit. Typical cases:
   :class:`pandas.DataFrame` to merge with clinical data of your own, and
   will build the BiocPy object yourself (or skip it entirely).
 
-A bundle is just a list of resources plus filters, so nothing is downloaded
-by default during discovery without BigWigs. BigWig discovery reads a sample
-index. Candidate URLs do not verify that files exist and do not report their
-sizes. That is the practical difference from Layer 1:
-``create_rse`` decides what to fetch for you, a bundle lets you decide.
+A bundle lets you inspect resources and choose which files to fetch.
+Project discovery constructs candidate URLs and reads a sample index if you
+request BigWigs. :ref:`Collection discovery <collections>` reads a membership
+table to locate the study files. Candidate URLs do not verify that files
+exist or report their sizes.
 
 Discovering resources for one or more projects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -792,9 +944,11 @@ Construction uses ``metadata_join="inner"`` by default, matching R's
 intersection of the nonempty metadata tables within each project. Samples
 absent from that intersection are excluded from both the assay and
 ``column_data``. Use ``metadata_join="outer"`` on ``create_rse`` or either
-bundle builder to retain every count sample with missing metadata values.
-This option is independent of ``join_policy``, which joins feature rows
-across projects. With no metadata resources, all count samples are retained.
+bundle builder to retain count samples with missing metadata values. For
+:ref:`collections <collections>`, both join modes limit the result to the
+samples listed in the membership table. This option is independent of
+``join_policy``, which joins feature rows across projects. With no metadata
+resources, all count samples are retained.
 
 Requested files that fail to load, conflicting sample identifiers, and mixed
 annotations raise errors. Select ``annotation_extension`` explicitly when a

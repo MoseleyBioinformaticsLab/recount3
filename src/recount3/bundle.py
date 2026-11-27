@@ -98,7 +98,7 @@ import io
 import itertools
 import logging
 import re
-from typing import Any, TYPE_CHECKING
+from typing import Any, NamedTuple, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -280,16 +280,14 @@ def _load_optional_metadata(
     applies the same rule, so one absent table no longer costs the caller
     the whole experiment.
 
-    Only retrieval failures are tolerated. A table that was retrieved but
-    cannot be parsed is a damaged file rather than an absent one, and
-    silently dropping it would hide real corruption, so its error
-    propagates -- as it also does in R.
+    Parse errors propagate. For collections, only a confirmed missing file
+    is skipped, matching the behavior of bundle and CLI downloads.
 
     Args:
       res: The metadata resource to load.
       autoload: Whether an unloaded resource may be fetched. With
-        :data:`False` an unloaded resource is an error, because the caller
-        has undertaken to load every resource beforehand.
+        :data:`False`, an unloaded resource is an error unless an earlier
+        load confirmed that the optional file was absent.
 
     Returns:
       The parsed table, or :data:`None` when the resource could not be
@@ -301,12 +299,22 @@ def _load_optional_metadata(
       TypeError: If the loaded object is not a :class:`pandas.DataFrame`.
       recount3.errors.LoadError: If the retrieved file cannot be parsed.
     """
+    collection_scoped = _description_value(res, "collection") is not None
     if not res.is_loaded():
         if not autoload:
+            if collection_scoped and res._unpublished_metadata:
+                return None
             raise ValueError(f"Metadata resource is not loaded: {res.url}")
         try:
             res.load()
-        except errors.DownloadError:
+        except (errors.DownloadError, OSError) as exc:
+            optional_failure = (
+                res._is_unpublished_collection_metadata(exc)
+                if collection_scoped
+                else isinstance(exc, errors.DownloadError)
+            )
+            if not optional_failure:
+                raise
             logging.warning(
                 "Dropping metadata table that could not be retrieved: %s",
                 res.url,
@@ -350,6 +358,37 @@ def _namespace_metadata_columns(
     out = df.rename(columns=rename)
     out = _ensure_unique_columns(out, empty_prefix="col")
     return out, provenance
+
+
+def _collection_metadata_by_project(
+    membership: resource.R3Resource,
+    custom: resource.R3Resource | None,
+    *,
+    autoload: bool,
+) -> dict[tuple[str, str], pd.DataFrame]:
+    """Attach custom fields to collection members grouped by project."""
+    members = search._collection_members(membership, autoload=autoload)
+    keys = list(_METADATA_MERGE_KEYS)
+    metadata = members[keys]
+    if metadata.duplicated(keys).any():
+        raise ValueError(f"Duplicate collection sample keys: {membership.url}")
+    if custom is not None:
+        frame = _load_optional_metadata(custom, autoload=autoload)
+        if frame is not None and not frame.empty:
+            frame = _standardize_metadata_frame(frame)
+            for key in keys:
+                frame[key] = frame[key].str.strip()
+            if frame[keys].fillna("").eq("").any().any():
+                raise ValueError(f"Missing custom metadata keys: {custom.url}")
+            metadata = metadata.merge(
+                frame, on=keys, how="left", sort=False, validate="one_to_one"
+            )
+    return {
+        (str(source), str(project)): metadata.iloc[positions]
+        for (source, project), positions in members.groupby(
+            ["file_source", "project"], sort=False
+        ).indices.items()
+    }
 
 
 def _outer_merge_metadata_frames(
@@ -1099,7 +1138,8 @@ def _select_gtf_resource_for_unit(
     peeking at the file itself. Confirmation needs the annotation on disk,
     so with ``autoload`` enabled a candidate that is not cached yet is
     downloaded first; with ``autoload`` disabled, uncached candidates are
-    skipped and the ranking alone decides.
+    skipped and the ranking alone decides. When a collection resource
+    shares its URL with other candidates, consider that URL only once.
 
     Args:
       bundle: The bundle to search for annotation resources.
@@ -1119,7 +1159,19 @@ def _select_gtf_resource_for_unit(
     if annotation_extension:
         ann = ann.filter(annotation_extension=annotation_extension)
 
-    candidates = list(ann.resources)
+    shared_urls = {
+        res.url
+        for res in ann.resources
+        if res.url and _description_value(res, "collection") is not None
+    }
+    seen: set[str | None] = set()
+    candidates = []
+    for res in ann.resources:
+        if res.url in shared_urls:
+            if res.url in seen:
+                continue
+            seen.add(res.url)
+        candidates.append(res)
     exact = [
         r
         for r in candidates
@@ -1558,10 +1610,31 @@ def _project_key(
     )
 
 
+class _ProjectScope(NamedTuple):
+    """Project identity and its mirror-specific collection, when selected."""
+
+    organism: str | None
+    source: str | None
+    project: str | None
+    collection: str | None
+    mirror: str | None
+
+
+def _project_scope(res: resource.R3Resource) -> _ProjectScope:
+    """Identify a project within its optional collection."""
+    collection = _description_value(res, "collection")
+    mirror = (
+        (res.config or r3_config.default_config()).base_url
+        if collection is not None
+        else None
+    )
+    return _ProjectScope(*_project_key(res), collection, mirror)
+
+
 def _group_by_project(
     resources: Iterable[resource.R3Resource],
-) -> dict[tuple[str | None, str | None, str | None], list[resource.R3Resource]]:
-    """Group resources by :func:`_project_key` in a single pass.
+) -> dict[_ProjectScope, list[resource.R3Resource]]:
+    """Group resources by :func:`_project_scope` in a single pass.
 
     Builders handle a bundle one project at a time. Collecting each project's
     resources with a scan of the whole bundle per project would cost
@@ -1572,16 +1645,31 @@ def _group_by_project(
         resources: Resources in bundle order.
 
     Returns:
-        A mapping from project identity to that project's resources. Keys
-        follow the order in which each project first appears, and each list
-        keeps bundle order.
+        A mapping from project scope to resources, in order of first
+        appearance. A collection scope includes its mirror. Each resource
+        list keeps bundle order.
     """
-    groups: dict[
-        tuple[str | None, str | None, str | None], list[resource.R3Resource]
-    ] = {}
+    groups: dict[_ProjectScope, list[resource.R3Resource]] = {}
     for res in resources:
-        groups.setdefault(_project_key(res), []).append(res)
+        groups.setdefault(_project_scope(res), []).append(res)
     return groups
+
+
+def _collection_tables(
+    resources: Iterable[resource.R3Resource], collection: str
+) -> dict[str | None, resource.R3Resource]:
+    """Index the tables for a collection and require its membership table."""
+    tables = {
+        _description_value(res, "table_name"): res
+        for res in resources
+        if res.description.resource_type == "collection_metadata"
+    }
+    if "recount_project" not in tables:
+        raise ValueError(
+            f"Collection {collection!r} requires its membership resource. "
+            "Rediscover it or include its recount_project table in the bundle."
+        )
+    return tables
 
 
 # ---------------------------------------------------------------------------
@@ -2204,6 +2292,92 @@ class R3ResourceBundle:
 
         return cls(resources=resources_list)
 
+    @classmethod
+    def discover_collection(
+        cls,
+        *,
+        collection: str,
+        organism: str = "human",
+        project: str | None = None,
+        genomic_units: r3_types.StringOrIterable = ("gene", "exon"),
+        annotations: r3_types.StringOrIterable = "default",
+        junction_exts: r3_types.StringOrIterable = (),
+        junction_type: str = "ALL",
+        include_metadata: bool = True,
+        include_bigwig: bool = False,
+        config: r3_config.Config | None = None,
+    ) -> R3ResourceBundle:
+        """Discover resources for a collection and return a bundle.
+
+        Discovery reads the membership table to locate the original study
+        files and identify the samples used during experiment assembly.
+        When only one project is selected, the bundle records its project
+        identity as in :meth:`discover`.
+
+        Args:
+          collection: Collection name as listed by
+            :func:`recount3.search.search_collections`.
+          organism: Organism name, ``"human"`` or ``"mouse"``.
+          project: Optional study identifier. By default, discover every
+            project in the collection.
+          genomic_units: Expression levels to include, ``"gene"`` or
+            ``"exon"``.
+          annotations: Annotation selection as in :meth:`discover`.
+          junction_exts: Junction file extensions to include, such as
+            ``("MM", "RR", "ID")``. Defaults to an empty tuple.
+          junction_type: Junction type selector, such as ``"ALL"``.
+          include_metadata: If :data:`True`, include study and custom
+            metadata. The membership table is always included.
+          include_bigwig: If :data:`True`, include per-sample BigWig
+            coverage files for the selected collection members.
+          config: Optional :class:`~recount3.config.Config` for the mirror
+            and cache.
+
+        Returns:
+          A new :class:`R3ResourceBundle` with the discovered resources.
+
+        Raises:
+          ValueError: If the collection membership is invalid or the
+            requested project is absent.
+          recount3.errors.DownloadError: If the membership table cannot be
+            retrieved.
+
+        Examples:
+            Discover gene counts for one collection member study::
+
+                bundle = r3.R3ResourceBundle.discover_collection(
+                    collection="geuvadis_smartseq",
+                    project="ERP110066",
+                    genomic_units=("gene",),
+                )
+        """
+        resources = search.search_collection(
+            collection=collection,
+            organism=organism,
+            project=project,
+            genomic_units=genomic_units,
+            annotations=annotations,
+            junction_extension=junction_exts,
+            junction_type=junction_type,
+            include_metadata=include_metadata,
+            include_bigwig=include_bigwig,
+            config=config,
+        )
+        identities = {
+            _project_key(res)
+            for res in resources
+            if _description_value(res, "project") is not None
+        }
+        if len(identities) == 1:
+            organism, source, project = next(iter(identities))
+            return cls(
+                resources=resources,
+                organism=organism,
+                data_source=source,
+                project=project,
+            )
+        return cls(resources=resources)
+
     def add(self, res: resource.R3Resource) -> None:
         """Add a resource to the bundle.
 
@@ -2237,6 +2411,7 @@ class R3ResourceBundle:
 
         This method iterates over :attr:`resources` and calls
         :meth:`recount3.resource.R3Resource.load` on each one.
+        It skips unpublished optional metadata for collection resources.
 
         Args:
           strict: If :data:`True`, stop at the first exception and
@@ -2251,8 +2426,14 @@ class R3ResourceBundle:
         for res in self.resources:
             try:
                 res.load(force=force)
-            except Exception:
-                if strict:
+            except Exception as exc:
+                if _description_value(
+                    res, "collection"
+                ) is not None and res._is_unpublished_collection_metadata(exc):
+                    logging.warning(
+                        "Skipping unpublished metadata: %s", res.url
+                    )
+                elif strict:
                     raise
         return self
 
@@ -2358,6 +2539,7 @@ class R3ResourceBundle:
         data_source: r3_types.FieldSpec | None = None,
         genomic_unit: r3_types.FieldSpec | None = None,
         project: r3_types.FieldSpec | None = None,
+        collection: r3_types.FieldSpec | None = None,
         sample: r3_types.FieldSpec | None = None,
         table_name: r3_types.FieldSpec | None = None,
         junction_type: r3_types.FieldSpec | None = None,
@@ -2379,6 +2561,7 @@ class R3ResourceBundle:
           data_source: Data source filter.
           genomic_unit: Genomic unit filter.
           project: Project identifier filter.
+          collection: Collection name filter.
           sample: Sample identifier filter.
           table_name: Metadata table name filter.
           junction_type: Junction type filter.
@@ -2419,6 +2602,7 @@ class R3ResourceBundle:
             "data_source": data_source,
             "genomic_unit": genomic_unit,
             "project": project,
+            "collection": collection,
             "sample": sample,
             "table_name": table_name,
             "junction_type": junction_type,
@@ -2479,19 +2663,21 @@ class R3ResourceBundle:
         """Return a bundle restricted to metadata resources.
 
         Returns:
-          A new :class:`R3ResourceBundle` containing only resources whose
-          ``resource_type`` is ``"metadata_files"``.
+          A new :class:`R3ResourceBundle` with study and collection metadata.
         """
-        return self.filter(resource_type="metadata_files")
+        return self.filter(
+            resource_type=("metadata_files", "collection_metadata")
+        )
 
     def exclude_metadata(self) -> R3ResourceBundle:
         """Return a bundle with metadata resources removed.
 
         Returns:
-          A new :class:`R3ResourceBundle` that excludes resources whose
-          ``resource_type`` is ``"metadata_files"``.
+          A new :class:`R3ResourceBundle` without study or collection metadata.
         """
-        return self.filter(resource_type="metadata_files", invert=True)
+        return self.filter(
+            resource_type=("metadata_files", "collection_metadata"), invert=True
+        )
 
     def where(
         self,
@@ -2614,9 +2800,9 @@ class R3ResourceBundle:
         """Return the list of sample identifiers associated with a project.
 
         The default behavior uses the bundle's stored project identity, as
-        recorded by :meth:`discover`. Explicit keyword arguments can be
-        provided to override or define the identity when the bundle was
-        not created by :meth:`discover`.
+        recorded by :meth:`discover` or :meth:`discover_collection`. Explicit
+        arguments can provide the identity for a bundle with multiple projects.
+        For a collection-scoped project, look up its curated sample IDs.
 
         Args:
           organism: Optional organism identifier override.
@@ -2634,6 +2820,26 @@ class R3ResourceBundle:
             data_source=data_source,
             project=project,
         )
+        by_project = _group_by_project(self.resources)
+        scopes = [
+            (scope, scope.collection)
+            for scope in by_project
+            if scope[:3] == (org, src, proj) and scope.collection is not None
+        ]
+        unscoped = _ProjectScope(org, src, proj, None, None)
+        if scopes and unscoped not in by_project:
+            sample_ids: set[str] = set()
+            for scope, collection in scopes:
+                collection_scope = scope._replace(source=None, project=None)
+                tables = _collection_tables(
+                    by_project.get(collection_scope, ()), collection
+                )
+                members = search._collection_members(tables["recount_project"])
+                matches = members["file_source"].eq(src) & members[
+                    "project"
+                ].eq(proj)
+                sample_ids.update(members.loc[matches, "external_id"])
+            return sorted(sample_ids)
         return search.samples_for_project(
             organism=org,
             data_source=src,
@@ -2897,7 +3103,7 @@ class R3ResourceBundle:
             frame.columns = frame.columns.map(str)
             if keyed_by_coordinates:
                 group = R3ResourceBundle(
-                    list(resources_by_project[_project_key(res)])
+                    list(resources_by_project[_project_scope(res)])
                 )
                 ranges = group._junction_ranges(frame, autoload=autoload)
                 frame.index = ranges.index
@@ -2954,7 +3160,7 @@ class R3ResourceBundle:
         rr = [
             res
             for res in rr
-            if _project_key(res) == _project_key(mm[0])
+            if _project_scope(res) == _project_scope(mm[0])
             and _description_value(res, "junction_type")
             == _description_value(mm[0], "junction_type")
         ]
@@ -3019,8 +3225,9 @@ class R3ResourceBundle:
         method constructs the recount3 mirror URL for its BigWig coverage file
         by matching each sample's ``study`` to a count resource. A bundle with
         only one project supplies the project identity when ``study`` is absent.
-        Sample ``file_source`` metadata overrides the source when available;
-        each resource's configuration supplies the mirror base URL.
+        Study bundles use sample ``file_source`` metadata when available.
+        Collection bundles use the source resolved from membership during
+        discovery. Each resource's configuration supplies the mirror base URL.
 
         Steps
 
@@ -3102,17 +3309,22 @@ class R3ResourceBundle:
                 urls.append(None)
                 continue
             org, source, project = _project_key(res)
-            if source_values is None:
-                source_fields = [
-                    c for c in out.columns if c.lower().endswith("file_source")
-                ]
-                source_values = (
-                    _row_values(out, source_fields[0])
-                    if source_fields
-                    else [None] * len(out)
-                )
-            if isinstance(source_values[position], str):
-                source = source_values[position].rstrip("/").rsplit("/", 1)[-1]
+            if _description_value(res, "collection") is None:
+                if source_values is None:
+                    source_fields = [
+                        c
+                        for c in out.columns
+                        if c.lower().endswith("file_source")
+                    ]
+                    source_values = (
+                        _row_values(out, source_fields[0])
+                        if source_fields
+                        else [None] * len(out)
+                    )
+                if isinstance(source_values[position], str):
+                    source = (
+                        source_values[position].rstrip("/").rsplit("/", 1)[-1]
+                    )
             if not all((org, source, project)):
                 urls.append(None)
                 continue
@@ -3135,6 +3347,7 @@ class R3ResourceBundle:
         sample_ids: Sequence[str],
         autoload: bool = True,
         metadata_join: str = "inner",
+        collection_metadata: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """Merge metadata within each project and align it to count samples.
 
@@ -3155,10 +3368,12 @@ class R3ResourceBundle:
            identifiers, so a count sample may be named by either. An
            identifier naming two rows is ambiguous; the first one met,
            row by row and ``external_id`` before ``rail_id``, is reported.
-        4. Pick the rows of the requested samples in their order. An inner
-           join requires every metadata row to be a counted sample; an outer
-           join keeps samples without metadata, filling ``external_id`` with
-           the sample ID.
+        4. Pick the rows of the requested samples in their order. For a
+           collection, sort by the sample keys using numeric ``rail_id``
+           values to match R's ``merge()`` order. An inner join requires every
+           metadata row to match a count sample. Outside collections, an
+           outer join also keeps samples without metadata and fills
+           ``external_id`` with the count sample ID.
 
         Note:
             ``O(T * S * M)`` for ``T`` tables per project (at most five in
@@ -3175,6 +3390,8 @@ class R3ResourceBundle:
             metadata_join: ``"inner"`` intersects nonempty tables per project;
                 ``"outer"`` retains every count sample with missing metadata
                 where no match exists.
+            collection_metadata: Member keys and custom fields for the
+                current project. Both join modes are limited to these keys.
 
         Returns:
             Metadata indexed by selected count sample IDs, with namespaced
@@ -3196,7 +3413,8 @@ class R3ResourceBundle:
         sample_ids = [str(x) for x in sample_ids]
         groups = {}
         provenance = {}
-        for res in self.only_metadata().resources:
+        project_metadata = self.filter(resource_type="metadata_files").resources
+        for res in project_metadata:
             frame = _load_optional_metadata(res, autoload=autoload)
             if frame is None:
                 continue
@@ -3211,9 +3429,14 @@ class R3ResourceBundle:
             if frame.duplicated(list(_METADATA_MERGE_KEYS)).any():
                 raise ValueError(f"Duplicate sample metadata keys in {res.url}")
             groups.setdefault(_project_key(res), []).append(frame)
-        if not groups:
+        if collection_metadata is not None:
+            collection_metadata, origin = _namespace_metadata_columns(
+                collection_metadata, origin="custom"
+            )
+            provenance.update(origin)
+        if not groups and collection_metadata is None:
             result = pd.DataFrame({"external_id": sample_ids}, index=sample_ids)
-            if self.only_metadata().resources:
+            if project_metadata:
                 # Every table the bundle offered was empty or unretrievable.
                 # R stops here too ("The are no metadata files to work
                 # with."): a bundle that asked for metadata and got none
@@ -3226,8 +3449,13 @@ class R3ResourceBundle:
             return result
         merged_groups = []
         for frames in groups.values():
+            identity_frames = (
+                frames
+                if collection_metadata is None
+                else [*frames, collection_metadata]
+            )
             identities = pd.concat(
-                [f[list(_METADATA_MERGE_KEYS)] for f in frames]
+                [f[list(_METADATA_MERGE_KEYS)] for f in identity_frames]
             ).drop_duplicates()
             for key, other in (
                 ("rail_id", "external_id"),
@@ -3260,7 +3488,27 @@ class R3ResourceBundle:
                     validate="one_to_one",
                 )
             merged_groups.append(merged)
-        merged = pd.concat(merged_groups, ignore_index=True)
+        if merged_groups:
+            merged = pd.concat(merged_groups, ignore_index=True)
+            if collection_metadata is not None:
+                merged = merged.merge(
+                    collection_metadata,
+                    on=list(_METADATA_MERGE_KEYS),
+                    how="inner" if metadata_join == "inner" else "right",
+                    sort=False,
+                    validate="one_to_one",
+                )
+        else:
+            merged = collection_metadata
+        if collection_metadata is not None:
+            merged = merged.sort_values(
+                list(_METADATA_MERGE_KEYS),
+                key=lambda values: (
+                    pd.to_numeric(values)
+                    if values.name == "rail_id"
+                    else values
+                ),
+            ).reset_index(drop=True)
         lookup = {}
         for position, *identifiers in zip(
             merged.index,
@@ -3276,7 +3524,10 @@ class R3ResourceBundle:
                             f"Ambiguous sample identifier {name!r} in metadata."
                         )
                     lookup[name] = position
-        if metadata_join == "inner":
+        keep_unmatched = (
+            metadata_join == "outer" and collection_metadata is None
+        )
+        if not keep_unmatched:
             represented = {
                 lookup[name] for name in sample_ids if name in lookup
             }
@@ -3299,16 +3550,16 @@ class R3ResourceBundle:
                     "leave the unmatched metadata missing."
                 )
         selected = [
-            name
-            for name in sample_ids
-            if name in lookup or metadata_join == "outer"
+            name for name in sample_ids if name in lookup or keep_unmatched
         ]
+        if collection_metadata is not None:
+            selected.sort(key=lookup.__getitem__)
         positions = [lookup.get(name, -1) for name in selected]
         aligned = merged.reindex(positions).copy()
         aligned.index = selected
         missing = aligned["external_id"].isna()
         if missing.any():
-            if metadata_join == "inner":
+            if not keep_unmatched:
                 raise ValueError(
                     "Matched metadata rows have missing external_id values."
                 )
@@ -3448,8 +3699,39 @@ class R3ResourceBundle:
         keys = list(counts_by_project)
         frames, columns, range_frames = [], [], []
         used_resources = []
+        project_homes = []
+        collection_tables: dict[
+            _ProjectScope, dict[tuple[str, str], pd.DataFrame]
+        ] = {}
         for key in keys:
+            source, project = key.source, key.project
+            collection = key.collection
             selected_counts = counts_by_project[key]
+            collection_metadata = None
+            if collection is None:
+                if source:
+                    project_homes.append(f"data_sources/{source}")
+            else:
+                project_homes.append(f"collections/{collection}")
+                scope = key._replace(source=None, project=None)
+                if scope not in collection_tables:
+                    tables = _collection_tables(
+                        resources_by_project.get(scope, ()), collection
+                    )
+                    collection_tables[scope] = _collection_metadata_by_project(
+                        tables["recount_project"],
+                        tables.get("custom"),
+                        autoload=autoload,
+                    )
+                    used_resources.extend(tables.values())
+                collection_metadata = collection_tables[scope].get(
+                    (str(source), str(project))
+                )
+                if collection_metadata is None:
+                    raise ValueError(
+                        f"No members in collection {collection!r} for "
+                        f"project {project!r} from {source!r}."
+                    )
             chosen = {id(r) for r in selected_counts}
             related = [
                 res
@@ -3468,6 +3750,7 @@ class R3ResourceBundle:
                 sample_ids=list(counts.columns),
                 autoload=autoload,
                 metadata_join=metadata_join,
+                collection_metadata=collection_metadata,
             )
             counts = counts.loc[:, col.index]
             counts, col = _maybe_relabel_counts_columns_to_external_id(
@@ -3530,11 +3813,9 @@ class R3ResourceBundle:
                 datetime.timezone.utc
             ).isoformat(),
             "recount3_version": version.__version__,
-            "project": collapse(key[2] for key in keys),
-            "organism": collapse(key[0] for key in keys),
-            "project_home": collapse(
-                f"data_sources/{key[1]}" for key in keys if key[1]
-            ),
+            "project": collapse(key.project for key in keys),
+            "organism": collapse(key.organism for key in keys),
+            "project_home": collapse(project_homes),
             "type": unit,
             "annotation": annotation,
             "annotation_extension": annotation_extension_used,
@@ -3606,7 +3887,7 @@ class R3ResourceBundle:
             unions them and fills only newly introduced rows with zero.
           metadata_join: ``"inner"`` selects the intersection of nonempty
             metadata tables within each project. ``"outer"`` retains all count
-            samples.
+            samples. Collection experiments limit both joins to members.
           autoload: If :data:`True`, load resources when needed. If False,
             count and metadata resources must already be loaded.
 
@@ -3699,7 +3980,8 @@ class R3ResourceBundle:
             absent features.
           metadata_join: ``"inner"`` intersects nonempty metadata tables
             within each project. ``"outer"`` retains all count
-            samples. This is independent of the feature ``join_policy``.
+            samples. Collection experiments limit both joins to members.
+            This is independent of the feature ``join_policy``.
           autoload: Whether to download and load resources as needed. With
             :data:`False`, counts and metadata must already be loaded and
             range files must be cached locally; no resources are retrieved.
@@ -3883,6 +4165,7 @@ class R3ResourceBundle:
         ``create_rse()`` does not call this method automatically; prefetch
         explicitly to use worker threads before construction.
         See :mod:`recount3.resource` for refresh and failure semantics.
+        Unpublished metadata files are skipped when downloading collections.
 
         Args:
           dest: Destination directory or ``.zip`` path, as a string or any
@@ -3904,21 +4187,22 @@ class R3ResourceBundle:
             selected.
         """
         resources = self.resources
+
+        def download_resource(res: resource.R3Resource) -> None:
+            try:
+                res.download(path=dest, cache_mode=cache, overwrite=overwrite)
+            except (errors.DownloadError, OSError) as exc:
+                if not res._is_unpublished_collection_metadata(exc):
+                    raise
+                logging.warning("Skipping unpublished metadata: %s", res.url)
+
         if max_workers <= 1 or len(resources) <= 1:
             for res in resources:
-                res.download(path=dest, cache_mode=cache, overwrite=overwrite)
+                download_resource(res)
             return
 
         workers = min(max_workers, len(resources))
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [
-                pool.submit(
-                    res.download,
-                    path=dest,
-                    cache_mode=cache,
-                    overwrite=overwrite,
-                )
-                for res in resources
-            ]
+            futures = [pool.submit(download_resource, res) for res in resources]
             for fut in concurrent.futures.as_completed(futures):
                 fut.result()  # re-raise the first download error, if any

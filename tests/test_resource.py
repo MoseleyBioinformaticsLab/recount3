@@ -45,6 +45,7 @@ import shutil
 import threading
 from typing import Any
 from unittest import mock
+import urllib.error
 import warnings
 
 import pandas as pd
@@ -73,6 +74,7 @@ from recount3.resource import R3Resource
 
 _DATA_DIR = pathlib.Path(__file__).parent / "data"
 _MIRROR = _DATA_DIR / "recount3_mirror" / "recount3"
+
 
 _GENE_GZ = (
     _MIRROR
@@ -729,6 +731,23 @@ def test_ensure_cached_config_none_calls_default_config(
 # ===========================================================================
 # R3Resource.download — validation / cache-only
 # ===========================================================================
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"), [(404, True), (410, True), (500, False)]
+)
+def test_collection_download_classifies_unpublished_metadata(
+    cfg: Config, status: int, expected: bool
+) -> None:
+    res = _make(
+        "collection_metadata",
+        cfg,
+        organism="human",
+        collection="curated",
+        table_name="custom",
+    )
+    failure = urllib.error.HTTPError(res.url, status, "test", {}, None)
+    assert res._is_unpublished_collection_metadata(failure) is expected
 
 
 def test_download_invalid_cache_mode_raises(cfg: Config) -> None:

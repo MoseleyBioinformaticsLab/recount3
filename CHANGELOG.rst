@@ -24,6 +24,20 @@ Breaking changes
   BigBed-handle access could succeed. Use ``pyBigWig.open()`` directly for
   BigBed files.
 
+Added
+~~~~~
+
+- Discover curated sample collections on mirrors that publish them. List
+  collections with ``search_collections()`` and locate their files with
+  ``search_collection()`` or ``R3ResourceBundle.discover_collection()``. Pass
+  ``collection=`` to ``available_samples()``, ``available_projects()``, or
+  ``project_homes()`` for collection-specific summaries. The CLI provides
+  ``recount3 search collections`` and ``recount3 search collection``.
+- Collection bundles and manifests point to the original study count files.
+  Experiment assembly selects member samples and adds published custom
+  metadata with a ``custom__`` prefix. Collection support is source-compatible
+  with existing project calls and CLI manifests.
+
 Changed
 ~~~~~~~
 
@@ -102,6 +116,8 @@ Performance
 Fixed
 ~~~~~
 
+- ``recount3 search`` uses the configured mirror in manifest URLs. The global
+  ``--base-url`` flag accepts mirror URLs with or without a trailing slash.
 - The shared R/Python cache stages downloads until registration and restores
   replaced files if the registry transaction rolls back. Cache lookup and
   listing also work on read-only snapshots.
