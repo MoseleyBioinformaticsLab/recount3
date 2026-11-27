@@ -311,16 +311,16 @@ Citation
 
 When using the ``recount3`` Python package in published work, please cite:
 
-* Alexander Alsalihi, Robert M Flight, and Hunter N.B. Moseley. “The recount3
-  Python package for programmatic access to uniformly processed RNA-seq data.”
-  *BMC Genomics* (2026). doi: `10.1186/s12864-026-13499-9`_
+* Alsalihi, A., Flight, R.M. & Moseley, H.N.B. The recount3 Python package for
+  programmatic access to uniformly processed RNA-seq data. *BMC Genomics*
+  (2026). https://doi.org/10.1186/s12864-026-13499-9
 
 If your work uses the recount3 data resource, please also cite the original
 recount3 publication:
 
-* Wilks, C., Zheng, S.C., Chen, F.Y. et al. “recount3: summaries and queries
-  for large-scale RNA-seq expression and splicing.” *Genome Biology* 22, 323
-  (2021). doi: `10.1186/s13059-021-02533-6`_
+* Wilks, C., Zheng, S.C., Chen, F.Y. *et al.* recount3: summaries and queries
+  for large-scale RNA-seq expression and splicing. *Genome Biol* 22, 323
+  (2021). https://doi.org/10.1186/s13059-021-02533-6
 
 .. _recount3: https://rna.recount.bio
 .. _recount3 study explorer: https://jhubiostatistics.shinyapps.io/recount3-study-explorer/
@@ -329,5 +329,3 @@ recount3 publication:
 .. _Pages: https://moseleybioinformaticslab.github.io/recount3/
 .. _Tutorial: https://moseleybioinformaticslab.github.io/recount3/tutorial.html
 .. _Issues: https://github.com/MoseleyBioinformaticsLab/recount3/issues
-.. _10.1186/s12864-026-13499-9: https://doi.org/10.1186/s12864-026-13499-9
-.. _10.1186/s13059-021-02533-6: https://doi.org/10.1186/s13059-021-02533-6
