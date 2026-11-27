@@ -41,6 +41,10 @@ Added
 Changed
 ~~~~~~~
 
+- ``compute_read_counts``, ``compute_scale_factors``, ``compute_tpm``,
+  ``is_paired_end``, and ``transform_counts`` move to ``recount3.compute``.
+  Calls through ``recount3.se`` emit ``DeprecationWarning`` and remain
+  supported until their planned removal in v2.0.0.
 - ``compute_tpm`` cancels the read-length and kilobase factors when scaling
   each sample to one million. Sparse results use a fill value of 0 and
   store nonzero values and NaN entries explicitly.

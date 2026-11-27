@@ -111,6 +111,10 @@ Run the suite from the repository root:
 Configuration resides in ``[tool.pytest.ini_options]`` of ``pyproject.toml``;
 no additional flags are required.
 
+Keep tests, mocks, and module-specific fixtures and helpers in the matching
+``test_<module>.py`` file. When two modules need the same mock, define it
+locally in each test file.
+
 **The suite must not access the network.** Tests read from the local mirror in
 ``tests/data/recount3_mirror/recount3/`` by pointing ``RECOUNT3_URL`` at its
 ``file://`` URL, construct fixtures on disk, or substitute test doubles with

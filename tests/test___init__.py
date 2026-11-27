@@ -35,6 +35,7 @@ import subprocess
 import sys
 
 import recount3
+import recount3.compute
 import recount3.se
 import recount3.types
 
@@ -128,11 +129,20 @@ def test_se_submodule_is_a_declared_export() -> None:
     assert recount3.se is sys.modules["recount3.se"]
 
 
-def test_se_submodule_is_exposed_by_a_bare_package_import(
+def test_compute_submodule_is_a_declared_export() -> None:
+    assert "compute" in recount3.__all__
+    assert recount3.compute is sys.modules["recount3.compute"]
+
+
+def test_submodules_are_exposed_by_a_bare_package_import(
     recount3_subprocess_env: dict[str, str],
 ) -> None:
-    """``import recount3`` alone must make ``recount3.se`` resolve."""
-    code = "import recount3 as r3\n" "assert callable(r3.se.compute_tpm)\n"
+    """Expose both submodules with a single ``import recount3``."""
+    code = (
+        "import recount3 as r3\n"
+        "assert callable(r3.compute.compute_tpm)\n"
+        "assert callable(r3.se.compute_tpm)\n"
+    )
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
@@ -144,10 +154,7 @@ def test_se_submodule_is_exposed_by_a_bare_package_import(
 
 
 def test_se_submodule_is_reachable_from_the_package() -> None:
-    """The tutorial documents r3.se.<helper>; that must keep working.
-
-    The helpers live on the submodule and are not top-level exports.
-    """
+    """Keep documented ``r3.se`` paths callable during the migration."""
     for name in (
         "compute_read_counts",
         "compute_scale_factors",
@@ -160,7 +167,7 @@ def test_se_submodule_is_reachable_from_the_package() -> None:
         assert callable(getattr(recount3.se, name)), f"r3.se.{name} missing"
         assert not hasattr(
             recount3, name
-        ), f"{name} is documented as r3.se.{name}, not a top-level export"
+        ), f"{name} is a submodule helper, not a top-level export"
 
 
 def test_error_classes_are_exported() -> None:

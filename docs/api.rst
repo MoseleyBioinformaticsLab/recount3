@@ -33,6 +33,12 @@ recount3.se
 .. automodule:: recount3.se
    :members:
 
+recount3.compute
+----------------
+
+.. automodule:: recount3.compute
+   :members:
+
 recount3._descriptions
 ----------------------
 

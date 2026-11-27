@@ -37,12 +37,10 @@ samples across multiple data sources (SRA, GTEx, TCGA). This package
 provides a small, typed Python API for discovering, downloading, and loading
 recount3 data files.
 
-The public surface is intentionally flat: core classes and helper functions
-are re-exported here for discovery and convenience. The one exception is the
-:mod:`recount3.se` submodule, which is exposed as ``r3.se`` rather than
-flattened. Its normalization and conversion helpers operate on BiocPy
-experiments, so they are called through that prefix, for example
-``r3.se.compute_tpm(rse)``.
+Core classes and helper functions are re-exported here for discovery and
+convenience. Helpers for working with BiocPy experiments are also available
+through the :mod:`recount3.se` and :mod:`recount3.compute` submodules, for
+example ``r3.compute.compute_tpm(rse)``.
 
 Typical usage example: high-level (recommended for most cases)::
 
@@ -74,7 +72,7 @@ Note:
     * BiocPy (``biocframe``, ``summarizedexperiment``, ``genomicranges``):
       required for :func:`create_rse`,
       :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`,
-      and the compute utilities in :mod:`recount3.se`.
+      and the compute utilities in :mod:`recount3.compute`.
       Install with ``pip install "recount3[biocpy]"``.
     * ``pyBigWig``: required for BigWig file access via
       :class:`~recount3._bigwig.BigWigFile`. Install with
@@ -83,6 +81,7 @@ Note:
 
 from __future__ import annotations
 
+from recount3 import compute as compute
 from recount3 import se as se
 from recount3._bigwig import BigWigFile
 from recount3._descriptions import R3Annotations
@@ -141,6 +140,7 @@ __all__ = [  # noqa: RUF022 - Exports are grouped by API role.
     "__version__",
     # Submodules
     "se",
+    "compute",
     # Config
     "Config",
     "default_config",

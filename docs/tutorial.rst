@@ -35,8 +35,8 @@ What each extra enables:
 - ``biocpy`` is required for :func:`~recount3.create_rse`,
   :meth:`~recount3.bundle.R3ResourceBundle.to_summarized_experiment`,
   :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`,
-  and every helper in :mod:`recount3.se` that returns or operates on a
-  BiocPy object.
+  and helpers in :mod:`recount3.se` and :mod:`recount3.compute` that return
+  or operate on a BiocPy object.
 - ``bigwig`` is required only when you call
   :meth:`~recount3.resource.R3Resource.load` on a BigWig resource or use the
   :class:`~recount3._bigwig.BigWigFile` reader directly.
@@ -481,9 +481,9 @@ Be deliberate about that flag:
 
 - A fallback object **has no genomic ranges**. Counts, sample metadata,
   and the operations driven by column data still work, namely
-  :func:`recount3.se.compute_scale_factors`,
+  :func:`recount3.compute.compute_scale_factors`,
   :func:`recount3.se.expand_sra_attributes`, and
-  :func:`recount3.se.is_paired_end`. The helpers that need an RSE,
+  :func:`recount3.compute.is_paired_end`. The helpers that need an RSE,
   ``compute_read_counts``, ``transform_counts``, and ``compute_tpm``, raise
   ``TypeError`` on a plain SE, as do range queries. The flag returns an RSE
   as usual whenever ranges are available.
@@ -1034,10 +1034,10 @@ Normalization and scaling
 Gene and exon matrices contain base-pair coverage sums (the ``raw_counts``
 assay). Junction matrices contain junction-supporting counts (the ``counts``
 assay); do not apply the gene coverage-to-read or TPM formulas to junctions.
-:mod:`recount3.se` provides helpers consistent with the R implementation.
-These reach the ``se`` submodule rather than the package root, so they are
-called as ``r3.se.compute_tpm(rse)``, whereas the builders and discovery
-helpers used so far are available directly as ``r3.create_rse(...)``.
+:mod:`recount3.compute` provides helpers consistent with the R implementation.
+Call them through the submodule, for example ``r3.compute.compute_tpm(rse)``.
+The builders and discovery helpers are available directly on ``r3``, for
+example ``r3.create_rse(...)``.
 
 ``compute_read_counts``, ``transform_counts``, and ``compute_tpm`` require an
 RSE. ``compute_scale_factors`` and ``is_paired_end`` also accept sample
@@ -1050,7 +1050,7 @@ Approximate read counts
 
    import recount3 as r3
 
-   reads = r3.se.compute_read_counts(rse)        # pandas DataFrame, integer-rounded
+   reads = r3.compute.compute_read_counts(rse)  # pandas DataFrame, integer-rounded
 
 Values are rounded to whole reads by default; pass ``round_to_integers=False``
 to retain the fractional estimates.
@@ -1064,8 +1064,8 @@ Two methods are supported, matching the R ``recount3`` reference:
 
    import recount3 as r3
 
-   sf_auc = r3.se.compute_scale_factors(rse, by="auc")
-   sf_mapreads = r3.se.compute_scale_factors(rse, by="mapped_reads")
+   sf_auc = r3.compute.compute_scale_factors(rse, by="auc")
+   sf_mapreads = r3.compute.compute_scale_factors(rse, by="mapped_reads")
    print(pd.DataFrame({"auc": sf_auc, "mapped_reads": sf_mapreads}).head(3))
 
 Both return a :class:`pandas.Series` indexed by ``external_id``::
@@ -1080,8 +1080,8 @@ Apply scale factors to the assay:
 
 .. code:: python
 
-   scaled = r3.se.transform_counts(rse, by="auc")          # default
-   scaled = r3.se.transform_counts(rse, by="mapped_reads", target_read_count=4e7)
+   scaled = r3.compute.transform_counts(rse, by="auc")  # default
+   scaled = r3.compute.transform_counts(rse, by="mapped_reads", target_read_count=4e7)
 
 TPM (gene/exon only, needs feature widths)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1090,7 +1090,7 @@ TPM (gene/exon only, needs feature widths)
 
    import recount3 as r3
 
-   tpm = r3.se.compute_tpm(rse)
+   tpm = r3.compute.compute_tpm(rse)
    print(type(tpm).__name__, tpm.shape)
    print(tpm.sum(axis=0).round().unique())
 
@@ -1118,7 +1118,7 @@ Check for missing or non-finite results before downstream analysis. The helpers
 return new DataFrames and do not replace the RSE assay; rounded estimates have
 integer-like values but may retain a floating dtype.
 
-:func:`recount3.se.is_paired_end`, ``compute_scale_factors``, and
+:func:`recount3.compute.is_paired_end`, ``compute_scale_factors``, and
 ``expand_sra_attributes`` accept a metadata DataFrame or an SE/RSE object.
 See the API reference for full signatures.
 
