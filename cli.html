@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CLI Reference &mdash; recount3 1.3.0 documentation</title>
+  <title>CLI Reference &mdash; recount3 1.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=1f29e9d3"></script>
+      <script src="_static/documentation_options.js?v=9172181d"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -175,12 +175,29 @@ project       organism, data_source, project
               include_bigwig=true|false)
 sources       organism
 source-meta   organism, data_source
+collections   organism
+collection    organism, collection
+              (optional project and the project-mode options above;
+              junction files are requested explicitly)
 </pre></div>
 </div>
 <p>Example:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>recount3<span class="w"> </span>search<span class="w"> </span>junctions<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">data_source</span><span class="o">=</span>sra<span class="w"> </span><span class="nv">project</span><span class="o">=</span>SRP009615<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span><span class="nv">junction_type</span><span class="o">=</span>ALL<span class="w"> </span><span class="nv">junction_extension</span><span class="o">=</span>MM<span class="w"> </span>--format<span class="o">=</span>tsv
+</pre></div>
+</div>
+<p>For collections, select a mirror that hosts them. The Snaptron test
+mirror is used by the upstream R package. Each row from <code class="docutils literal notranslate"><span class="pre">search</span>
+<span class="pre">collections</span></code> points to a collection’s sample membership table.
+A <code class="docutils literal notranslate"><span class="pre">search</span> <span class="pre">collection</span></code> manifest includes that table for experiment
+assembly, even with <code class="docutils literal notranslate"><span class="pre">include_metadata=false</span></code>.
+Pass the same mirror to <code class="docutils literal notranslate"><span class="pre">search</span></code> and <code class="docutils literal notranslate"><span class="pre">download</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">RECOUNT3_URL</span><span class="o">=</span>https://snaptron.cs.jhu.edu/data/temp/recount3/
+recount3<span class="w"> </span>search<span class="w"> </span>collections<span class="w"> </span><span class="nv">organism</span><span class="o">=</span>human
+recount3<span class="w"> </span>search<span class="w"> </span>collection<span class="w"> </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">collection</span><span class="o">=</span>geuvadis_smartseq<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="nv">project</span><span class="o">=</span>ERP110066<span class="w"> </span><span class="nv">genomic_unit</span><span class="o">=</span>gene<span class="w"> </span>--output<span class="w"> </span>collection.jsonl
+recount3<span class="w"> </span>download<span class="w"> </span>--from<span class="o">=</span>collection.jsonl<span class="w"> </span>--dest<span class="o">=</span>./collection-files
 </pre></div>
 </div>
 </dd>
@@ -263,10 +280,10 @@ rejects.</p>
 <p><strong>JSONL</strong> (also called NDJSON) stores one JSON object per line. It is ideal for
 streaming, grepping, and piping, and is used for both <code class="docutils literal notranslate"><span class="pre">search</span></code> output and
 <code class="docutils literal notranslate"><span class="pre">download</span></code> input.</p>
-<p>Each manifest line contains all resource description fields plus two
-convenience keys: <code class="docutils literal notranslate"><span class="pre">url</span></code> (the fully qualified HTTP URL) and <code class="docutils literal notranslate"><span class="pre">arcname</span></code> (the
-destination path inside a <code class="docutils literal notranslate"><span class="pre">.zip</span></code> archive). For example, this record is
-wrapped for readability:</p>
+<p>Each manifest line contains the resource description fields and two derived
+keys, <code class="docutils literal notranslate"><span class="pre">url</span></code> (the fully qualified URL) and <code class="docutils literal notranslate"><span class="pre">arcname</span></code> (the destination path
+inside a <code class="docutils literal notranslate"><span class="pre">.zip</span></code> archive). Collection resources also include <code class="docutils literal notranslate"><span class="pre">collection</span></code>.
+This record is wrapped for readability:</p>
 <div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="nt">"resource_type"</span><span class="p">:</span><span class="s2">"count_files_gene_or_exon"</span><span class="p">,</span><span class="nt">"organism"</span><span class="p">:</span><span class="s2">"human"</span><span class="p">,</span>
 <span class="w"> </span><span class="nt">"data_source"</span><span class="p">:</span><span class="s2">"sra"</span><span class="p">,</span><span class="nt">"genomic_unit"</span><span class="p">:</span><span class="s2">"gene"</span><span class="p">,</span><span class="nt">"project"</span><span class="p">:</span><span class="s2">"SRP009615"</span><span class="p">,</span>
 <span class="w"> </span><span class="nt">"sample"</span><span class="p">:</span><span class="kc">null</span><span class="p">,</span><span class="nt">"annotation_extension"</span><span class="p">:</span><span class="s2">"G026"</span><span class="p">,</span><span class="nt">"junction_type"</span><span class="p">:</span><span class="kc">null</span><span class="p">,</span>
@@ -311,7 +328,9 @@ setting), the default directory matches R’s recount3 cache: normally
 <code class="docutils literal notranslate"><span class="pre">XDG_CACHE_HOME</span></code> overrides and platform-specific defaults are respected.
 An explicit <code class="docutils literal notranslate"><span class="pre">--cache-dir</span></code> or <code class="docutils literal notranslate"><span class="pre">RECOUNT3_CACHE_DIR</span></code> still takes precedence.
 The <code class="docutils literal notranslate"><span class="pre">filesystem</span></code> default remains <code class="docutils literal notranslate"><span class="pre">~/.cache/recount3/files</span></code>. See
-<a class="reference internal" href="tutorial.html#cache-and-configuration"><span class="std std-ref">Cache and configuration</span></a> for platform paths and shared-cache examples.</p>
+<a class="reference internal" href="tutorial.html#cache-and-configuration"><span class="std std-ref">Cache and configuration</span></a> for platform paths and shared-cache examples.
+With <code class="docutils literal notranslate"><span class="pre">download</span> <span class="pre">--jobs</span></code>, shared-cache workers can overlap transfers and
+checksums and commit several completed registry updates together.</p>
 </section>
 <section id="logging">
 <h2>Logging<a class="headerlink" href="#logging" title="Link to this heading"></a></h2>

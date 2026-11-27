@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3._descriptions &mdash; recount3 1.3.0 documentation</title>
+  <title>recount3._descriptions &mdash; recount3 1.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=1f29e9d3"></script>
+      <script src="../../_static/documentation_options.js?v=9172181d"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -126,6 +126,7 @@
 <span class="sd">  ``"bigwig_files"``                          :class:`R3BigWig`</span>
 <span class="sd">  ``"data_sources"``                          :class:`R3DataSources`</span>
 <span class="sd">  ``"data_source_metadata"``                  :class:`R3DataSourceMetadata`</span>
+<span class="sd">  ``"collection_metadata"``                   :class:`R3CollectionMetadata`</span>
 <span class="sd">  ==========================================  ============================</span>
 
 <span class="sd">Valid values for the ``organism`` and ``data_source`` fields are exposed as</span>
@@ -152,9 +153,9 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cast</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">ClassVar</span>
 
 <span class="n">VALID_ORGANISMS</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">"human"</span><span class="p">,</span> <span class="s2">"mouse"</span><span class="p">})</span>
 <span class="n">VALID_DATA_SOURCES</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">"sra"</span><span class="p">,</span> <span class="s2">"gtex"</span><span class="p">,</span> <span class="s2">"tcga"</span><span class="p">})</span>
@@ -236,6 +237,7 @@
 <span class="sd">        junction_type: Junction category selector (e.g., "ALL").</span>
 <span class="sd">        junction_extension: Junction file format tag (e.g., "MM", "ID", "RR").</span>
 <span class="sd">        table_name: Metadata table name (e.g., "recount_qc").</span>
+<span class="sd">        collection: Collection name for collection-scoped resources.</span>
 <span class="sd">    """</span>
 
     <span class="n">resource_type</span><span class="p">:</span> <span class="nb">str</span>
@@ -248,6 +250,7 @@
     <span class="n">junction_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">junction_extension</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="R3ResourceDescription">
@@ -283,11 +286,11 @@
 <span class="sd">            static typing; implemented by ``_R3CommonFields``.</span>
 <span class="sd">    """</span>
 
-    <span class="n">_TYPE_REGISTRY</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">_TYPE_REGISTRY</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">type</span><span class="p">[</span><span class="n">R3ResourceDescription</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="n">_RESOURCE_TYPE</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">resource_type</span><span class="p">:</span> <span class="nb">str</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span>  <span class="c1"># noqa: PYI034 - The factory returns registered subclasses.</span>
         <span class="bp">cls</span><span class="p">,</span>
         <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
@@ -701,6 +704,48 @@
         <span class="k">return</span> <span class="p">(</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/data_sources/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">/metadata/"</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">data_source</span><span class="si">}</span><span class="s2">.recount_project.MD.gz"</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="R3CollectionMetadata">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3CollectionMetadata">[docs]</a>
+<span class="nd">@R3ResourceDescription</span><span class="o">.</span><span class="n">register_type</span><span class="p">(</span><span class="s2">"collection_metadata"</span><span class="p">)</span>
+<span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">R3CollectionMetadata</span><span class="p">(</span><span class="n">_R3CommonFields</span><span class="p">,</span> <span class="n">R3ResourceDescription</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Descriptor for per-collection metadata tables.</span>
+
+<span class="sd">    Required fields:</span>
+<span class="sd">      - organism</span>
+<span class="sd">      - collection</span>
+<span class="sd">      - table_name</span>
+
+<span class="sd">    Duffel layout:</span>
+<span class="sd">      {organism}/collections/{collection}/metadata/</span>
+<span class="sd">        {collection}.{table_name}.gz</span>
+
+<span class="sd">    The table name is ``"recount_project"`` for membership or ``"custom"``</span>
+<span class="sd">    for curator-supplied metadata.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_require</span><span class="p">(</span><span class="s2">"organism"</span><span class="p">,</span> <span class="s2">"collection"</span><span class="p">,</span> <span class="s2">"table_name"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_organism</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">collection</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"."</span><span class="p">,</span> <span class="s2">".."</span><span class="p">}</span> <span class="ow">or</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">char</span> <span class="ow">in</span> <span class="s2">"/</span><span class="se">\\</span><span class="s2">?#%"</span> <span class="ow">or</span> <span class="n">char</span><span class="o">.</span><span class="n">isspace</span><span class="p">()</span> <span class="ow">or</span> <span class="nb">ord</span><span class="p">(</span><span class="n">char</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">32</span>
+            <span class="k">for</span> <span class="n">char</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid collection: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">table_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">"recount_project"</span><span class="p">,</span> <span class="s2">"custom"</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid collection table: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+<div class="viewcode-block" id="R3CollectionMetadata.url_path">
+<a class="viewcode-back" href="../../api.html#recount3._descriptions.R3CollectionMetadata.url_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">url_path</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">organism</span><span class="si">}</span><span class="s2">/collections/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="si">}</span><span class="s2">/metadata/"</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">collection</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">table_name</span><span class="si">}</span><span class="s2">.gz"</span>
         <span class="p">)</span></div>
 </div>
 

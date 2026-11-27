@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3.search &mdash; recount3 1.3.0 documentation</title>
+  <title>recount3.search &mdash; recount3 1.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=1f29e9d3"></script>
+      <script src="../../_static/documentation_options.js?v=9172181d"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -116,7 +116,7 @@
 <span class="sd">  * :func:`search_count_files_junctions`: junction count files (MM/ID/RR)</span>
 <span class="sd">  * :func:`search_metadata_files`: per-project metadata tables</span>
 <span class="sd">  * :func:`search_bigwig_files`: per-sample BigWig coverage files</span>
-<span class="sd">  * :func:`search_data_sources`: organism-level data-source index</span>
+<span class="sd">  * :func:`search_data_sources`: organism-level homes index</span>
 <span class="sd">  * :func:`search_data_source_metadata`: data-source metadata listings</span>
 <span class="sd">  * :func:`search_project_all`: convenience orchestrator that calls all of</span>
 <span class="sd">    the above for a given project and returns a combined resource list</span>
@@ -126,11 +126,13 @@
 <span class="sd">  All are part of the public top-level surface (re-exported from</span>
 <span class="sd">  :mod:`recount3`):</span>
 
-<span class="sd">  * :func:`available_samples`: DataFrame of samples available across data</span>
-<span class="sd">    sources</span>
+<span class="sd">  * :func:`available_samples`: DataFrame of samples from data sources or a</span>
+<span class="sd">    collection</span>
 <span class="sd">  * :func:`available_projects`: DataFrame of projects with sample counts</span>
 <span class="sd">  * :func:`project_homes`: DataFrame mapping projects to their data-source</span>
-<span class="sd">    home URLs</span>
+<span class="sd">    or collection homes</span>
+<span class="sd">  * :func:`search_collections`: membership tables advertised by a mirror</span>
+<span class="sd">  * :func:`search_collection`: resources for a collection or a member study</span>
 <span class="sd">  * :func:`samples_for_project`: sample IDs for a specific project</span>
 <span class="sd">  * :func:`create_sample_project_lists`: build per-data-source sample/project</span>
 <span class="sd">    lists (backs the ``ids`` CLI command)</span>
@@ -175,21 +177,27 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">posixpath</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Final</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">posixpath</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">cast</span><span class="p">,</span> <span class="n">Final</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.request</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_descriptions</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_utils</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">config</span> <span class="k">as</span> <span class="n">r3_config</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">resource</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">types</span> <span class="k">as</span> <span class="n">r3_types</span>
 
 <span class="c1">#   https://rna.recount.bio/docs/raw-files.html  (Section 6.2)</span>
-<span class="c1"># Human:  G026 (Gencode v26), G029 (Gencode v29), F006 (FANTOM6_cat),</span>
-<span class="c1">#         R109 (RefSeq), ERCC (ERCC), SIRV (SIRV)</span>
-<span class="c1"># Mouse:  M023 (Gencode v23)</span>
+<span class="c1"># Human codes include G026 and G029 for Gencode, F006 for FANTOM6_cat,</span>
+<span class="c1"># R109 for RefSeq, plus ERCC and SIRV.</span>
+<span class="c1"># Mouse uses M023 for Gencode v23.</span>
 <span class="n">_ANN_EXT_HUMAN</span><span class="p">:</span> <span class="n">Final</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">"G026"</span><span class="p">,</span>
     <span class="s2">"G029"</span><span class="p">,</span>
@@ -306,7 +314,7 @@
         <span class="k">try</span><span class="p">:</span>
             <span class="n">desc</span> <span class="o">=</span> <span class="n">_descriptions</span><span class="o">.</span><span class="n">R3ResourceDescription</span><span class="p">(</span><span class="o">**</span><span class="n">params</span><span class="p">)</span>
             <span class="n">res</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">(</span><span class="n">desc</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-exception-caught</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
                 <span class="k">raise</span>
             <span class="k">continue</span>
@@ -612,7 +620,7 @@
 <span class="w">    </span><span class="sd">"""Return data-source index :class:`~recount3.R3Resource` objects.</span>
 
 <span class="sd">    Each resource resolves to the ``homes_index`` file for one organism,</span>
-<span class="sd">    which lists the available data sources for that organism.</span>
+<span class="sd">    which lists the data sources and any collections for that organism.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        organism: One or more organism names (e.g. ``"human"``, ``"mouse"``).</span>
@@ -666,6 +674,100 @@
         <span class="n">data_source</span><span class="o">=</span><span class="n">data_source</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">_make_resources</span><span class="p">(</span><span class="n">grid</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span> <span class="n">deduplicate</span><span class="o">=</span><span class="n">deduplicate</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_collection_table</span><span class="p">(</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">table_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Construct a resource for a collection's membership or custom table."""</span>
+    <span class="k">return</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">(</span>
+        <span class="n">_descriptions</span><span class="o">.</span><span class="n">R3ResourceDescription</span><span class="p">(</span>
+            <span class="n">resource_type</span><span class="o">=</span><span class="s2">"collection_metadata"</span><span class="p">,</span>
+            <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
+            <span class="n">collection</span><span class="o">=</span><span class="n">collection</span><span class="p">,</span>
+            <span class="n">table_name</span><span class="o">=</span><span class="n">table_name</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="search_collections">
+<a class="viewcode-back" href="../../api.html#recount3.search.search_collections">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">search_collections</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"human"</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return collection membership :class:`~recount3.R3Resource` objects.</span>
+
+<span class="sd">    Each resource points to the ``recount_project`` table for one</span>
+<span class="sd">    collection advertised in the organism's ``homes_index``. A local mirror</span>
+<span class="sd">    without an index uses its collection directories. The Snaptron test</span>
+<span class="sd">    mirror uses the collection catalog from the upstream R package.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        organism: Organism to query (``"human"`` or ``"mouse"``).</span>
+<span class="sd">        config: Optional :class:`~recount3.config.Config` for the mirror</span>
+<span class="sd">            and cache.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        A list of :class:`~recount3.resource.R3Resource` objects, one per</span>
+<span class="sd">        collection in index order. An index containing only data sources</span>
+<span class="sd">        yields an empty list.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the organism or a listed collection name is invalid.</span>
+<span class="sd">        recount3.errors.DownloadError: If the mirror's index cannot be</span>
+<span class="sd">            retrieved.</span>
+<span class="sd">    """</span>
+    <span class="n">org</span> <span class="o">=</span> <span class="n">_normalize_organism_name</span><span class="p">(</span><span class="n">organism</span><span class="p">)</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlsplit</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">base_url</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">))</span>
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">base</span><span class="o">.</span><span class="n">netloc</span> <span class="o">==</span> <span class="s2">"snaptron.cs.jhu.edu"</span>
+        <span class="ow">and</span> <span class="n">base</span><span class="o">.</span><span class="n">path</span> <span class="o">==</span> <span class="s2">"/data/temp/recount3"</span>
+    <span class="p">):</span>
+        <span class="n">homes</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="p">[</span>
+                <span class="s2">"collections/ccle"</span><span class="p">,</span>
+                <span class="s2">"collections/geuvadis_smartseq"</span><span class="p">,</span>
+                <span class="s2">"collections/gtex_geuvadis"</span><span class="p">,</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="n">org</span> <span class="o">==</span> <span class="s2">"human"</span>
+            <span class="k">else</span> <span class="p">[]</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">index_resource</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">(</span>
+            <span class="n">_descriptions</span><span class="o">.</span><span class="n">R3ResourceDescription</span><span class="p">(</span>
+                <span class="n">resource_type</span><span class="o">=</span><span class="s2">"data_sources"</span><span class="p">,</span> <span class="n">organism</span><span class="o">=</span><span class="n">org</span>
+            <span class="p">),</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">cfg</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">root</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">url2pathname</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="n">path</span><span class="p">))</span> <span class="o">/</span> <span class="n">org</span>
+            <span class="k">if</span> <span class="n">base</span><span class="o">.</span><span class="n">scheme</span> <span class="o">==</span> <span class="s2">"file"</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">root</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">"homes_index"</span><span class="p">)</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+            <span class="n">homes</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="sa">f</span><span class="s2">"collections/</span><span class="si">{</span><span class="n">directory</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span>
+                <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">root</span> <span class="o">/</span> <span class="s2">"collections"</span><span class="p">)</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*"</span><span class="p">))</span>
+                <span class="k">if</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span>
+            <span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">homes</span> <span class="o">=</span> <span class="n">cast</span><span class="p">(</span><span class="s2">"list[str]"</span><span class="p">,</span> <span class="n">index_resource</span><span class="o">.</span><span class="n">load</span><span class="p">())</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="n">_collection_table</span><span class="p">(</span><span class="n">org</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s2">"recount_project"</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span>
+            <span class="n">_posix_basename</span><span class="p">(</span><span class="n">home</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">home</span> <span class="ow">in</span> <span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="o">.</span><span class="n">strip</span><span class="p">,</span> <span class="n">homes</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">_posix_dirname</span><span class="p">(</span><span class="n">home</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"collections"</span>
+        <span class="p">)</span>
+    <span class="p">]</span></div>
 
 
 
@@ -818,18 +920,19 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"human"</span><span class="p">,</span>
     <span class="n">data_sources</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StringOrIterable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return a sample overview similar to recount3::available_samples().</span>
 
-<span class="sd">    This reads per-data-source ``*.recount_project.MD.gz`` tables and</span>
-<span class="sd">    returns a normalized DataFrame describing all samples for the requested</span>
-<span class="sd">    organism.</span>
+<span class="sd">    Read source or collection membership tables and normalize their columns.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">      organism: Organism to query ("human" or "mouse").</span>
 <span class="sd">      data_sources: Optional subset of data sources to include (for example,</span>
 <span class="sd">        "sra", "gtex", "tcga"). By default all known data sources are used.</span>
+<span class="sd">      collection: Read a named collection's membership on the configured</span>
+<span class="sd">        mirror. Mutually exclusive with ``data_sources``.</span>
 <span class="sd">      strict: If True, raise a ValueError when no metadata can be found.</span>
 <span class="sd">        If False, return an empty DataFrame instead.</span>
 
@@ -854,10 +957,18 @@
 <span class="sd">    """</span>
     <span class="n">org</span> <span class="o">=</span> <span class="n">_normalize_organism_name</span><span class="p">(</span><span class="n">organism</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">data_sources</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">selected_sources</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">_descriptions</span><span class="o">.</span><span class="n">VALID_DATA_SOURCES</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">collection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">data_sources</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Specify either data_sources or collection."</span><span class="p">)</span>
+        <span class="n">resources</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_collection_table</span><span class="p">(</span><span class="n">org</span><span class="p">,</span> <span class="n">collection</span><span class="p">,</span> <span class="s2">"recount_project"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="p">]</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">selected_sources</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">_normalize_to_tuple</span><span class="p">(</span><span class="n">data_sources</span><span class="p">))</span>
+        <span class="n">selected_sources</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">sorted</span><span class="p">(</span><span class="n">_descriptions</span><span class="o">.</span><span class="n">VALID_DATA_SOURCES</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">data_sources</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="nb">list</span><span class="p">(</span><span class="n">_normalize_to_tuple</span><span class="p">(</span><span class="n">data_sources</span><span class="p">))</span>
+        <span class="p">)</span>
         <span class="n">invalid</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">source</span>
             <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">selected_sources</span>
@@ -871,26 +982,25 @@
             <span class="p">)</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">selected_sources</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"No data_sources specified."</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">selected_sources</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"No data_sources specified."</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+        <span class="n">resources</span> <span class="o">=</span> <span class="n">search_data_source_metadata</span><span class="p">(</span>
+            <span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span>
+            <span class="n">data_source</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">selected_sources</span><span class="p">),</span>
+            <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
+            <span class="n">deduplicate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
 
-    <span class="n">resources</span> <span class="o">=</span> <span class="n">search_data_source_metadata</span><span class="p">(</span>
-        <span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span>
-        <span class="n">data_source</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">selected_sources</span><span class="p">),</span>
-        <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
-        <span class="n">deduplicate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">resources</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
-            <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">"No data-source metadata resources found for organism "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">org</span><span class="si">!r}</span><span class="s2"> and data_sources </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">selected_sources</span><span class="p">)</span><span class="si">!r}</span><span class="s2">."</span>
-            <span class="p">)</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">resources</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="s2">"No data-source metadata resources found for organism "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">org</span><span class="si">!r}</span><span class="s2"> and data_sources </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">selected_sources</span><span class="p">)</span><span class="si">!r}</span><span class="s2">."</span>
+                <span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
 
     <span class="n">frames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">load_errors</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -898,18 +1008,21 @@
     <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">resources</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">obj</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
-        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># pylint: disable=broad-except</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
             <span class="n">load_errors</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">res</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="n">exc</span><span class="p">))</span>
             <span class="k">continue</span>
 
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">collection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">frames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_normalize_collection_members</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">url</span><span class="o">=</span><span class="n">res</span><span class="o">.</span><span class="n">url</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
             <span class="n">frames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_strip_metadata_column_prefix</span><span class="p">(</span><span class="n">obj</span><span class="p">))</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">frames</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">load_errors</span><span class="p">:</span>
             <span class="n">first_url</span><span class="p">,</span> <span class="n">first_exc</span> <span class="o">=</span> <span class="n">load_errors</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="s2">"collection"</span> <span class="k">if</span> <span class="n">collection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"data-source"</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">"Failed to load any data-source metadata table. "</span>
+                <span class="sa">f</span><span class="s2">"Failed to load any </span><span class="si">{</span><span class="n">origin</span><span class="si">}</span><span class="s2"> metadata table. "</span>
                 <span class="sa">f</span><span class="s2">"First error: </span><span class="si">{</span><span class="n">first_exc</span><span class="si">!r}</span><span class="s2"> (while loading </span><span class="si">{</span><span class="n">first_url</span><span class="si">!r}</span><span class="s2">)."</span>
             <span class="p">)</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">first_exc</span>
@@ -956,6 +1069,9 @@
         <span class="n">samples</span><span class="p">[</span><span class="s2">"project_home"</span><span class="p">]</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[</span><span class="s2">"metadata_source"</span><span class="p">]</span>
         <span class="n">samples</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"metadata_source"</span><span class="p">])</span>
 
+    <span class="k">if</span> <span class="n">collection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">samples</span><span class="p">[</span><span class="s2">"project_home"</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"collections/</span><span class="si">{</span><span class="n">collection</span><span class="si">}</span><span class="s2">"</span>
+
     <span class="k">if</span> <span class="s2">"project_home"</span> <span class="ow">in</span> <span class="n">samples</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="n">samples</span><span class="p">[</span><span class="s2">"project_type"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">samples</span><span class="p">[</span><span class="s2">"project_home"</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_posix_dirname</span><span class="p">)</span>
@@ -987,6 +1103,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"human"</span><span class="p">,</span>
     <span class="n">data_sources</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StringOrIterable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return a project overview like recount3::available_projects().</span>
@@ -997,6 +1114,7 @@
 <span class="sd">    Args:</span>
 <span class="sd">      organism: Organism to query ("human" or "mouse").</span>
 <span class="sd">      data_sources: Optional subset of data sources to include.</span>
+<span class="sd">      collection: Optional collection name, passed to :func:`available_samples`.</span>
 <span class="sd">      strict: Passed through to :func:`available_samples`.</span>
 
 <span class="sd">    Returns:</span>
@@ -1015,6 +1133,7 @@
     <span class="n">samples</span> <span class="o">=</span> <span class="n">available_samples</span><span class="p">(</span>
         <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
         <span class="n">data_sources</span><span class="o">=</span><span class="n">data_sources</span><span class="p">,</span>
+        <span class="n">collection</span><span class="o">=</span><span class="n">collection</span><span class="p">,</span>
         <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -1038,34 +1157,25 @@
     <span class="k">if</span> <span class="s2">"project_type"</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"project_type"</span><span class="p">])</span>
 
-    <span class="n">key_cols</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">col</span>
-        <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">"organism"</span><span class="p">,</span> <span class="s2">"project_home"</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span>
-    <span class="p">]</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">"organism"</span><span class="p">,</span> <span class="s2">"project_home"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">collection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fields</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"file_source"</span><span class="p">)</span>
+    <span class="n">key_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">fields</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
 
     <span class="k">if</span> <span class="n">key_cols</span><span class="p">:</span>
-        <span class="n">projects</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">key_cols</span><span class="p">,</span> <span class="n">as_index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dropna</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">first</span><span class="p">()</span>
-            <span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">grouped</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span>
+            <span class="n">key_cols</span><span class="p">,</span> <span class="n">as_index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dropna</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">sort</span><span class="o">=</span><span class="n">collection</span> <span class="ow">is</span> <span class="kc">None</span>
         <span class="p">)</span>
+        <span class="n">projects</span> <span class="o">=</span> <span class="n">grouped</span><span class="o">.</span><span class="n">first</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">projects</span><span class="p">[</span><span class="s2">"n_samples"</span><span class="p">]</span> <span class="o">=</span> <span class="n">grouped</span><span class="o">.</span><span class="n">size</span><span class="p">()[</span><span class="s2">"size"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"Int64"</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">projects</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">projects</span><span class="p">[</span><span class="s2">"n_samples"</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="s2">"Int64"</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="s2">"project_home"</span> <span class="ow">in</span> <span class="n">projects</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
         <span class="n">projects</span><span class="p">[</span><span class="s2">"project_type"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">projects</span><span class="p">[</span><span class="s2">"project_home"</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">_posix_dirname</span><span class="p">)</span>
         <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">key_cols</span><span class="p">:</span>
-        <span class="n">sample_keys</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">key_cols</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="s2">"_"</span><span class="o">.</span><span class="n">join</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">counts</span> <span class="o">=</span> <span class="n">sample_keys</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span>
-
-        <span class="n">project_keys</span> <span class="o">=</span> <span class="n">projects</span><span class="p">[</span><span class="n">key_cols</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="s2">"_"</span><span class="o">.</span><span class="n">join</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-        <span class="n">projects</span><span class="p">[</span><span class="s2">"n_samples"</span><span class="p">]</span> <span class="o">=</span> <span class="n">project_keys</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">counts</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"Int64"</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">projects</span><span class="p">[</span><span class="s2">"n_samples"</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="s2">"Int64"</span><span class="p">)</span>
 
     <span class="n">preferred</span> <span class="o">=</span> <span class="p">[</span>
         <span class="s2">"project"</span><span class="p">,</span>
@@ -1088,6 +1198,7 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"human"</span><span class="p">,</span>
     <span class="n">data_sources</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StringOrIterable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return a project home summary similar to recount3::project_homes().</span>
@@ -1098,11 +1209,12 @@
 <span class="sd">    Args:</span>
 <span class="sd">      organism: Organism to query ("human" or "mouse").</span>
 <span class="sd">      data_sources: Optional subset of data sources to include.</span>
+<span class="sd">      collection: Collection name, passed to :func:`available_projects`.</span>
 <span class="sd">      strict: Passed through to :func:`available_projects`.</span>
 
 <span class="sd">    Returns:</span>
-<span class="sd">      A DataFrame with one row per project home and at least the</span>
-<span class="sd">      following columns:</span>
+<span class="sd">      A DataFrame with one row per organism, project home, and file source</span>
+<span class="sd">      and at least the following columns:</span>
 
 <span class="sd">      * ``project_home``: recount3 project home path.</span>
 <span class="sd">      * ``project_type``: High-level project type (for example,</span>
@@ -1116,6 +1228,7 @@
     <span class="n">projects</span> <span class="o">=</span> <span class="n">available_projects</span><span class="p">(</span>
         <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
         <span class="n">data_sources</span><span class="o">=</span><span class="n">data_sources</span><span class="p">,</span>
+        <span class="n">collection</span><span class="o">=</span><span class="n">collection</span><span class="p">,</span>
         <span class="n">strict</span><span class="o">=</span><span class="n">strict</span><span class="p">,</span>
     <span class="p">)</span>
 
@@ -1138,13 +1251,11 @@
         <span class="n">projects</span><span class="p">[</span><span class="s2">"file_source"</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">NA</span>
 
     <span class="n">group_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"project_home"</span><span class="p">,</span> <span class="s2">"project_type"</span><span class="p">,</span> <span class="s2">"organism"</span><span class="p">,</span> <span class="s2">"file_source"</span><span class="p">]</span>
-    <span class="n">grouped</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="k">return</span> <span class="p">(</span>
         <span class="n">projects</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">group_cols</span><span class="p">,</span> <span class="n">dropna</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span><span class="s2">"project"</span><span class="p">]</span>
         <span class="o">.</span><span class="n">nunique</span><span class="p">()</span>
         <span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"n_projects"</span><span class="p">)</span>
-    <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">grouped</span></div>
+    <span class="p">)</span></div>
 
 
 
@@ -1386,8 +1497,7 @@
             <span class="k">return</span> <span class="p">[]</span>
         <span class="n">samp_col</span> <span class="o">=</span> <span class="n">candidates</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="n">values</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">({</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">sub</span><span class="p">[</span><span class="n">samp_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)})</span>
-    <span class="k">return</span> <span class="n">values</span></div>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">({</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">sub</span><span class="p">[</span><span class="n">samp_col</span><span class="p">]</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)})</span></div>
 
 
 
@@ -1462,8 +1572,8 @@
 
     <span class="n">found</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="n">include_gene</span> <span class="o">=</span> <span class="s2">"gene"</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">genomic_units</span><span class="p">)</span>
-    <span class="n">include_exon</span> <span class="o">=</span> <span class="s2">"exon"</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">genomic_units</span><span class="p">)</span>
+    <span class="n">include_gene</span> <span class="o">=</span> <span class="s2">"gene"</span> <span class="ow">in</span> <span class="p">{</span><span class="n">u</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">genomic_units</span><span class="p">}</span>
+    <span class="n">include_exon</span> <span class="o">=</span> <span class="s2">"exon"</span> <span class="ow">in</span> <span class="p">{</span><span class="n">u</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">genomic_units</span><span class="p">}</span>
     <span class="k">if</span> <span class="n">include_gene</span> <span class="ow">or</span> <span class="n">include_exon</span><span class="p">:</span>
         <span class="n">units</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="n">include_gene</span><span class="p">:</span>
@@ -1539,6 +1649,154 @@
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">found</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">_sort_key</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_collection_members</span><span class="p">(</span>
+    <span class="n">membership</span><span class="p">:</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">autoload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Load collection membership with canonical sample and source keys."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">autoload</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">membership</span><span class="o">.</span><span class="n">is_loaded</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Collection membership is not loaded: </span><span class="si">{</span><span class="n">membership</span><span class="o">.</span><span class="n">url</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_normalize_collection_members</span><span class="p">(</span><span class="n">membership</span><span class="o">.</span><span class="n">load</span><span class="p">(),</span> <span class="n">url</span><span class="o">=</span><span class="n">membership</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_collection_members</span><span class="p">(</span>
+    <span class="n">table</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validate and normalize the membership table for all collection users."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Expected a collection membership table: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="n">_strip_metadata_column_prefix</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+    <span class="n">identifiers</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">"rail_id"</span><span class="p">,</span> <span class="s2">"external_id"</span><span class="p">]</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="p">{</span><span class="o">*</span><span class="n">identifiers</span><span class="p">,</span> <span class="s2">"file_source"</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">missing</span> <span class="o">:=</span> <span class="n">required</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">members</span><span class="o">.</span><span class="n">columns</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"Collection membership is missing columns "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">)</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"study"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">members</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">members</span><span class="p">[</span><span class="s2">"study"</span><span class="p">]</span> <span class="o">=</span> <span class="n">members</span><span class="p">[</span><span class="s2">"project"</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="p">(</span><span class="o">*</span><span class="n">identifiers</span><span class="p">,</span> <span class="s2">"study"</span><span class="p">):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">canonical_identifier_series</span><span class="p">(</span><span class="n">members</span><span class="p">[</span><span class="n">col</span><span class="p">])</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">values</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">ne</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Missing collection </span><span class="si">{</span><span class="n">col</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">members</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">members</span><span class="p">[</span><span class="s2">"project"</span><span class="p">]</span><span class="o">.</span><span class="n">equals</span><span class="p">(</span><span class="n">members</span><span class="p">[</span><span class="s2">"study"</span><span class="p">]):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Collection project and study columns differ: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="n">homes</span> <span class="o">=</span> <span class="n">members</span><span class="p">[</span><span class="s2">"file_source"</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"string"</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">"/"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">homes</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">"data_sources/</span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2">"</span>
+            <span class="k">for</span> <span class="n">source</span> <span class="ow">in</span> <span class="n">_descriptions</span><span class="o">.</span><span class="n">VALID_DATA_SOURCES</span>
+        <span class="p">]</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Invalid collection source home: </span><span class="si">{</span><span class="n">url</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">members</span><span class="p">[</span><span class="s2">"file_source"</span><span class="p">]</span> <span class="o">=</span> <span class="n">homes</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">"/"</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">str</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">members</span>
+
+
+<div class="viewcode-block" id="search_collection">
+<a class="viewcode-back" href="../../api.html#recount3.search.search_collection">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">search_collection</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">collection</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">organism</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"human"</span><span class="p">,</span>
+    <span class="n">project</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">genomic_units</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StringOrIterable</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"gene"</span><span class="p">,</span> <span class="s2">"exon"</span><span class="p">),</span>
+    <span class="n">annotations</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StringOrIterable</span> <span class="o">=</span> <span class="s2">"default"</span><span class="p">,</span>
+    <span class="n">junction_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ALL"</span><span class="p">,</span>
+    <span class="n">junction_extension</span><span class="p">:</span> <span class="n">r3_types</span><span class="o">.</span><span class="n">StringOrIterable</span> <span class="o">=</span> <span class="p">(),</span>
+    <span class="n">include_metadata</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_bigwig</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">:</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">Config</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Enumerate resources for a collection or one project within it.</span>
+
+<span class="sd">    The membership table resolves each project to its original data source</span>
+<span class="sd">    and supplies the sample IDs used during assembly. The result includes</span>
+<span class="sd">    the membership table and, when requested, one custom metadata table.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">      collection: Collection name as listed by :func:`search_collections`.</span>
+<span class="sd">      organism: ``"human"`` or ``"mouse"``.</span>
+<span class="sd">      project: Optional study identifier. By default include all projects.</span>
+<span class="sd">      genomic_units: Expression levels to include (``"gene"``, ``"exon"``).</span>
+<span class="sd">      annotations: Annotation selection as in :func:`search_project_all`.</span>
+<span class="sd">      junction_type: Junction type, typically ``"ALL"``.</span>
+<span class="sd">      junction_extension: Junction artifacts to include (``"MM"``, ``"RR"``,</span>
+<span class="sd">        ``"ID"``). Defaults to an empty tuple.</span>
+<span class="sd">      include_metadata: If :data:`True`, include study metadata and the</span>
+<span class="sd">        collection's custom table.</span>
+<span class="sd">      include_bigwig: If :data:`True`, include per-sample BigWig files for</span>
+<span class="sd">        the selected members.</span>
+<span class="sd">      config: Optional :class:`~recount3.config.Config` for the mirror and</span>
+<span class="sd">        cache.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">      A list of :class:`~recount3.resource.R3Resource` objects for the</span>
+<span class="sd">      selected collection and projects.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">      ValueError: If the query is invalid, the membership table is invalid,</span>
+<span class="sd">        or the requested project is absent.</span>
+<span class="sd">      recount3.errors.DownloadError: If the membership table cannot be</span>
+<span class="sd">        retrieved.</span>
+<span class="sd">    """</span>
+    <span class="n">cfg</span> <span class="o">=</span> <span class="n">config</span> <span class="ow">or</span> <span class="n">r3_config</span><span class="o">.</span><span class="n">default_config</span><span class="p">()</span>
+    <span class="n">org</span> <span class="o">=</span> <span class="n">_normalize_organism_name</span><span class="p">(</span><span class="n">organism</span><span class="p">)</span>
+    <span class="n">membership</span> <span class="o">=</span> <span class="n">_collection_table</span><span class="p">(</span><span class="n">org</span><span class="p">,</span> <span class="n">collection</span><span class="p">,</span> <span class="s2">"recount_project"</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="n">_collection_members</span><span class="p">(</span><span class="n">membership</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">project</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">members</span> <span class="o">=</span> <span class="n">members</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">members</span><span class="p">[</span><span class="s2">"project"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">project</span><span class="p">)]</span>
+    <span class="k">if</span> <span class="n">members</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"No projects found in collection </span><span class="si">{</span><span class="n">collection</span><span class="si">!r}</span><span class="s2"> for </span><span class="si">{</span><span class="n">project</span><span class="si">!r}</span><span class="s2">."</span>
+        <span class="p">)</span>
+    <span class="n">units</span> <span class="o">=</span> <span class="n">_normalize_to_tuple</span><span class="p">(</span><span class="n">genomic_units</span><span class="p">)</span>
+    <span class="n">extensions</span> <span class="o">=</span> <span class="n">_normalize_to_tuple</span><span class="p">(</span><span class="n">junction_extension</span><span class="p">)</span>
+    <span class="n">annotations</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">_normalize_to_tuple</span><span class="p">(</span><span class="n">annotations</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">annotations</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="k">else</span> <span class="n">annotations</span>
+    <span class="p">)</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">{</span><span class="n">membership</span><span class="o">.</span><span class="n">url</span><span class="p">:</span> <span class="n">membership</span><span class="p">}</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">study</span><span class="p">),</span> <span class="n">samples</span> <span class="ow">in</span> <span class="n">members</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span>
+        <span class="p">[</span><span class="s2">"file_source"</span><span class="p">,</span> <span class="s2">"project"</span><span class="p">],</span> <span class="n">sort</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">):</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="n">search_project_all</span><span class="p">(</span>
+            <span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span>
+            <span class="n">data_source</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">source</span><span class="p">),</span>
+            <span class="n">project</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">study</span><span class="p">),</span>
+            <span class="n">genomic_units</span><span class="o">=</span><span class="n">units</span><span class="p">,</span>
+            <span class="n">annotations</span><span class="o">=</span><span class="n">annotations</span><span class="p">,</span>
+            <span class="n">junction_type</span><span class="o">=</span><span class="n">junction_type</span><span class="p">,</span>
+            <span class="n">junction_extension</span><span class="o">=</span><span class="n">extensions</span><span class="p">,</span>
+            <span class="n">include_metadata</span><span class="o">=</span><span class="n">include_metadata</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_bigwig</span><span class="p">:</span>
+            <span class="n">files</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                <span class="n">search_bigwig_files</span><span class="p">(</span>
+                    <span class="n">organism</span><span class="o">=</span><span class="n">org</span><span class="p">,</span>
+                    <span class="n">data_source</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">source</span><span class="p">),</span>
+                    <span class="n">project</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">study</span><span class="p">),</span>
+                    <span class="n">sample</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">samples</span><span class="p">[</span><span class="s2">"external_id"</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()),</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+            <span class="n">description</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+                <span class="n">res</span><span class="o">.</span><span class="n">description</span><span class="p">,</span> <span class="n">collection</span><span class="o">=</span><span class="n">collection</span>
+            <span class="p">)</span>
+            <span class="n">configured</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">R3Resource</span><span class="p">(</span><span class="n">description</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">cfg</span><span class="p">)</span>
+            <span class="n">found</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">configured</span><span class="o">.</span><span class="n">url</span><span class="p">,</span> <span class="n">configured</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">include_metadata</span><span class="p">:</span>
+        <span class="n">custom</span> <span class="o">=</span> <span class="n">_collection_table</span><span class="p">(</span><span class="n">org</span><span class="p">,</span> <span class="n">collection</span><span class="p">,</span> <span class="s2">"custom"</span><span class="p">,</span> <span class="n">cfg</span><span class="p">)</span>
+        <span class="n">found</span><span class="p">[</span><span class="n">custom</span><span class="o">.</span><span class="n">url</span><span class="p">]</span> <span class="o">=</span> <span class="n">custom</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">values</span><span class="p">())</span></div>
 
 </pre></div>
 

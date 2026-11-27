@@ -1,12 +1,13 @@
 Tutorial
 ========
 
-This tutorial walks through the ``recount3`` Python API end-to-end: finding
-projects and samples, downloading the files behind them, assembling
+This tutorial walks through the ``recount3`` Python API from discovery to
+analysis. You'll find projects, samples, and curated collections, download
+their files, and assemble
 :class:`~summarizedexperiment.SummarizedExperiment` and
-:class:`~summarizedexperiment.RangedSummarizedExperiment` objects, merging
-sample metadata, normalizing and scaling counts, reading BigWig coverage, and
-managing the on-disk cache.
+:class:`~summarizedexperiment.RangedSummarizedExperiment` objects. Later
+sections cover sample metadata, count normalization and scaling, BigWig
+coverage, and the on-disk cache.
 
 For the ``recount3`` command-line tool, see :doc:`cli`. For full per-symbol
 documentation, see :doc:`api`.
@@ -21,29 +22,29 @@ tutorial:
 
 .. code:: bash
 
-   python3 -m pip install recount3               # core only
-   python3 -m pip install "recount3[biocpy]"     # + SummarizedExperiment
-   python3 -m pip install "recount3[bigwig]"     # + pyBigWig
-   python3 -m pip install "recount3[parquet]"    # + .parquet output
-   python3 -m pip install "recount3[anndata]"    # + .h5ad output
-   python3 -m pip install "recount3[pybiocfilecache]"  # R cache sharing
-   python3 -m pip install "recount3[all]"        # every optional feature
+   python3 -m pip install recount3                    # Core package
+   python3 -m pip install "recount3[biocpy]"          # SummarizedExperiment API
+   python3 -m pip install "recount3[bigwig]"          # BigWig coverage access
+   python3 -m pip install "recount3[parquet]"         # Parquet (.parquet) output
+   python3 -m pip install "recount3[anndata]"         # AnnData (.h5ad) output
+   python3 -m pip install "recount3[pybiocfilecache]" # Shared R/Python cache
+   python3 -m pip install "recount3[all]"             # All optional features
 
 What each extra enables:
 
 - ``biocpy`` is required for :func:`~recount3.create_rse`,
   :meth:`~recount3.bundle.R3ResourceBundle.to_summarized_experiment`,
   :meth:`~recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment`,
-  and every helper in :mod:`recount3.se` that returns or operates on a
-  BiocPy object.
+  and helpers in :mod:`recount3.se` and :mod:`recount3.compute` that return
+  or operate on a BiocPy object.
 - ``bigwig`` is required only when you call
   :meth:`~recount3.resource.R3Resource.load` on a BigWig resource or use the
   :class:`~recount3._bigwig.BigWigFile` reader directly.
-- ``parquet`` installs ``pyarrow`` and is required to write ``.parquet``, both
-  from :meth:`pandas.DataFrame.to_parquet` on a stacked matrix and from
-  ``recount3 bundle stack-counts --out=counts.parquet``. pandas accepts either
-  ``pyarrow`` or ``fastparquet``; an existing ``fastparquet`` installation is
-  used as-is, and the ``io.parquet.engine`` option is honoured.
+- ``parquet`` installs ``pyarrow`` for writing ``.parquet`` files with
+  :meth:`pandas.DataFrame.to_parquet` or
+  ``recount3 bundle stack-counts --out=counts.parquet``. pandas can also use
+  a compatible ``fastparquet`` installation and honours the
+  ``io.parquet.engine`` option.
 - ``anndata`` installs ``anndata`` and ``delayedarray`` (and implies
   ``biocpy``). ``SummarizedExperiment.to_anndata()`` imports both, and
   ``summarizedexperiment`` declares neither as a required dependency, so the
@@ -118,12 +119,24 @@ finer control is required.
 Finding projects and samples before choosing a study
 ----------------------------------------------------
 
-The quick start above assumes you already know which study you want. If you
-do not, start from the source-level metadata: these calls read and parse the
-mirror's own project and sample tables, so what they return is a record of
-what exists rather than a guess at a filename. Limit ``data_sources`` to the
-source you need. The human SRA table alone covers several thousand
-projects:
+The quick start above assumes you already know which study you want. For
+interactive discovery, open the `recount3 study explorer
+<https://jhubiostatistics.shinyapps.io/recount3-study-explorer/>`_. Filter
+the study table by organism or ``project_home``, search study titles and
+abstracts, and select a project.
+
+Use the selected row's ``project`` and ``organism`` in Python. For a home such
+as ``data_sources/sra``, pass ``data_source="sra"`` to
+:func:`~recount3.create_rse` and use the explorer's annotation as
+``annotation_label`` for gene or exon counts. The explorer also generates R
+code. For a home under ``collections/``, use the name after the slash in the
+:ref:`collection workflow <collections>`.
+
+For programmatic discovery, start from the source-level metadata: these
+calls read and parse the mirror's own project and sample tables, so what
+they return is a record of what exists rather than a guess at a filename.
+Limit ``data_sources`` to the source you need. The human SRA table alone
+covers several thousand projects:
 
 .. code:: python
 
@@ -156,6 +169,157 @@ Keep the distinction in mind while reading the rest of this tutorial: the
 discovery calls on this page read metadata, whereas the resource and bundle
 layers below mostly *construct* candidate URLs from the parameters you give
 them. A constructed URL is not evidence that the file exists.
+
+
+.. _collections:
+
+Working with curated collections
+--------------------------------
+
+A collection selects samples from one or more studies and can add metadata
+for those samples. In this example, you'll use the ``geuvadis_smartseq``
+collection to build a gene-level experiment for its samples from study
+``ERP110066``.
+
+Use the Snaptron test mirror for this example. Set the mirror in a separate
+shell, then start Python from that shell so it reads the same setting. The
+assembly step requires the ``biocpy`` extra.
+
+.. code:: bash
+
+   export RECOUNT3_URL=https://snaptron.cs.jhu.edu/data/temp/recount3/
+
+Finding the collection's samples
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+List the human collections on the mirror. Then use the collection name in
+``available_projects`` and ``available_samples`` to see which studies and
+samples it includes:
+
+.. code:: python
+
+   import recount3 as r3
+
+   organism = "human"
+   collection = "geuvadis_smartseq"
+   project = "ERP110066"
+
+   listings = r3.search_collections(organism=organism)
+   print("Collections:", [res.description.collection for res in listings])
+
+   projects = r3.available_projects(organism=organism, collection=collection)
+   selected = projects.loc[projects["project"].eq(project)]
+   columns = ["project", "file_source", "n_samples"]
+   print(selected[columns].to_string(index=False))
+
+   samples = r3.available_samples(organism=organism, collection=collection)
+   members = samples.loc[samples["project"].eq(project)]
+   member_ids = members["external_id"].tolist()
+   print("Collection samples:", member_ids)
+
+Output::
+
+   Collections: ['ccle', 'geuvadis_smartseq', 'gtex_geuvadis']
+     project file_source  n_samples
+   ERP110066         sra          1
+   Collection samples: ['ERR2713106']
+
+The collection's membership table supplies the study's data source and its
+selected samples. Here ``file_source`` identifies SRA as the source of the
+study files, and ``n_samples`` counts the study's samples in this collection.
+
+Assembling a gene-level experiment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Pass the same collection and project to
+:meth:`~recount3.R3ResourceBundle.discover_collection`. Request gene counts
+with ``G026``, the file extension for GENCODE v26. Then build a
+:class:`~summarizedexperiment.RangedSummarizedExperiment` (RSE) and compare
+its sample names with the membership list:
+
+.. code:: python
+
+   bundle = r3.R3ResourceBundle.discover_collection(
+       organism=organism,
+       collection=collection,
+       project=project,
+       genomic_units=("gene",),
+       annotations=("G026",),
+   )
+   rse = bundle.to_ranged_summarized_experiment(genomic_unit="gene")
+
+   sample_names = list(rse.get_column_names())
+   print("Features x samples:", rse.shape)
+   print("Samples:", sample_names)
+   assert set(sample_names) == set(member_ids)
+
+Output::
+
+   Features x samples: (63856, 1)
+   Samples: ['ERR2713106']
+
+The RSE has one column for the collection member. Assembly reads the original
+study count file, which can include samples outside the collection. The
+optional custom metadata table adds columns prefixed with ``custom__``.
+For this collection, inspect the curator's sequencing type with
+``rse.get_column_data()["custom__sequencing_type"]``.
+
+Assembly downloads the files it needs into the cache. To save copies of the
+raw files in a directory, call ``bundle.download(dest="./geuvadis-files")``.
+You may see a warning that Snaptron is missing the study's sequencing QC
+table. Assembly uses the metadata tables the mirror provides.
+
+Running the same workflow from the command line
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Back in the shell where you set ``RECOUNT3_URL``, list the collections and
+write a JSONL manifest for this study. Use that manifest to download the raw
+files and save the experiment to a pickle file:
+
+.. code:: bash
+
+   recount3 search collections organism=human --format=tsv
+   recount3 search collection organism=human collection=geuvadis_smartseq \
+       project=ERP110066 genomic_unit=gene annotation_extension=G026 \
+       --output=collection.jsonl
+   recount3 download --from=collection.jsonl --dest=./geuvadis-files
+   recount3 bundle rse --from=collection.jsonl --genomic-unit=gene \
+       --out=geuvadis-ERP110066.pkl
+
+You can run ``bundle rse`` directly after writing the manifest if you only
+want the experiment. It fetches any files it needs. See :doc:`cli` for
+download and output options.
+
+Adapting the example
+~~~~~~~~~~~~~~~~~~~~
+
+Omit ``project`` from ``discover_collection`` to discover all member studies.
+The default ``join_policy="inner"`` keeps features shared by the selected
+studies. If you combine bundles, use ``bundle.filter(collection=collection)``
+to select one collection with its membership table and annotations. Each
+assembled experiment requires unique sample IDs.
+
+The membership table, ``<name>.recount_project.gz``, stays in the bundle
+with ``include_metadata=False``. With metadata enabled, assembly adds fields
+from ``<name>.custom.gz`` when published, joining by ``rail_id``,
+``external_id``, and ``study``. If a study metadata table is missing rows for
+some collection members, pass ``metadata_join="outer"`` to the Python builder
+to retain those members when their count columns are present.
+
+To work with exon counts, use ``genomic_units=("exon",)`` in discovery and
+``genomic_unit="exon"`` in assembly. For junctions, use a mirror that supplies
+the count, coordinate, and sample ID files for the study. Set
+``genomic_units=()`` and ``junction_exts=("MM", "RR", "ID")`` in discovery and
+``genomic_unit="junction"`` in assembly. Pass ``include_bigwig=True`` to include
+coverage files for collection members.
+
+For another mirror, set ``RECOUNT3_URL`` before starting Python and run
+``search_collections`` again. Mirrors can list collections in the organism's
+``homes_index``. On a local mirror, recount3 can also list collection
+directories when the index is absent.
+See :ref:`cache-and-configuration` for other ways to select a mirror and the
+`upstream raw-file documentation <https://rna.recount.bio/docs/raw-files.html#data-source-vs-collection>`_
+for the file layout.
 
 
 The three layers of the API
@@ -317,9 +481,9 @@ Be deliberate about that flag:
 
 - A fallback object **has no genomic ranges**. Counts, sample metadata,
   and the operations driven by column data still work, namely
-  :func:`recount3.se.compute_scale_factors`,
+  :func:`recount3.compute.compute_scale_factors`,
   :func:`recount3.se.expand_sra_attributes`, and
-  :func:`recount3.se.is_paired_end`. The helpers that need an RSE,
+  :func:`recount3.compute.is_paired_end`. The helpers that need an RSE,
   ``compute_read_counts``, ``transform_counts``, and ``compute_tpm``, raise
   ``TypeError`` on a plain SE, as do range queries. The flag returns an RSE
   as usual whenever ranges are available.
@@ -376,11 +540,11 @@ shape does not fit. Typical cases:
   :class:`pandas.DataFrame` to merge with clinical data of your own, and
   will build the BiocPy object yourself (or skip it entirely).
 
-A bundle is just a list of resources plus filters, so nothing is downloaded
-by default during discovery without BigWigs. BigWig discovery reads a sample
-index. Candidate URLs do not verify that files exist and do not report their
-sizes. That is the practical difference from Layer 1:
-``create_rse`` decides what to fetch for you, a bundle lets you decide.
+A bundle lets you inspect resources and choose which files to fetch.
+Project discovery constructs candidate URLs and reads a sample index if you
+request BigWigs. :ref:`Collection discovery <collections>` reads a membership
+table to locate the study files. Candidate URLs do not verify that files
+exist or report their sizes.
 
 Discovering resources for one or more projects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -780,9 +944,11 @@ Construction uses ``metadata_join="inner"`` by default, matching R's
 intersection of the nonempty metadata tables within each project. Samples
 absent from that intersection are excluded from both the assay and
 ``column_data``. Use ``metadata_join="outer"`` on ``create_rse`` or either
-bundle builder to retain every count sample with missing metadata values.
-This option is independent of ``join_policy``, which joins feature rows
-across projects. With no metadata resources, all count samples are retained.
+bundle builder to retain count samples with missing metadata values. For
+:ref:`collections <collections>`, both join modes limit the result to the
+samples listed in the membership table. This option is independent of
+``join_policy``, which joins feature rows across projects. With no metadata
+resources, all count samples are retained.
 
 Requested files that fail to load, conflicting sample identifiers, and mixed
 annotations raise errors. Select ``annotation_extension`` explicitly when a
@@ -868,10 +1034,10 @@ Normalization and scaling
 Gene and exon matrices contain base-pair coverage sums (the ``raw_counts``
 assay). Junction matrices contain junction-supporting counts (the ``counts``
 assay); do not apply the gene coverage-to-read or TPM formulas to junctions.
-:mod:`recount3.se` provides helpers consistent with the R implementation.
-These reach the ``se`` submodule rather than the package root, so they are
-called as ``r3.se.compute_tpm(rse)``, whereas the builders and discovery
-helpers used so far are available directly as ``r3.create_rse(...)``.
+:mod:`recount3.compute` provides helpers consistent with the R implementation.
+Call them through the submodule, for example ``r3.compute.compute_tpm(rse)``.
+The builders and discovery helpers are available directly on ``r3``, for
+example ``r3.create_rse(...)``.
 
 ``compute_read_counts``, ``transform_counts``, and ``compute_tpm`` require an
 RSE. ``compute_scale_factors`` and ``is_paired_end`` also accept sample
@@ -884,7 +1050,7 @@ Approximate read counts
 
    import recount3 as r3
 
-   reads = r3.se.compute_read_counts(rse)        # pandas DataFrame, integer-rounded
+   reads = r3.compute.compute_read_counts(rse)  # pandas DataFrame, integer-rounded
 
 Values are rounded to whole reads by default; pass ``round_to_integers=False``
 to retain the fractional estimates.
@@ -898,8 +1064,8 @@ Two methods are supported, matching the R ``recount3`` reference:
 
    import recount3 as r3
 
-   sf_auc = r3.se.compute_scale_factors(rse, by="auc")
-   sf_mapreads = r3.se.compute_scale_factors(rse, by="mapped_reads")
+   sf_auc = r3.compute.compute_scale_factors(rse, by="auc")
+   sf_mapreads = r3.compute.compute_scale_factors(rse, by="mapped_reads")
    print(pd.DataFrame({"auc": sf_auc, "mapped_reads": sf_mapreads}).head(3))
 
 Both return a :class:`pandas.Series` indexed by ``external_id``::
@@ -914,8 +1080,8 @@ Apply scale factors to the assay:
 
 .. code:: python
 
-   scaled = r3.se.transform_counts(rse, by="auc")          # default
-   scaled = r3.se.transform_counts(rse, by="mapped_reads", target_read_count=4e7)
+   scaled = r3.compute.transform_counts(rse, by="auc")  # default
+   scaled = r3.compute.transform_counts(rse, by="mapped_reads", target_read_count=4e7)
 
 TPM (gene/exon only, needs feature widths)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -924,7 +1090,7 @@ TPM (gene/exon only, needs feature widths)
 
    import recount3 as r3
 
-   tpm = r3.se.compute_tpm(rse)
+   tpm = r3.compute.compute_tpm(rse)
    print(type(tpm).__name__, tpm.shape)
    print(tpm.sum(axis=0).round().unique())
 
@@ -952,7 +1118,7 @@ Check for missing or non-finite results before downstream analysis. The helpers
 return new DataFrames and do not replace the RSE assay; rounded estimates have
 integer-like values but may retain a floating dtype.
 
-:func:`recount3.se.is_paired_end`, ``compute_scale_factors``, and
+:func:`recount3.compute.is_paired_end`, ``compute_scale_factors``, and
 ``expand_sra_attributes`` accept a metadata DataFrame or an SE/RSE object.
 See the API reference for full signatures.
 
@@ -1177,8 +1343,47 @@ Per-base coverage comes back as a :class:`numpy.ndarray`, one value per base
 over the requested interval.
 
 Both spellings close the file on exit and expose the same ``values()``,
-``stats()``, and ``intervals()`` calls, so either spelling works; just do not
-expect wrapper-only behaviour from the second.
+``stats()``, and ``intervals()`` methods. The wrapper spells the bin-count
+keyword ``n_bins``; the raw handle uses ``nBins``. Wrapper validation and
+unsigned interval endpoint restoration apply to calls on the wrapper.
+
+On the wrapper's ``stats()`` and ``intervals()``, omitted ``start`` and ``end``
+bounds default independently to zero and the chromosome length. Coordinates
+and bin counts must be integers; fractional values and numeric strings raise
+``TypeError``.
+String arguments must be valid UTF-8 without embedded NUL characters;
+invalid strings are rejected before opening or querying the file.
+Coordinates must fit unsigned 32-bit integers, and ``n_bins`` must be between
+one and ``2**31 - 1``. Values outside these numeric limits raise ``ValueError``
+before reaching native code. For example,
+``bw.stats("chr1", start=1000, exact=True)``
+summarizes from base 1000 to the chromosome end. ``exact=True`` computes from
+the stored intervals; the default may use approximate zoom summaries.
+Use ``exact=True`` for sums: native zoom-summary bugs can substantially
+undercount them or return ``None`` for covered zero-signal regions.
+Keep ``n_bins`` at or below the number of bases in the interval: native
+statistics can be inconsistent for bins narrower than one base.
+
+``header()`` returns native metadata unchanged. Some pyBigWig builds truncate
+its floating-point summaries to integers, and writer-generated extrema can
+be inaccurate. Use ``stats(..., exact=True)`` for statistics from the stored
+signal when numerical accuracy matters.
+
+``values(..., numpy=True)`` requires a pyBigWig build with NumPy support
+(``pyBigWig.numpy == 1``). The default list output works with either build.
+List queries are limited to ``2**31 - 1`` bases by the native loop counter.
+Both forms allocate memory proportional to the requested region; request
+smaller regions when working with large chromosomes.
+Uncovered bases yield NaN, whereas a file with no entries at all yields an
+empty list or array. For empty-file NumPy output, use pyBigWig 0.3.25 or newer:
+earlier versions have a native bug that returns a scalar array containing an
+uninitialized value instead. ``intervals()`` returns a tuple of stored intervals
+or ``None`` for no overlaps; endpoints are not clipped to the query bounds.
+
+Read methods reject write mode before opening the file, so an accidental
+read cannot truncate an existing file or call unsafe native reader code on
+a writer. Use the raw context-manager handle for writing. Changes to a
+wrapper's ``path`` or ``mode`` apply after its current handle is closed.
 
 BigWig intervals use zero-based, half-open coordinates; uncovered positions can
 be NaN. ``load()`` first caches the full BigWig file. Reading a small interval
@@ -1256,59 +1461,66 @@ With ``cache="disable"``, ZIP downloads use temporary files before inserting
 complete members; directory downloads stream to their destinations without
 cache deduplication. Cache-disabled calls do not load pybiocfilecache.
 
-All these locks coordinate threads **within one Python process**. They do not
-coordinate separate CLI jobs, Python processes, R sessions, or cluster nodes.
-Use separate cache and output paths per concurrent process, or provide external
-coordination. Run cache removal, registry maintenance, and external file edits
-only when the cache is idle. Atomic payload replacement alone does not provide
-cross-process deduplication or transactional registry and payload updates.
+Payload and archive locks coordinate threads within one Python process. Use
+separate output paths across processes or coordinate writes to shared output.
+The optional backend also coordinates access to the shared SQLite registry.
+Run cache removal, registry maintenance, and external file edits when the
+cache is idle.
 
 
 Optional shared R/Python cache
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-recount3 already includes a fast URL-hash filesystem cache. It is the default
-and requires no cache extra. Use the optional ``pybiocfilecache`` backend when
-you need to share cached resources with R's BiocFileCache. Its SQLite lookups,
-metadata writes, and local-file checksums add measurable overhead; it is not
-a performance upgrade. Installing the extra alone does not change the default.
+The default ``filesystem`` backend uses URL-hash filenames and requires no
+cache extra. Select ``pybiocfilecache`` to share downloaded files and registry
+entries with R's BiocFileCache. Concurrent Python operations reuse a SQLite
+connection for each shared cache, hash payloads alongside transfers, and
+commit completed registrations in groups of up to 16. A cached download
+returns after its registration is committed. A failure to publish one file
+leaves the other registrations in the batch eligible to commit.
 
-In a controlled WSL2 benchmark (Python 3.14.7, three repetitions, four 1 MiB
-files, 25 ms per loopback HTTP request), median download times were:
+The table reports median wall time over three runs on local Linux ext4 with
+Python 3.14.7, SQLite 3.53.1, and pybiocfilecache 0.7.0. Each worker called
+``R3Resource.download()`` to fill or reuse the cache. The test supplied
+synthetic HTTP response bodies and added 20 ms of delay only to the
+delayed workload. Imports and output materialization were outside the timed
+runs. Cold runs started with an empty cache and warm runs reused those files.
 
-.. list-table:: Native cache versus optional shared cache
+.. list-table:: Cache-only downloads by backend
    :header-rows: 1
-   :widths: 30 15 20 20
+   :widths: 52 15 17 16
 
-   * - Cache state / workers
-     - Native (s)
-     - Shared (s)
-     - Shared/native
-   * - Empty / 1
-     - 0.131
-     - 0.429
-     - 3.3x
-   * - Empty / 4
-     - 0.054
-     - 0.365
-     - 6.8x
-   * - Warm / 1
-     - 0.0015
-     - 0.0382
-     - 26.1x
-   * - Warm / 4
-     - 0.0091
-     - 0.0622
-     - 6.9x
+   * - Workload
+     - Native (ms)
+     - Previous shared (ms)
+     - Updated shared (ms)
+   * - Cold, 128 × 4 KiB with delay, 8 workers
+     - 369.0
+     - 3425.7
+     - 698.3
+   * - Warm, 128 × 4 KiB, 8 workers
+     - 78.6
+     - 1841.3
+     - 382.8
+   * - Warm, 128 × 4 KiB, 1 worker
+     - 9.6
+     - 1801.3
+     - 819.2
+   * - Cold, 12 × 32 MiB, 8 workers
+     - 132.5
+     - 1145.0
+     - 295.8
+   * - Warm, 12 × 32 MiB, 8 workers
+     - 9.6
+     - 819.9
+     - 151.6
 
-The optional backend added roughly 22--25 MiB to peak client RSS in these
-cases. Empty-cache timing includes the optional import and registration;
-warm timing excludes prefill but includes lookups and local-file checksums.
-These figures describe these small controlled workloads, not public-mirror
-throughput or a universal slowdown ratio. Transfer size, network latency,
-registry size, and filesystem performance affect the overhead. The native
-backend is the faster default; shared-cache reuse can still avoid a much more
-expensive download when the file was already obtained from R.
+The updated shared cache was 4.9 times faster in the delayed cold run.
+Checksum reads and access-time updates still add work to warm downloads.
+For the 128 small files with one worker, looking up paths with
+``ensure_cached(download=False)`` took 52.9 ms with the updated backend,
+448.3 ms with the previous backend, and 4.6 ms with the native cache.
+Network latency, file sizes, worker count, and storage affect these timings.
 
 Install and explicitly select it with::
 
@@ -1376,12 +1588,13 @@ directory. For a custom location, point R at that **same directory**::
     info <- BiocFileCache::bfcinfo(bfc)
     BiocFileCache::bfcpath(bfc, rids = info$rid)
 
-The supported pybiocfilecache 0.7.x series maintains R database compatibility.
-Both interfaces use schema version ``0.99.4`` and the same resource columns.
-Sequential interoperability was tested with the supplied R recount3 source
-and BiocFileCache 3.0.0: R can query and use Python-created entries, Python can
-reuse R-created entries, and resource IDs remain unique after interleaved
-additions and deletion. SQL defaults can differ without preventing these reads.
+The supported pybiocfilecache 0.7.x series and R BiocFileCache use schema
+version ``0.99.4``. Python opens existing registries in that format. Registries
+created by recount3 use the same auto-incrementing resource IDs as R. Recount3
+adds an exact URL index when it first commits registrations to a registry.
+With R recount3 1.21.1 and BiocFileCache 3.0.0 on Linux, R and Python reused
+each other's entries and concurrently registered different URLs in the same
+database.
 
 The exact remote URL is the lookup key (``rname``). An existing R record is
 used at its registered path, including relative and web-resource paths.
@@ -1396,25 +1609,37 @@ cached download. R can find them by URL through ``bfcquery`` or ``bfcrpath``.
 R's ``recount3::file_retrieve`` also makes a remote availability check before
 consulting its cache; use ``bfcpath`` to access cached data without that check.
 
-recount3 continues to handle network timeouts, TLS, retries, and atomic
-replacement. It does not delegate transfers to the optional package's web
-downloader. Existing R resource types and relative paths are preserved.
-A Python refresh of an R web record clears the old HTTP validators, because
-the unconditional transfer does not collect replacements. Local records use
-pybiocfilecache's checksum; even warm local-cache downloads recompute it.
+recount3 handles network timeouts, TLS, retries, and atomic replacement.
+The shared backend preserves R resource types and relative paths. A Python
+refresh of an R web record clears the old HTTP validators because the
+unconditional transfer collects no replacements. Cached downloads recompute
+the configured checksum for local files, including on a cache hit. If you only
+need the path of an existing payload, use ``res.ensure_cached(download=False)``
+to resolve it without rehashing the file or updating its registry entry.
+This lookup and ``recount3_cache_files()`` also work on read-only cache snapshots.
 
-Registry operations are serialized per shared database within this Python
-process. Network transfers occur outside that lock. A registry error propagates
-while leaving any completed payload available. Retrying a local cache hit
-repairs its checksum; after an interrupted web refresh, repeat ``update`` to
-reset its validators. Payload replacement and SQLite commits are not one
-transaction, so a process crash may require registry maintenance.
+Python and R coordinate registry access using ``BiocFileCache.sqlite.LOCK``.
+Transfers and checksums run outside this lock. Initialize the shared cache
+before starting concurrent jobs. Python rechecks the destination under the
+registry lock before publishing a download and commits its checksum under the
+same lock. If R registers a different path for the URL during a download,
+Python discards the temporary file and retries at the registered path.
+Coordinate fetches or refreshes of the same payload across processes to avoid
+redundant transfers.
 
-``recount3_cache_files()`` excludes SQLite databases, journals, and R lock
-files. With this backend it includes registered paths outside the cache root and
-registered entries whose payload was removed externally. Patterns filter these
-paths. ``recount3_cache_rm()`` deletes selected payloads inside the cache root
-and removes their registry rows, including stale rows for missing payloads.
+Registry errors propagate. If a batch rolls back, Python restores the payloads
+it replaced in that transaction. A completed local download can be retained
+after an individual registration error. Retrying the local cache hit repairs
+its checksum. After a process crash during a web refresh, repeat ``update`` to
+reset its validators.
+
+``recount3_cache_files()`` excludes SQLite databases, journals, R lock files,
+and staged downloads. With this backend it includes registered paths outside
+the cache root and registered entries whose payload was removed externally.
+Patterns filter these paths. ``recount3_cache_rm()`` deletes selected payloads
+inside the cache root and removes their registry rows, including stale rows
+for missing payloads. It also removes selected staging files left inside the
+cache root by interrupted downloads.
 For registered files outside the cache root, including R's ``action="asis"``
 references, it removes only the registry rows and leaves the files untouched.
 Containment is checked after resolving symlinks. The returned list includes
@@ -1429,18 +1654,12 @@ It does not consult R's registry or maintain its rows. Use the optional backend
 for removal of registered files. Absolute-path local entries require repair if
 the cache is moved; relative R entries remain relative to the shared root.
 
-Inspect the same registry directly from Python with::
+Inspect the same registry directly with pybiocfilecache while the cache is idle::
 
     from pybiocfilecache import BiocFileCache
 
     with BiocFileCache(cfg.cache_dir) as registry:
         records = registry.list_resources()
-
-Shared format does not imply simultaneous-transfer coordination. The thread
-locks in recount3 do not coordinate R sessions or other Python processes.
-Use the shared directory sequentially, or provide external coordination for
-writers, refreshes, and removal.
-
 
 Configuration precedence is, from lowest to highest: library defaults,
 environment variables, an explicit :class:`~recount3.Config` passed to a

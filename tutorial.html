@@ -6,14 +6,14 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tutorial &mdash; recount3 1.3.0 documentation</title>
+  <title>Tutorial &mdash; recount3 1.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=1f29e9d3"></script>
+      <script src="_static/documentation_options.js?v=9172181d"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -48,6 +48,13 @@
 <li class="toctree-l2"><a class="reference internal" href="#installation">Installation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#quick-start">Quick start</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#finding-projects-and-samples-before-choosing-a-study">Finding projects and samples before choosing a study</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#working-with-curated-collections">Working with curated collections</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#finding-the-collection-s-samples">Finding the collection’s samples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#assembling-a-gene-level-experiment">Assembling a gene-level experiment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#running-the-same-workflow-from-the-command-line">Running the same workflow from the command line</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adapting-the-example">Adapting the example</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#the-three-layers-of-the-api">The three layers of the API</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#layer-1-building-experiments-with-create-rse">Layer 1: Building experiments with <code class="docutils literal notranslate"><span class="pre">create_rse</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#gene-level-rse-default">Gene-level RSE (default)</a></li>
@@ -130,12 +137,13 @@
              
   <section id="tutorial">
 <h1>Tutorial<a class="headerlink" href="#tutorial" title="Link to this heading"></a></h1>
-<p>This tutorial walks through the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> Python API end-to-end: finding
-projects and samples, downloading the files behind them, assembling
+<p>This tutorial walks through the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> Python API from discovery to
+analysis. You’ll find projects, samples, and curated collections, download
+their files, and assemble
 <code class="xref py py-class docutils literal notranslate"><span class="pre">SummarizedExperiment</span></code> and
-<code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> objects, merging
-sample metadata, normalizing and scaling counts, reading BigWig coverage, and
-managing the on-disk cache.</p>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> objects. Later
+sections cover sample metadata, count normalization and scaling, BigWig
+coverage, and the on-disk cache.</p>
 <p>For the <code class="docutils literal notranslate"><span class="pre">recount3</span></code> command-line tool, see <a class="reference internal" href="cli.html"><span class="doc">CLI Reference</span></a>. For full per-symbol
 documentation, see <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a>.</p>
 <section id="installation">
@@ -143,13 +151,13 @@ documentation, see <a class="reference internal" href="api.html"><span class="do
 <p>The core package supports Python 3.10 through 3.15 and depends only on NumPy,
 pandas, and SciPy. The optional extras enable features used throughout this
 tutorial:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">               </span><span class="c1"># core only</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[biocpy]"</span><span class="w">     </span><span class="c1"># + SummarizedExperiment</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[bigwig]"</span><span class="w">     </span><span class="c1"># + pyBigWig</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[parquet]"</span><span class="w">    </span><span class="c1"># + .parquet output</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[anndata]"</span><span class="w">    </span><span class="c1"># + .h5ad output</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[pybiocfilecache]"</span><span class="w">  </span><span class="c1"># R cache sharing</span>
-python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[all]"</span><span class="w">        </span><span class="c1"># every optional feature</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>recount3<span class="w">                    </span><span class="c1"># Core package</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[biocpy]"</span><span class="w">          </span><span class="c1"># SummarizedExperiment API</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[bigwig]"</span><span class="w">          </span><span class="c1"># BigWig coverage access</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[parquet]"</span><span class="w">         </span><span class="c1"># Parquet (.parquet) output</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[anndata]"</span><span class="w">         </span><span class="c1"># AnnData (.h5ad) output</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[pybiocfilecache]"</span><span class="w"> </span><span class="c1"># Shared R/Python cache</span>
+python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"recount3[all]"</span><span class="w">             </span><span class="c1"># All optional features</span>
 </pre></div>
 </div>
 <p>What each extra enables:</p>
@@ -157,16 +165,16 @@ python3<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </s
 <li><p><code class="docutils literal notranslate"><span class="pre">biocpy</span></code> is required for <code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code>,
 <a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.to_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_summarized_experiment()</span></code></a>,
 <a class="reference internal" href="api.html#recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment" title="recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_ranged_summarized_experiment()</span></code></a>,
-and every helper in <a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> that returns or operates on a
-BiocPy object.</p></li>
+and helpers in <a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> and <a class="reference internal" href="api.html#module-recount3.compute" title="recount3.compute"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.compute</span></code></a> that return
+or operate on a BiocPy object.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">bigwig</span></code> is required only when you call
 <a class="reference internal" href="api.html#recount3.resource.R3Resource.load" title="recount3.resource.R3Resource.load"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load()</span></code></a> on a BigWig resource or use the
 <a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a> reader directly.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">parquet</span></code> installs <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> and is required to write <code class="docutils literal notranslate"><span class="pre">.parquet</span></code>, both
-from <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html#pandas.DataFrame.to_parquet" title="(in pandas v3.0.6)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_parquet()</span></code></a> on a stacked matrix and from
-<code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">bundle</span> <span class="pre">stack-counts</span> <span class="pre">--out=counts.parquet</span></code>. pandas accepts either
-<code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> or <code class="docutils literal notranslate"><span class="pre">fastparquet</span></code>; an existing <code class="docutils literal notranslate"><span class="pre">fastparquet</span></code> installation is
-used as-is, and the <code class="docutils literal notranslate"><span class="pre">io.parquet.engine</span></code> option is honoured.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">parquet</span></code> installs <code class="docutils literal notranslate"><span class="pre">pyarrow</span></code> for writing <code class="docutils literal notranslate"><span class="pre">.parquet</span></code> files with
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_parquet.html#pandas.DataFrame.to_parquet" title="(in pandas v3.1)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pandas.DataFrame.to_parquet()</span></code></a> or
+<code class="docutils literal notranslate"><span class="pre">recount3</span> <span class="pre">bundle</span> <span class="pre">stack-counts</span> <span class="pre">--out=counts.parquet</span></code>. pandas can also use
+a compatible <code class="docutils literal notranslate"><span class="pre">fastparquet</span></code> installation and honours the
+<code class="docutils literal notranslate"><span class="pre">io.parquet.engine</span></code> option.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">anndata</span></code> installs <code class="docutils literal notranslate"><span class="pre">anndata</span></code> and <code class="docutils literal notranslate"><span class="pre">delayedarray</span></code> (and implies
 <code class="docutils literal notranslate"><span class="pre">biocpy</span></code>). <code class="docutils literal notranslate"><span class="pre">SummarizedExperiment.to_anndata()</span></code> imports both, and
 <code class="docutils literal notranslate"><span class="pre">summarizedexperiment</span></code> declares neither as a required dependency, so the
@@ -233,12 +241,21 @@ finer control is required.</p>
 </section>
 <section id="finding-projects-and-samples-before-choosing-a-study">
 <h2>Finding projects and samples before choosing a study<a class="headerlink" href="#finding-projects-and-samples-before-choosing-a-study" title="Link to this heading"></a></h2>
-<p>The quick start above assumes you already know which study you want. If you
-do not, start from the source-level metadata: these calls read and parse the
-mirror’s own project and sample tables, so what they return is a record of
-what exists rather than a guess at a filename. Limit <code class="docutils literal notranslate"><span class="pre">data_sources</span></code> to the
-source you need. The human SRA table alone covers several thousand
-projects:</p>
+<p>The quick start above assumes you already know which study you want. For
+interactive discovery, open the <a class="reference external" href="https://jhubiostatistics.shinyapps.io/recount3-study-explorer/">recount3 study explorer</a>. Filter
+the study table by organism or <code class="docutils literal notranslate"><span class="pre">project_home</span></code>, search study titles and
+abstracts, and select a project.</p>
+<p>Use the selected row’s <code class="docutils literal notranslate"><span class="pre">project</span></code> and <code class="docutils literal notranslate"><span class="pre">organism</span></code> in Python. For a home such
+as <code class="docutils literal notranslate"><span class="pre">data_sources/sra</span></code>, pass <code class="docutils literal notranslate"><span class="pre">data_source=&quot;sra&quot;</span></code> to
+<code class="xref py py-func docutils literal notranslate"><span class="pre">create_rse()</span></code> and use the explorer’s annotation as
+<code class="docutils literal notranslate"><span class="pre">annotation_label</span></code> for gene or exon counts. The explorer also generates R
+code. For a home under <code class="docutils literal notranslate"><span class="pre">collections/</span></code>, use the name after the slash in the
+<a class="reference internal" href="#collections"><span class="std std-ref">collection workflow</span></a>.</p>
+<p>For programmatic discovery, start from the source-level metadata: these
+calls read and parse the mirror’s own project and sample tables, so what
+they return is a record of what exists rather than a guess at a filename.
+Limit <code class="docutils literal notranslate"><span class="pre">data_sources</span></code> to the source you need. The human SRA table alone
+covers several thousand projects:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
 
 <span class="n">projects</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">available_projects</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="s2">"human"</span><span class="p">,</span> <span class="n">data_sources</span><span class="o">=</span><span class="s2">"sra"</span><span class="p">)</span>
@@ -249,7 +266,7 @@ projects:</p>
 <span class="nb">print</span><span class="p">(</span><span class="n">study_samples</span><span class="p">[[</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">"external_id"</span><span class="p">]]</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
 </pre></div>
 </div>
-<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>. The human SRA project table has 8,677
+<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>. The human SRA project table has 8,677
 rows; <code class="docutils literal notranslate"><span class="pre">n_samples</span></code> there matches the column count you will get from
 <code class="docutils literal notranslate"><span class="pre">create_rse</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>     <span class="n">project</span>  <span class="n">n_samples</span> <span class="n">file_source</span>      <span class="n">project_home</span>
@@ -268,6 +285,137 @@ human-readable label.</p>
 discovery calls on this page read metadata, whereas the resource and bundle
 layers below mostly <em>construct</em> candidate URLs from the parameters you give
 them. A constructed URL is not evidence that the file exists.</p>
+</section>
+<section id="working-with-curated-collections">
+<span id="collections"></span><h2>Working with curated collections<a class="headerlink" href="#working-with-curated-collections" title="Link to this heading"></a></h2>
+<p>A collection selects samples from one or more studies and can add metadata
+for those samples. In this example, you’ll use the <code class="docutils literal notranslate"><span class="pre">geuvadis_smartseq</span></code>
+collection to build a gene-level experiment for its samples from study
+<code class="docutils literal notranslate"><span class="pre">ERP110066</span></code>.</p>
+<p>Use the Snaptron test mirror for this example. Set the mirror in a separate
+shell, then start Python from that shell so it reads the same setting. The
+assembly step requires the <code class="docutils literal notranslate"><span class="pre">biocpy</span></code> extra.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">RECOUNT3_URL</span><span class="o">=</span>https://snaptron.cs.jhu.edu/data/temp/recount3/
+</pre></div>
+</div>
+<section id="finding-the-collection-s-samples">
+<h3>Finding the collection’s samples<a class="headerlink" href="#finding-the-collection-s-samples" title="Link to this heading"></a></h3>
+<p>List the human collections on the mirror. Then use the collection name in
+<code class="docutils literal notranslate"><span class="pre">available_projects</span></code> and <code class="docutils literal notranslate"><span class="pre">available_samples</span></code> to see which studies and
+samples it includes:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
+
+<span class="n">organism</span> <span class="o">=</span> <span class="s2">"human"</span>
+<span class="n">collection</span> <span class="o">=</span> <span class="s2">"geuvadis_smartseq"</span>
+<span class="n">project</span> <span class="o">=</span> <span class="s2">"ERP110066"</span>
+
+<span class="n">listings</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">search_collections</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Collections:"</span><span class="p">,</span> <span class="p">[</span><span class="n">res</span><span class="o">.</span><span class="n">description</span><span class="o">.</span><span class="n">collection</span> <span class="k">for</span> <span class="n">res</span> <span class="ow">in</span> <span class="n">listings</span><span class="p">])</span>
+
+<span class="n">projects</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">available_projects</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span> <span class="n">collection</span><span class="o">=</span><span class="n">collection</span><span class="p">)</span>
+<span class="n">selected</span> <span class="o">=</span> <span class="n">projects</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">projects</span><span class="p">[</span><span class="s2">"project"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">project</span><span class="p">)]</span>
+<span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"project"</span><span class="p">,</span> <span class="s2">"file_source"</span><span class="p">,</span> <span class="s2">"n_samples"</span><span class="p">]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">selected</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span><span class="o">.</span><span class="n">to_string</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+
+<span class="n">samples</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">available_samples</span><span class="p">(</span><span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span> <span class="n">collection</span><span class="o">=</span><span class="n">collection</span><span class="p">)</span>
+<span class="n">members</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">samples</span><span class="p">[</span><span class="s2">"project"</span><span class="p">]</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="n">project</span><span class="p">)]</span>
+<span class="n">member_ids</span> <span class="o">=</span> <span class="n">members</span><span class="p">[</span><span class="s2">"external_id"</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Collection samples:"</span><span class="p">,</span> <span class="n">member_ids</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Output:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Collections</span><span class="p">:</span> <span class="p">[</span><span class="s1">'ccle'</span><span class="p">,</span> <span class="s1">'geuvadis_smartseq'</span><span class="p">,</span> <span class="s1">'gtex_geuvadis'</span><span class="p">]</span>
+  <span class="n">project</span> <span class="n">file_source</span>  <span class="n">n_samples</span>
+<span class="n">ERP110066</span>         <span class="n">sra</span>          <span class="mi">1</span>
+<span class="n">Collection</span> <span class="n">samples</span><span class="p">:</span> <span class="p">[</span><span class="s1">'ERR2713106'</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The collection’s membership table supplies the study’s data source and its
+selected samples. Here <code class="docutils literal notranslate"><span class="pre">file_source</span></code> identifies SRA as the source of the
+study files, and <code class="docutils literal notranslate"><span class="pre">n_samples</span></code> counts the study’s samples in this collection.</p>
+</section>
+<section id="assembling-a-gene-level-experiment">
+<h3>Assembling a gene-level experiment<a class="headerlink" href="#assembling-a-gene-level-experiment" title="Link to this heading"></a></h3>
+<p>Pass the same collection and project to
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">discover_collection()</span></code>. Request gene counts
+with <code class="docutils literal notranslate"><span class="pre">G026</span></code>, the file extension for GENCODE v26. Then build a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">RangedSummarizedExperiment</span></code> (RSE) and compare
+its sample names with the membership list:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">bundle</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">R3ResourceBundle</span><span class="o">.</span><span class="n">discover_collection</span><span class="p">(</span>
+    <span class="n">organism</span><span class="o">=</span><span class="n">organism</span><span class="p">,</span>
+    <span class="n">collection</span><span class="o">=</span><span class="n">collection</span><span class="p">,</span>
+    <span class="n">project</span><span class="o">=</span><span class="n">project</span><span class="p">,</span>
+    <span class="n">genomic_units</span><span class="o">=</span><span class="p">(</span><span class="s2">"gene"</span><span class="p">,),</span>
+    <span class="n">annotations</span><span class="o">=</span><span class="p">(</span><span class="s2">"G026"</span><span class="p">,),</span>
+<span class="p">)</span>
+<span class="n">rse</span> <span class="o">=</span> <span class="n">bundle</span><span class="o">.</span><span class="n">to_ranged_summarized_experiment</span><span class="p">(</span><span class="n">genomic_unit</span><span class="o">=</span><span class="s2">"gene"</span><span class="p">)</span>
+
+<span class="n">sample_names</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">rse</span><span class="o">.</span><span class="n">get_column_names</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Features x samples:"</span><span class="p">,</span> <span class="n">rse</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Samples:"</span><span class="p">,</span> <span class="n">sample_names</span><span class="p">)</span>
+<span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">sample_names</span><span class="p">)</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">member_ids</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Output:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Features</span> <span class="n">x</span> <span class="n">samples</span><span class="p">:</span> <span class="p">(</span><span class="mi">63856</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">Samples</span><span class="p">:</span> <span class="p">[</span><span class="s1">'ERR2713106'</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>The RSE has one column for the collection member. Assembly reads the original
+study count file, which can include samples outside the collection. The
+optional custom metadata table adds columns prefixed with <code class="docutils literal notranslate"><span class="pre">custom__</span></code>.
+For this collection, inspect the curator’s sequencing type with
+<code class="docutils literal notranslate"><span class="pre">rse.get_column_data()[&quot;custom__sequencing_type&quot;]</span></code>.</p>
+<p>Assembly downloads the files it needs into the cache. To save copies of the
+raw files in a directory, call <code class="docutils literal notranslate"><span class="pre">bundle.download(dest=&quot;./geuvadis-files&quot;)</span></code>.
+You may see a warning that Snaptron is missing the study’s sequencing QC
+table. Assembly uses the metadata tables the mirror provides.</p>
+</section>
+<section id="running-the-same-workflow-from-the-command-line">
+<h3>Running the same workflow from the command line<a class="headerlink" href="#running-the-same-workflow-from-the-command-line" title="Link to this heading"></a></h3>
+<p>Back in the shell where you set <code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code>, list the collections and
+write a JSONL manifest for this study. Use that manifest to download the raw
+files and save the experiment to a pickle file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>recount3<span class="w"> </span>search<span class="w"> </span>collections<span class="w"> </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span>--format<span class="o">=</span>tsv
+recount3<span class="w"> </span>search<span class="w"> </span>collection<span class="w"> </span><span class="nv">organism</span><span class="o">=</span>human<span class="w"> </span><span class="nv">collection</span><span class="o">=</span>geuvadis_smartseq<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="nv">project</span><span class="o">=</span>ERP110066<span class="w"> </span><span class="nv">genomic_unit</span><span class="o">=</span>gene<span class="w"> </span><span class="nv">annotation_extension</span><span class="o">=</span>G026<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="o">=</span>collection.jsonl
+recount3<span class="w"> </span>download<span class="w"> </span>--from<span class="o">=</span>collection.jsonl<span class="w"> </span>--dest<span class="o">=</span>./geuvadis-files
+recount3<span class="w"> </span>bundle<span class="w"> </span>rse<span class="w"> </span>--from<span class="o">=</span>collection.jsonl<span class="w"> </span>--genomic-unit<span class="o">=</span>gene<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--out<span class="o">=</span>geuvadis-ERP110066.pkl
+</pre></div>
+</div>
+<p>You can run <code class="docutils literal notranslate"><span class="pre">bundle</span> <span class="pre">rse</span></code> directly after writing the manifest if you only
+want the experiment. It fetches any files it needs. See <a class="reference internal" href="cli.html"><span class="doc">CLI Reference</span></a> for
+download and output options.</p>
+</section>
+<section id="adapting-the-example">
+<h3>Adapting the example<a class="headerlink" href="#adapting-the-example" title="Link to this heading"></a></h3>
+<p>Omit <code class="docutils literal notranslate"><span class="pre">project</span></code> from <code class="docutils literal notranslate"><span class="pre">discover_collection</span></code> to discover all member studies.
+The default <code class="docutils literal notranslate"><span class="pre">join_policy=&quot;inner&quot;</span></code> keeps features shared by the selected
+studies. If you combine bundles, use <code class="docutils literal notranslate"><span class="pre">bundle.filter(collection=collection)</span></code>
+to select one collection with its membership table and annotations. Each
+assembled experiment requires unique sample IDs.</p>
+<p>The membership table, <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.recount_project.gz</span></code>, stays in the bundle
+with <code class="docutils literal notranslate"><span class="pre">include_metadata=False</span></code>. With metadata enabled, assembly adds fields
+from <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.custom.gz</span></code> when published, joining by <code class="docutils literal notranslate"><span class="pre">rail_id</span></code>,
+<code class="docutils literal notranslate"><span class="pre">external_id</span></code>, and <code class="docutils literal notranslate"><span class="pre">study</span></code>. If a study metadata table is missing rows for
+some collection members, pass <code class="docutils literal notranslate"><span class="pre">metadata_join=&quot;outer&quot;</span></code> to the Python builder
+to retain those members when their count columns are present.</p>
+<p>To work with exon counts, use <code class="docutils literal notranslate"><span class="pre">genomic_units=(&quot;exon&quot;,)</span></code> in discovery and
+<code class="docutils literal notranslate"><span class="pre">genomic_unit=&quot;exon&quot;</span></code> in assembly. For junctions, use a mirror that supplies
+the count, coordinate, and sample ID files for the study. Set
+<code class="docutils literal notranslate"><span class="pre">genomic_units=()</span></code> and <code class="docutils literal notranslate"><span class="pre">junction_exts=(&quot;MM&quot;,</span> <span class="pre">&quot;RR&quot;,</span> <span class="pre">&quot;ID&quot;)</span></code> in discovery and
+<code class="docutils literal notranslate"><span class="pre">genomic_unit=&quot;junction&quot;</span></code> in assembly. Pass <code class="docutils literal notranslate"><span class="pre">include_bigwig=True</span></code> to include
+coverage files for collection members.</p>
+<p>For another mirror, set <code class="docutils literal notranslate"><span class="pre">RECOUNT3_URL</span></code> before starting Python and run
+<code class="docutils literal notranslate"><span class="pre">search_collections</span></code> again. Mirrors can list collections in the organism’s
+<code class="docutils literal notranslate"><span class="pre">homes_index</span></code>. On a local mirror, recount3 can also list collection
+directories when the index is absent.
+See <a class="reference internal" href="#cache-and-configuration"><span class="std std-ref">Cache and configuration</span></a> for other ways to select a mirror and the
+<a class="reference external" href="https://rna.recount.bio/docs/raw-files.html#data-source-vs-collection">upstream raw-file documentation</a>
+for the file layout.</p>
+</section>
 </section>
 <section id="the-three-layers-of-the-api">
 <h2>The three layers of the API<a class="headerlink" href="#the-three-layers-of-the-api" title="Link to this heading"></a></h2>
@@ -416,9 +564,9 @@ explaining why:</p>
 <ul class="simple">
 <li><p>A fallback object <strong>has no genomic ranges</strong>. Counts, sample metadata,
 and the operations driven by column data still work, namely
-<a class="reference internal" href="api.html#recount3.se.compute_scale_factors" title="recount3.se.compute_scale_factors"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.compute_scale_factors()</span></code></a>,
+<a class="reference internal" href="api.html#recount3.compute.compute_scale_factors" title="recount3.compute.compute_scale_factors"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.compute.compute_scale_factors()</span></code></a>,
 <a class="reference internal" href="api.html#recount3.se.expand_sra_attributes" title="recount3.se.expand_sra_attributes"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.expand_sra_attributes()</span></code></a>, and
-<a class="reference internal" href="api.html#recount3.se.is_paired_end" title="recount3.se.is_paired_end"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.is_paired_end()</span></code></a>. The helpers that need an RSE,
+<a class="reference internal" href="api.html#recount3.compute.is_paired_end" title="recount3.compute.is_paired_end"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.compute.is_paired_end()</span></code></a>. The helpers that need an RSE,
 <code class="docutils literal notranslate"><span class="pre">compute_read_counts</span></code>, <code class="docutils literal notranslate"><span class="pre">transform_counts</span></code>, and <code class="docutils literal notranslate"><span class="pre">compute_tpm</span></code>, raise
 <code class="docutils literal notranslate"><span class="pre">TypeError</span></code> on a plain SE, as do range queries. The flag returns an RSE
 as usual whenever ranges are available.</p></li>
@@ -469,14 +617,14 @@ manifest for someone else to fetch.</p></li>
 table, without the other resources in a default bundle. <code class="docutils literal notranslate"><span class="pre">create_rse</span></code>
 already limits counts to the requested genomic unit and annotation.</p></li>
 <li><p><em>Your own assembly.</em> You want the stacked counts as a
-<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> to merge with clinical data of your own, and
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> to merge with clinical data of your own, and
 will build the BiocPy object yourself (or skip it entirely).</p></li>
 </ul>
-<p>A bundle is just a list of resources plus filters, so nothing is downloaded
-by default during discovery without BigWigs. BigWig discovery reads a sample
-index. Candidate URLs do not verify that files exist and do not report their
-sizes. That is the practical difference from Layer 1:
-<code class="docutils literal notranslate"><span class="pre">create_rse</span></code> decides what to fetch for you, a bundle lets you decide.</p>
+<p>A bundle lets you inspect resources and choose which files to fetch.
+Project discovery constructs candidate URLs and reads a sample index if you
+request BigWigs. <a class="reference internal" href="#collections"><span class="std std-ref">Collection discovery</span></a> reads a membership
+table to locate the study files. Candidate URLs do not verify that files
+exist or report their sizes.</p>
 <section id="discovering-resources-for-one-or-more-projects">
 <h3>Discovering resources for one or more projects<a class="headerlink" href="#discovering-resources-for-one-or-more-projects" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
@@ -600,7 +748,7 @@ bundle first to choose which family you want:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">DataFrame</span> <span class="p">(</span><span class="mi">63856</span><span class="p">,</span> <span class="mi">12</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A plain <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>, feature IDs on the index and sample IDs on
+<p>A plain <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a>, feature IDs on the index and sample IDs on
 the columns, identical to what <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> puts in its <code class="docutils literal notranslate"><span class="pre">raw_counts</span></code>
 assay. Junctions stack the same way, and stay sparse-backed:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">junction_counts_df</span> <span class="o">=</span> <span class="p">(</span>
@@ -770,16 +918,16 @@ depends on the resource:</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Gene/exon counts</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Junction MM (with ID sidecar)</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> (sparse-backed)</p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a> (sparse-backed)</p></td>
 </tr>
 <tr class="row-even"><td><p>Junction ID / RR</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Metadata tables / source listings</p></td>
-<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
+<td><p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p></td>
 </tr>
 <tr class="row-even"><td><p>BigWig</p></td>
 <td><p><a class="reference internal" href="api.html#recount3._bigwig.BigWigFile" title="recount3._bigwig.BigWigFile"><code class="xref py py-class docutils literal notranslate"><span class="pre">BigWigFile</span></code></a></p></td>
@@ -885,9 +1033,11 @@ origin (e.g. <code class="docutils literal notranslate"><span class="pre">recoun
 intersection of the nonempty metadata tables within each project. Samples
 absent from that intersection are excluded from both the assay and
 <code class="docutils literal notranslate"><span class="pre">column_data</span></code>. Use <code class="docutils literal notranslate"><span class="pre">metadata_join=&quot;outer&quot;</span></code> on <code class="docutils literal notranslate"><span class="pre">create_rse</span></code> or either
-bundle builder to retain every count sample with missing metadata values.
-This option is independent of <code class="docutils literal notranslate"><span class="pre">join_policy</span></code>, which joins feature rows
-across projects. With no metadata resources, all count samples are retained.</p>
+bundle builder to retain count samples with missing metadata values. For
+<a class="reference internal" href="#collections"><span class="std std-ref">collections</span></a>, both join modes limit the result to the
+samples listed in the membership table. This option is independent of
+<code class="docutils literal notranslate"><span class="pre">join_policy</span></code>, which joins feature rows across projects. With no metadata
+resources, all count samples are retained.</p>
 <p>Requested files that fail to load, conflicting sample identifiers, and mixed
 annotations raise errors. Select <code class="docutils literal notranslate"><span class="pre">annotation_extension</span></code> explicitly when a
 bundle contains several annotations. For junctions from multiple projects,
@@ -962,10 +1112,10 @@ groups; here you would combine them, for example with
 <p>Gene and exon matrices contain base-pair coverage sums (the <code class="docutils literal notranslate"><span class="pre">raw_counts</span></code>
 assay). Junction matrices contain junction-supporting counts (the <code class="docutils literal notranslate"><span class="pre">counts</span></code>
 assay); do not apply the gene coverage-to-read or TPM formulas to junctions.
-<a class="reference internal" href="api.html#module-recount3.se" title="recount3.se"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.se</span></code></a> provides helpers consistent with the R implementation.
-These reach the <code class="docutils literal notranslate"><span class="pre">se</span></code> submodule rather than the package root, so they are
-called as <code class="docutils literal notranslate"><span class="pre">r3.se.compute_tpm(rse)</span></code>, whereas the builders and discovery
-helpers used so far are available directly as <code class="docutils literal notranslate"><span class="pre">r3.create_rse(...)</span></code>.</p>
+<a class="reference internal" href="api.html#module-recount3.compute" title="recount3.compute"><code class="xref py py-mod docutils literal notranslate"><span class="pre">recount3.compute</span></code></a> provides helpers consistent with the R implementation.
+Call them through the submodule, for example <code class="docutils literal notranslate"><span class="pre">r3.compute.compute_tpm(rse)</span></code>.
+The builders and discovery helpers are available directly on <code class="docutils literal notranslate"><span class="pre">r3</span></code>, for
+example <code class="docutils literal notranslate"><span class="pre">r3.create_rse(...)</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">compute_read_counts</span></code>, <code class="docutils literal notranslate"><span class="pre">transform_counts</span></code>, and <code class="docutils literal notranslate"><span class="pre">compute_tpm</span></code> require an
 RSE. <code class="docutils literal notranslate"><span class="pre">compute_scale_factors</span></code> and <code class="docutils literal notranslate"><span class="pre">is_paired_end</span></code> also accept sample
 metadata DataFrames and plain SE objects.</p>
@@ -973,7 +1123,7 @@ metadata DataFrames and plain SE objects.</p>
 <h3>Approximate read counts<a class="headerlink" href="#approximate-read-counts" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
 
-<span class="n">reads</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">se</span><span class="o">.</span><span class="n">compute_read_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>        <span class="c1"># pandas DataFrame, integer-rounded</span>
+<span class="n">reads</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">compute_read_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>  <span class="c1"># pandas DataFrame, integer-rounded</span>
 </pre></div>
 </div>
 <p>Values are rounded to whole reads by default; pass <code class="docutils literal notranslate"><span class="pre">round_to_integers=False</span></code>
@@ -984,12 +1134,12 @@ to retain the fractional estimates.</p>
 <p>Two methods are supported, matching the R <code class="docutils literal notranslate"><span class="pre">recount3</span></code> reference:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
 
-<span class="n">sf_auc</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">se</span><span class="o">.</span><span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"auc"</span><span class="p">)</span>
-<span class="n">sf_mapreads</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">se</span><span class="o">.</span><span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"mapped_reads"</span><span class="p">)</span>
+<span class="n">sf_auc</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"auc"</span><span class="p">)</span>
+<span class="n">sf_mapreads</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">compute_scale_factors</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"mapped_reads"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"auc"</span><span class="p">:</span> <span class="n">sf_auc</span><span class="p">,</span> <span class="s2">"mapped_reads"</span><span class="p">:</span> <span class="n">sf_mapreads</span><span class="p">})</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.Series</span></code></a> indexed by <code class="docutils literal notranslate"><span class="pre">external_id</span></code>:</p>
+<p>Both return a <a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.Series.html#pandas.Series" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.Series</span></code></a> indexed by <code class="docutils literal notranslate"><span class="pre">external_id</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>                  <span class="n">auc</span>  <span class="n">mapped_reads</span>
 <span class="n">external_id</span>
 <span class="n">SRR389077</span>    <span class="mf">0.045855</span>      <span class="mf">0.129044</span>
@@ -998,8 +1148,8 @@ to retain the fractional estimates.</p>
 </pre></div>
 </div>
 <p>Apply scale factors to the assay:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scaled</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">se</span><span class="o">.</span><span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"auc"</span><span class="p">)</span>          <span class="c1"># default</span>
-<span class="n">scaled</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">se</span><span class="o">.</span><span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"mapped_reads"</span><span class="p">,</span> <span class="n">target_read_count</span><span class="o">=</span><span class="mf">4e7</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">scaled</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"auc"</span><span class="p">)</span>  <span class="c1"># default</span>
+<span class="n">scaled</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">transform_counts</span><span class="p">(</span><span class="n">rse</span><span class="p">,</span> <span class="n">by</span><span class="o">=</span><span class="s2">"mapped_reads"</span><span class="p">,</span> <span class="n">target_read_count</span><span class="o">=</span><span class="mf">4e7</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -1007,7 +1157,7 @@ to retain the fractional estimates.</p>
 <h3>TPM (gene/exon only, needs feature widths)<a class="headerlink" href="#tpm-gene-exon-only-needs-feature-widths" title="Link to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">r3</span>
 
-<span class="n">tpm</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">se</span><span class="o">.</span><span class="n">compute_tpm</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
+<span class="n">tpm</span> <span class="o">=</span> <span class="n">r3</span><span class="o">.</span><span class="n">compute</span><span class="o">.</span><span class="n">compute_tpm</span><span class="p">(</span><span class="n">rse</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">tpm</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">tpm</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">tpm</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">()</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span>
 </pre></div>
@@ -1035,7 +1185,7 @@ for display; each nonzero sample should sum to approximately one million.
 Check for missing or non-finite results before downstream analysis. The helpers
 return new DataFrames and do not replace the RSE assay; rounded estimates have
 integer-like values but may retain a floating dtype.</p>
-<p><a class="reference internal" href="api.html#recount3.se.is_paired_end" title="recount3.se.is_paired_end"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.se.is_paired_end()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">compute_scale_factors</span></code>, and
+<p><a class="reference internal" href="api.html#recount3.compute.is_paired_end" title="recount3.compute.is_paired_end"><code class="xref py py-func docutils literal notranslate"><span class="pre">recount3.compute.is_paired_end()</span></code></a>, <code class="docutils literal notranslate"><span class="pre">compute_scale_factors</span></code>, and
 <code class="docutils literal notranslate"><span class="pre">expand_sra_attributes</span></code> accept a metadata DataFrame or an SE/RSE object.
 See the API reference for full signatures.</p>
 </section>
@@ -1234,8 +1384,43 @@ handle, not the wrapper:</p>
 <p>Per-base coverage comes back as a <a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a>, one value per base
 over the requested interval.</p>
 <p>Both spellings close the file on exit and expose the same <code class="docutils literal notranslate"><span class="pre">values()</span></code>,
-<code class="docutils literal notranslate"><span class="pre">stats()</span></code>, and <code class="docutils literal notranslate"><span class="pre">intervals()</span></code> calls, so either spelling works; just do not
-expect wrapper-only behaviour from the second.</p>
+<code class="docutils literal notranslate"><span class="pre">stats()</span></code>, and <code class="docutils literal notranslate"><span class="pre">intervals()</span></code> methods. The wrapper spells the bin-count
+keyword <code class="docutils literal notranslate"><span class="pre">n_bins</span></code>; the raw handle uses <code class="docutils literal notranslate"><span class="pre">nBins</span></code>. Wrapper validation and
+unsigned interval endpoint restoration apply to calls on the wrapper.</p>
+<p>On the wrapper’s <code class="docutils literal notranslate"><span class="pre">stats()</span></code> and <code class="docutils literal notranslate"><span class="pre">intervals()</span></code>, omitted <code class="docutils literal notranslate"><span class="pre">start</span></code> and <code class="docutils literal notranslate"><span class="pre">end</span></code>
+bounds default independently to zero and the chromosome length. Coordinates
+and bin counts must be integers; fractional values and numeric strings raise
+<code class="docutils literal notranslate"><span class="pre">TypeError</span></code>.
+String arguments must be valid UTF-8 without embedded NUL characters;
+invalid strings are rejected before opening or querying the file.
+Coordinates must fit unsigned 32-bit integers, and <code class="docutils literal notranslate"><span class="pre">n_bins</span></code> must be between
+one and <code class="docutils literal notranslate"><span class="pre">2**31</span> <span class="pre">-</span> <span class="pre">1</span></code>. Values outside these numeric limits raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>
+before reaching native code. For example,
+<code class="docutils literal notranslate"><span class="pre">bw.stats(&quot;chr1&quot;,</span> <span class="pre">start=1000,</span> <span class="pre">exact=True)</span></code>
+summarizes from base 1000 to the chromosome end. <code class="docutils literal notranslate"><span class="pre">exact=True</span></code> computes from
+the stored intervals; the default may use approximate zoom summaries.
+Use <code class="docutils literal notranslate"><span class="pre">exact=True</span></code> for sums: native zoom-summary bugs can substantially
+undercount them or return <code class="docutils literal notranslate"><span class="pre">None</span></code> for covered zero-signal regions.
+Keep <code class="docutils literal notranslate"><span class="pre">n_bins</span></code> at or below the number of bases in the interval: native
+statistics can be inconsistent for bins narrower than one base.</p>
+<p><code class="docutils literal notranslate"><span class="pre">header()</span></code> returns native metadata unchanged. Some pyBigWig builds truncate
+its floating-point summaries to integers, and writer-generated extrema can
+be inaccurate. Use <code class="docutils literal notranslate"><span class="pre">stats(...,</span> <span class="pre">exact=True)</span></code> for statistics from the stored
+signal when numerical accuracy matters.</p>
+<p><code class="docutils literal notranslate"><span class="pre">values(...,</span> <span class="pre">numpy=True)</span></code> requires a pyBigWig build with NumPy support
+(<code class="docutils literal notranslate"><span class="pre">pyBigWig.numpy</span> <span class="pre">==</span> <span class="pre">1</span></code>). The default list output works with either build.
+List queries are limited to <code class="docutils literal notranslate"><span class="pre">2**31</span> <span class="pre">-</span> <span class="pre">1</span></code> bases by the native loop counter.
+Both forms allocate memory proportional to the requested region; request
+smaller regions when working with large chromosomes.
+Uncovered bases yield NaN, whereas a file with no entries at all yields an
+empty list or array. For empty-file NumPy output, use pyBigWig 0.3.25 or newer:
+earlier versions have a native bug that returns a scalar array containing an
+uninitialized value instead. <code class="docutils literal notranslate"><span class="pre">intervals()</span></code> returns a tuple of stored intervals
+or <code class="docutils literal notranslate"><span class="pre">None</span></code> for no overlaps; endpoints are not clipped to the query bounds.</p>
+<p>Read methods reject write mode before opening the file, so an accidental
+read cannot truncate an existing file or call unsafe native reader code on
+a writer. Use the raw context-manager handle for writing. Changes to a
+wrapper’s <code class="docutils literal notranslate"><span class="pre">path</span></code> or <code class="docutils literal notranslate"><span class="pre">mode</span></code> apply after its current handle is closed.</p>
 <p>BigWig intervals use zero-based, half-open coordinates; uncovered positions can
 be NaN. <code class="docutils literal notranslate"><span class="pre">load()</span></code> first caches the full BigWig file. Reading a small interval
 limits the array returned, not the initial download. To limit downloads to one
@@ -1299,68 +1484,76 @@ archive members can overlap, but adding or replacing members is serialized.
 With <code class="docutils literal notranslate"><span class="pre">cache=&quot;disable&quot;</span></code>, ZIP downloads use temporary files before inserting
 complete members; directory downloads stream to their destinations without
 cache deduplication. Cache-disabled calls do not load pybiocfilecache.</p>
-<p>All these locks coordinate threads <strong>within one Python process</strong>. They do not
-coordinate separate CLI jobs, Python processes, R sessions, or cluster nodes.
-Use separate cache and output paths per concurrent process, or provide external
-coordination. Run cache removal, registry maintenance, and external file edits
-only when the cache is idle. Atomic payload replacement alone does not provide
-cross-process deduplication or transactional registry and payload updates.</p>
+<p>Payload and archive locks coordinate threads within one Python process. Use
+separate output paths across processes or coordinate writes to shared output.
+The optional backend also coordinates access to the shared SQLite registry.
+Run cache removal, registry maintenance, and external file edits when the
+cache is idle.</p>
 </section>
 <section id="optional-shared-r-python-cache">
 <h3>Optional shared R/Python cache<a class="headerlink" href="#optional-shared-r-python-cache" title="Link to this heading"></a></h3>
-<p>recount3 already includes a fast URL-hash filesystem cache. It is the default
-and requires no cache extra. Use the optional <code class="docutils literal notranslate"><span class="pre">pybiocfilecache</span></code> backend when
-you need to share cached resources with R’s BiocFileCache. Its SQLite lookups,
-metadata writes, and local-file checksums add measurable overhead; it is not
-a performance upgrade. Installing the extra alone does not change the default.</p>
-<p>In a controlled WSL2 benchmark (Python 3.14.7, three repetitions, four 1 MiB
-files, 25 ms per loopback HTTP request), median download times were:</p>
+<p>The default <code class="docutils literal notranslate"><span class="pre">filesystem</span></code> backend uses URL-hash filenames and requires no
+cache extra. Select <code class="docutils literal notranslate"><span class="pre">pybiocfilecache</span></code> to share downloaded files and registry
+entries with R’s BiocFileCache. Concurrent Python operations reuse a SQLite
+connection for each shared cache, hash payloads alongside transfers, and
+commit completed registrations in groups of up to 16. A cached download
+returns after its registration is committed. A failure to publish one file
+leaves the other registrations in the batch eligible to commit.</p>
+<p>The table reports median wall time over three runs on local Linux ext4 with
+Python 3.14.7, SQLite 3.53.1, and pybiocfilecache 0.7.0. Each worker called
+<code class="docutils literal notranslate"><span class="pre">R3Resource.download()</span></code> to fill or reuse the cache. The test supplied
+synthetic HTTP response bodies and added 20 ms of delay only to the
+delayed workload. Imports and output materialization were outside the timed
+runs. Cold runs started with an empty cache and warm runs reused those files.</p>
 <table class="docutils align-default" id="id2">
-<caption><span class="caption-text">Native cache versus optional shared cache</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
+<caption><span class="caption-text">Cache-only downloads by backend</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
 <colgroup>
-<col style="width: 35.3%" />
-<col style="width: 17.6%" />
-<col style="width: 23.5%" />
-<col style="width: 23.5%" />
+<col style="width: 52.0%" />
+<col style="width: 15.0%" />
+<col style="width: 17.0%" />
+<col style="width: 16.0%" />
 </colgroup>
 <thead>
-<tr class="row-odd"><th class="head"><p>Cache state / workers</p></th>
-<th class="head"><p>Native (s)</p></th>
-<th class="head"><p>Shared (s)</p></th>
-<th class="head"><p>Shared/native</p></th>
+<tr class="row-odd"><th class="head"><p>Workload</p></th>
+<th class="head"><p>Native (ms)</p></th>
+<th class="head"><p>Previous shared (ms)</p></th>
+<th class="head"><p>Updated shared (ms)</p></th>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>Empty / 1</p></td>
-<td><p>0.131</p></td>
-<td><p>0.429</p></td>
-<td><p>3.3x</p></td>
+<tr class="row-even"><td><p>Cold, 128 × 4 KiB with delay, 8 workers</p></td>
+<td><p>369.0</p></td>
+<td><p>3425.7</p></td>
+<td><p>698.3</p></td>
 </tr>
-<tr class="row-odd"><td><p>Empty / 4</p></td>
-<td><p>0.054</p></td>
-<td><p>0.365</p></td>
-<td><p>6.8x</p></td>
+<tr class="row-odd"><td><p>Warm, 128 × 4 KiB, 8 workers</p></td>
+<td><p>78.6</p></td>
+<td><p>1841.3</p></td>
+<td><p>382.8</p></td>
 </tr>
-<tr class="row-even"><td><p>Warm / 1</p></td>
-<td><p>0.0015</p></td>
-<td><p>0.0382</p></td>
-<td><p>26.1x</p></td>
+<tr class="row-even"><td><p>Warm, 128 × 4 KiB, 1 worker</p></td>
+<td><p>9.6</p></td>
+<td><p>1801.3</p></td>
+<td><p>819.2</p></td>
 </tr>
-<tr class="row-odd"><td><p>Warm / 4</p></td>
-<td><p>0.0091</p></td>
-<td><p>0.0622</p></td>
-<td><p>6.9x</p></td>
+<tr class="row-odd"><td><p>Cold, 12 × 32 MiB, 8 workers</p></td>
+<td><p>132.5</p></td>
+<td><p>1145.0</p></td>
+<td><p>295.8</p></td>
+</tr>
+<tr class="row-even"><td><p>Warm, 12 × 32 MiB, 8 workers</p></td>
+<td><p>9.6</p></td>
+<td><p>819.9</p></td>
+<td><p>151.6</p></td>
 </tr>
 </tbody>
 </table>
-<p>The optional backend added roughly 22–25 MiB to peak client RSS in these
-cases. Empty-cache timing includes the optional import and registration;
-warm timing excludes prefill but includes lookups and local-file checksums.
-These figures describe these small controlled workloads, not public-mirror
-throughput or a universal slowdown ratio. Transfer size, network latency,
-registry size, and filesystem performance affect the overhead. The native
-backend is the faster default; shared-cache reuse can still avoid a much more
-expensive download when the file was already obtained from R.</p>
+<p>The updated shared cache was 4.9 times faster in the delayed cold run.
+Checksum reads and access-time updates still add work to warm downloads.
+For the 128 small files with one worker, looking up paths with
+<code class="docutils literal notranslate"><span class="pre">ensure_cached(download=False)</span></code> took 52.9 ms with the updated backend,
+448.3 ms with the previous backend, and 4.6 ms with the native cache.
+Network latency, file sizes, worker count, and storage affect these timings.</p>
 <p>Install and explicitly select it with:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">python</span> <span class="o">-</span><span class="n">m</span> <span class="n">pip</span> <span class="n">install</span> <span class="s2">"recount3[pybiocfilecache]"</span>
 <span class="n">export</span> <span class="n">RECOUNT3_CACHE_BACKEND</span><span class="o">=</span><span class="n">pybiocfilecache</span>
@@ -1425,12 +1618,13 @@ info &lt;- BiocFileCache::bfcinfo(bfc)
 BiocFileCache::bfcpath(bfc, rids = info$rid)
 </pre></div>
 </div>
-<p>The supported pybiocfilecache 0.7.x series maintains R database compatibility.
-Both interfaces use schema version <code class="docutils literal notranslate"><span class="pre">0.99.4</span></code> and the same resource columns.
-Sequential interoperability was tested with the supplied R recount3 source
-and BiocFileCache 3.0.0: R can query and use Python-created entries, Python can
-reuse R-created entries, and resource IDs remain unique after interleaved
-additions and deletion. SQL defaults can differ without preventing these reads.</p>
+<p>The supported pybiocfilecache 0.7.x series and R BiocFileCache use schema
+version <code class="docutils literal notranslate"><span class="pre">0.99.4</span></code>. Python opens existing registries in that format. Registries
+created by recount3 use the same auto-incrementing resource IDs as R. Recount3
+adds an exact URL index when it first commits registrations to a registry.
+With R recount3 1.21.1 and BiocFileCache 3.0.0 on Linux, R and Python reused
+each other’s entries and concurrently registered different URLs in the same
+database.</p>
 <p>The exact remote URL is the lookup key (<code class="docutils literal notranslate"><span class="pre">rname</span></code>). An existing R record is
 used at its registered path, including relative and web-resource paths.
 Python does not download another URL-hash copy when that registered file is
@@ -1442,23 +1636,34 @@ as local files without an extra copy. Existing native files are adopted on
 cached download. R can find them by URL through <code class="docutils literal notranslate"><span class="pre">bfcquery</span></code> or <code class="docutils literal notranslate"><span class="pre">bfcrpath</span></code>.
 R’s <code class="docutils literal notranslate"><span class="pre">recount3::file_retrieve</span></code> also makes a remote availability check before
 consulting its cache; use <code class="docutils literal notranslate"><span class="pre">bfcpath</span></code> to access cached data without that check.</p>
-<p>recount3 continues to handle network timeouts, TLS, retries, and atomic
-replacement. It does not delegate transfers to the optional package’s web
-downloader. Existing R resource types and relative paths are preserved.
-A Python refresh of an R web record clears the old HTTP validators, because
-the unconditional transfer does not collect replacements. Local records use
-pybiocfilecache’s checksum; even warm local-cache downloads recompute it.</p>
-<p>Registry operations are serialized per shared database within this Python
-process. Network transfers occur outside that lock. A registry error propagates
-while leaving any completed payload available. Retrying a local cache hit
-repairs its checksum; after an interrupted web refresh, repeat <code class="docutils literal notranslate"><span class="pre">update</span></code> to
-reset its validators. Payload replacement and SQLite commits are not one
-transaction, so a process crash may require registry maintenance.</p>
-<p><code class="docutils literal notranslate"><span class="pre">recount3_cache_files()</span></code> excludes SQLite databases, journals, and R lock
-files. With this backend it includes registered paths outside the cache root and
-registered entries whose payload was removed externally. Patterns filter these
-paths. <code class="docutils literal notranslate"><span class="pre">recount3_cache_rm()</span></code> deletes selected payloads inside the cache root
-and removes their registry rows, including stale rows for missing payloads.
+<p>recount3 handles network timeouts, TLS, retries, and atomic replacement.
+The shared backend preserves R resource types and relative paths. A Python
+refresh of an R web record clears the old HTTP validators because the
+unconditional transfer collects no replacements. Cached downloads recompute
+the configured checksum for local files, including on a cache hit. If you only
+need the path of an existing payload, use <code class="docutils literal notranslate"><span class="pre">res.ensure_cached(download=False)</span></code>
+to resolve it without rehashing the file or updating its registry entry.
+This lookup and <code class="docutils literal notranslate"><span class="pre">recount3_cache_files()</span></code> also work on read-only cache snapshots.</p>
+<p>Python and R coordinate registry access using <code class="docutils literal notranslate"><span class="pre">BiocFileCache.sqlite.LOCK</span></code>.
+Transfers and checksums run outside this lock. Initialize the shared cache
+before starting concurrent jobs. Python rechecks the destination under the
+registry lock before publishing a download and commits its checksum under the
+same lock. If R registers a different path for the URL during a download,
+Python discards the temporary file and retries at the registered path.
+Coordinate fetches or refreshes of the same payload across processes to avoid
+redundant transfers.</p>
+<p>Registry errors propagate. If a batch rolls back, Python restores the payloads
+it replaced in that transaction. A completed local download can be retained
+after an individual registration error. Retrying the local cache hit repairs
+its checksum. After a process crash during a web refresh, repeat <code class="docutils literal notranslate"><span class="pre">update</span></code> to
+reset its validators.</p>
+<p><code class="docutils literal notranslate"><span class="pre">recount3_cache_files()</span></code> excludes SQLite databases, journals, R lock files,
+and staged downloads. With this backend it includes registered paths outside
+the cache root and registered entries whose payload was removed externally.
+Patterns filter these paths. <code class="docutils literal notranslate"><span class="pre">recount3_cache_rm()</span></code> deletes selected payloads
+inside the cache root and removes their registry rows, including stale rows
+for missing payloads. It also removes selected staging files left inside the
+cache root by interrupted downloads.
 For registered files outside the cache root, including R’s <code class="docutils literal notranslate"><span class="pre">action=&quot;asis&quot;</span></code>
 references, it removes only the registry rows and leaves the files untouched.
 Containment is checked after resolving symlinks. The returned list includes
@@ -1471,17 +1676,13 @@ Run maintenance while all users of the shared cache are idle.</p>
 It does not consult R’s registry or maintain its rows. Use the optional backend
 for removal of registered files. Absolute-path local entries require repair if
 the cache is moved; relative R entries remain relative to the shared root.</p>
-<p>Inspect the same registry directly from Python with:</p>
+<p>Inspect the same registry directly with pybiocfilecache while the cache is idle:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pybiocfilecache</span><span class="w"> </span><span class="kn">import</span> <span class="n">BiocFileCache</span>
 
 <span class="k">with</span> <span class="n">BiocFileCache</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">cache_dir</span><span class="p">)</span> <span class="k">as</span> <span class="n">registry</span><span class="p">:</span>
     <span class="n">records</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">list_resources</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>Shared format does not imply simultaneous-transfer coordination. The thread
-locks in recount3 do not coordinate R sessions or other Python processes.
-Use the shared directory sequentially, or provide external coordination for
-writers, refreshes, and removal.</p>
 <p>Configuration precedence is, from lowest to highest: library defaults,
 environment variables, an explicit <code class="xref py py-class docutils literal notranslate"><span class="pre">Config</span></code> passed to a
 resource or search function. The supported environment variables are:</p>
@@ -1616,7 +1817,7 @@ columns and the <code class="docutils literal notranslate"><span class="pre">uns
 instead, which keeps the names verbatim.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">Cannot</span> <span class="pre">write</span> <span class="pre">Parquet:</span> <span class="pre">N</span> <span class="pre">columns</span> <span class="pre">use</span> <span class="pre">a</span> <span class="pre">pandas</span> <span class="pre">sparse</span> <span class="pre">dtype</span></code></dt><dd><p>Junction count matrices load sparse-backed and no Parquet engine accepts
-<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.SparseDtype.html#pandas.SparseDtype" title="(in pandas v3.0.6)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.SparseDtype</span></code></a>. Write a text format, or pass <code class="docutils literal notranslate"><span class="pre">--densify</span></code>
+<a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.SparseDtype.html#pandas.SparseDtype" title="(in pandas v3.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.SparseDtype</span></code></a>. Write a text format, or pass <code class="docutils literal notranslate"><span class="pre">--densify</span></code>
 to materialize every implicit zero first. Densifying a junction matrix
 can need far more memory than the sparse form.</p>
 </dd>

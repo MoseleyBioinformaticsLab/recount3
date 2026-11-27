@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Index &mdash; recount3 1.3.0 documentation</title>
+  <title>Index &mdash; recount3 1.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=1f29e9d3"></script>
+      <script src="_static/documentation_options.js?v=9172181d"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
@@ -173,14 +173,26 @@
 </li>
       <li><a href="api.html#recount3.types.CompatibilityMode">CompatibilityMode (in module recount3.types)</a>
 </li>
+      <li><a href="api.html#recount3.compute.compute_read_counts">compute_read_counts() (in module recount3.compute)</a>
+
+      <ul>
+        <li><a href="api.html#recount3.se.compute_read_counts">(in module recount3.se)</a>
+</li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#recount3.se.compute_read_counts">compute_read_counts() (in module recount3.se)</a>
+      <li><a href="api.html#recount3.compute.compute_scale_factors">compute_scale_factors() (in module recount3.compute)</a>
+
+      <ul>
+        <li><a href="api.html#recount3.se.compute_scale_factors">(in module recount3.se)</a>
 </li>
-      <li><a href="api.html#recount3.se.compute_scale_factors">compute_scale_factors() (in module recount3.se)</a>
+      </ul></li>
+      <li><a href="api.html#recount3.compute.compute_tpm">compute_tpm() (in module recount3.compute)</a>
+
+      <ul>
+        <li><a href="api.html#recount3.se.compute_tpm">(in module recount3.se)</a>
 </li>
-      <li><a href="api.html#recount3.se.compute_tpm">compute_tpm() (in module recount3.se)</a>
-</li>
+      </ul></li>
       <li><a href="api.html#recount3.config.Config">Config (class in recount3.config)</a>
 </li>
       <li><a href="api.html#recount3.resource.R3Resource.config">config (recount3.resource.R3Resource attribute)</a>
@@ -207,9 +219,11 @@
 </li>
       <li><a href="api.html#recount3.resource.R3Resource.description">description (recount3.resource.R3Resource attribute)</a>
 </li>
+      <li><a href="api.html#recount3.bundle.R3ResourceBundle.discover">discover() (recount3.bundle.R3ResourceBundle class method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api.html#recount3.bundle.R3ResourceBundle.discover">discover() (recount3.bundle.R3ResourceBundle class method)</a>
+      <li><a href="api.html#recount3.bundle.R3ResourceBundle.discover_collection">discover_collection() (recount3.bundle.R3ResourceBundle class method)</a>
 </li>
       <li><a href="api.html#recount3.bundle.R3ResourceBundle.download">download() (recount3.bundle.R3ResourceBundle method)</a>
 
@@ -283,12 +297,16 @@
 </li>
       <li><a href="api.html#recount3.resource.R3Resource.is_loaded">is_loaded() (recount3.resource.R3Resource method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#recount3._bigwig.BigWigFile.is_open">is_open() (recount3._bigwig.BigWigFile method)</a>
 </li>
-      <li><a href="api.html#recount3.se.is_paired_end">is_paired_end() (in module recount3.se)</a>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#recount3.compute.is_paired_end">is_paired_end() (in module recount3.compute)</a>
+
+      <ul>
+        <li><a href="api.html#recount3.se.is_paired_end">(in module recount3.se)</a>
 </li>
+      </ul></li>
       <li><a href="api.html#recount3.bundle.R3ResourceBundle.iter_bigwig">iter_bigwig() (recount3.bundle.R3ResourceBundle method)</a>
 </li>
       <li><a href="api.html#recount3.bundle.R3ResourceBundle.iter_loaded">iter_loaded() (recount3.bundle.R3ResourceBundle method)</a>
@@ -336,6 +354,8 @@
         <li><a href="api.html#module-recount3._descriptions">recount3._descriptions</a>
 </li>
         <li><a href="api.html#module-recount3.bundle">recount3.bundle</a>
+</li>
+        <li><a href="api.html#module-recount3.compute">recount3.compute</a>
 </li>
         <li><a href="api.html#module-recount3.config">recount3.config</a>
 </li>
@@ -388,6 +408,8 @@
 </li>
       <li><a href="api.html#recount3._descriptions.R3BigWig">R3BigWig (class in recount3._descriptions)</a>
 </li>
+      <li><a href="api.html#recount3._descriptions.R3CollectionMetadata">R3CollectionMetadata (class in recount3._descriptions)</a>
+</li>
       <li><a href="api.html#recount3._descriptions.R3DataSourceMetadata">R3DataSourceMetadata (class in recount3._descriptions)</a>
 </li>
       <li><a href="api.html#recount3._descriptions.R3DataSources">R3DataSources (class in recount3._descriptions)</a>
@@ -438,6 +460,13 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    recount3.compute
+
+      <ul>
+        <li><a href="api.html#module-recount3.compute">module</a>
+</li>
+      </ul></li>
       <li>
     recount3.config
 
@@ -508,14 +537,18 @@
 </li>
       <li><a href="api.html#recount3.search.search_bigwig_files">search_bigwig_files() (in module recount3.search)</a>
 </li>
+      <li><a href="api.html#recount3.search.search_collection">search_collection() (in module recount3.search)</a>
+</li>
+      <li><a href="api.html#recount3.search.search_collections">search_collections() (in module recount3.search)</a>
+</li>
       <li><a href="api.html#recount3.search.search_count_files_gene_or_exon">search_count_files_gene_or_exon() (in module recount3.search)</a>
 </li>
       <li><a href="api.html#recount3.search.search_count_files_junctions">search_count_files_junctions() (in module recount3.search)</a>
 </li>
-      <li><a href="api.html#recount3.search.search_data_source_metadata">search_data_source_metadata() (in module recount3.search)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api.html#recount3.search.search_data_source_metadata">search_data_source_metadata() (in module recount3.search)</a>
+</li>
       <li><a href="api.html#recount3.search.search_data_sources">search_data_sources() (in module recount3.search)</a>
 </li>
       <li><a href="api.html#recount3.search.search_metadata_files">search_metadata_files() (in module recount3.search)</a>
@@ -540,14 +573,18 @@
 </li>
       <li><a href="api.html#recount3.se.to_anndata">to_anndata() (in module recount3.se)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#recount3.bundle.R3ResourceBundle.to_ranged_summarized_experiment">to_ranged_summarized_experiment() (recount3.bundle.R3ResourceBundle method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api.html#recount3.bundle.R3ResourceBundle.to_summarized_experiment">to_summarized_experiment() (recount3.bundle.R3ResourceBundle method)</a>
 </li>
-      <li><a href="api.html#recount3.se.transform_counts">transform_counts() (in module recount3.se)</a>
+      <li><a href="api.html#recount3.compute.transform_counts">transform_counts() (in module recount3.compute)</a>
+
+      <ul>
+        <li><a href="api.html#recount3.se.transform_counts">(in module recount3.se)</a>
 </li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -560,6 +597,8 @@
 
       <ul>
         <li><a href="api.html#recount3._descriptions.R3BigWig.url_path">(recount3._descriptions.R3BigWig method)</a>
+</li>
+        <li><a href="api.html#recount3._descriptions.R3CollectionMetadata.url_path">(recount3._descriptions.R3CollectionMetadata method)</a>
 </li>
         <li><a href="api.html#recount3._descriptions.R3DataSourceMetadata.url_path">(recount3._descriptions.R3DataSourceMetadata method)</a>
 </li>

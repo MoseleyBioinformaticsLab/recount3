@@ -104,6 +104,10 @@ Commands
                    include_bigwig=true|false)
      sources       organism
      source-meta   organism, data_source
+     collections   organism
+     collection    organism, collection
+                   (optional project and the project-mode options above;
+                   junction files are requested explicitly)
 
   Example:
 
@@ -112,6 +116,21 @@ Commands
      recount3 search junctions \
          organism=human data_source=sra project=SRP009615 \
          junction_type=ALL junction_extension=MM --format=tsv
+
+  For collections, select a mirror that hosts them. The Snaptron test
+  mirror is used by the upstream R package. Each row from ``search
+  collections`` points to a collection's sample membership table.
+  A ``search collection`` manifest includes that table for experiment
+  assembly, even with ``include_metadata=false``.
+  Pass the same mirror to ``search`` and ``download``.
+
+  .. code-block:: bash
+
+     export RECOUNT3_URL=https://snaptron.cs.jhu.edu/data/temp/recount3/
+     recount3 search collections organism=human
+     recount3 search collection organism=human collection=geuvadis_smartseq \
+         project=ERP110066 genomic_unit=gene --output collection.jsonl
+     recount3 download --from=collection.jsonl --dest=./collection-files
 
 ``download``
   Materialize resources from a manifest file or one inline JSON object.
@@ -214,10 +233,10 @@ Input and output formats
 streaming, grepping, and piping, and is used for both ``search`` output and
 ``download`` input.
 
-Each manifest line contains all resource description fields plus two
-convenience keys: ``url`` (the fully qualified HTTP URL) and ``arcname`` (the
-destination path inside a ``.zip`` archive). For example, this record is
-wrapped for readability:
+Each manifest line contains the resource description fields and two derived
+keys, ``url`` (the fully qualified URL) and ``arcname`` (the destination path
+inside a ``.zip`` archive). Collection resources also include ``collection``.
+This record is wrapped for readability:
 
 .. code-block:: json
 
@@ -271,6 +290,8 @@ setting), the default directory matches R's recount3 cache: normally
 An explicit ``--cache-dir`` or ``RECOUNT3_CACHE_DIR`` still takes precedence.
 The ``filesystem`` default remains ``~/.cache/recount3/files``. See
 :ref:`cache-and-configuration` for platform paths and shared-cache examples.
+With ``download --jobs``, shared-cache workers can overlap transfers and
+checksums and commit several completed registry updates together.
 
 Logging
 -------

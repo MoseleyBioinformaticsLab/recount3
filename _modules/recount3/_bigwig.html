@@ -5,14 +5,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>recount3._bigwig &mdash; recount3 1.3.0 documentation</title>
+  <title>recount3._bigwig &mdash; recount3 1.4.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
 
   
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=1f29e9d3"></script>
+      <script src="../../_static/documentation_options.js?v=9172181d"></script>
       <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/js/theme.js"></script>
@@ -103,127 +103,208 @@
 <span class="c1"># OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE</span>
 <span class="c1"># OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</span>
 <span class="c1">#</span>
-<span class="sd">"""BigWig file access via a small wrapper around ``pyBigWig``.</span>
+<span class="sd">"""Read local BigWig coverage with :class:`recount3.BigWigFile`.</span>
 
-<span class="sd">This is an internal module. For BigWig access via the public API, use</span>
-<span class="sd">:meth:`~recount3.resource.R3Resource.load` on a BigWig</span>
-<span class="sd">:class:`~recount3.resource.R3Resource`.</span>
+<span class="sd">BigWig resources loaded through :meth:`~recount3.resource.R3Resource.load`</span>
+<span class="sd">also return this wrapper. The optional ``pyBigWig`` dependency is imported</span>
+<span class="sd">when opening a file; install it with ``pip install "recount3[bigwig]"``.</span>
 
-<span class="sd">The optional dependency is imported through</span>
-<span class="sd">:func:`~recount3._utils.get_pybigwig_module`.</span>
+<span class="sd">Example::</span>
 
-<span class="sd">Typical usage example::</span>
-
-<span class="sd">  &gt;&gt;&gt; from pathlib import Path</span>
-<span class="sd">  &gt;&gt;&gt; import recount3 as r3</span>
-<span class="sd">  &gt;&gt;&gt; with r3.BigWigFile(Path("example.bw")) as bw:</span>
-<span class="sd">  ...     lengths = bw.chroms()</span>
-<span class="sd">  ...     mean = bw.stats("chr1", 0, 1000)[0]</span>
-
-<span class="sd">Note:</span>
-<span class="sd">    Requires the optional ``pyBigWig`` package. Install with</span>
-<span class="sd">    ``pip install "recount3[bigwig]"``. An :exc:`ImportError` is raised on</span>
-<span class="sd">    first use if the package is not available. ``pyBigWig`` can be difficult</span>
-<span class="sd">    to install on non-Linux systems.</span>
+<span class="sd">    &gt;&gt;&gt; import recount3 as r3</span>
+<span class="sd">    &gt;&gt;&gt; reader = r3.BigWigFile("example.bw")</span>
+<span class="sd">    &gt;&gt;&gt; with reader:</span>
+<span class="sd">    ...     lengths = reader.chroms()</span>
+<span class="sd">    ...     mean = reader.stats("chr1", 0, 1000, exact=True)[0]</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">cast</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">TracebackType</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">types</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cast</span><span class="p">,</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">_utils</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">recount3</span><span class="w"> </span><span class="kn">import</span> <span class="n">errors</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>  <span class="c1"># pragma: no cover</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">pyBigWig</span>  <span class="c1"># type: ignore[import-not-found]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_native_string</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a plain string encodable as UTF-8 and free of NUL characters."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be a string"</span><span class="p">)</span>
+    <span class="c1"># Match the contents C reads; str(value) would call an overridden __str__.</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="nb">str</span><span class="o">.</span><span class="fm">__str__</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"</span><span class="se">\0</span><span class="s2">"</span> <span class="ow">in</span> <span class="n">value</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must not contain NUL characters"</span><span class="p">)</span>
+    <span class="n">value</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">"utf-8"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">value</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coordinate</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return an integer index in the unsigned 32-bit coordinate range."""</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">operator</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">result</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">32</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be between 0 and 2**32 - 1"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_bounds</span><span class="p">(</span><span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return validated coordinate keywords, omitting bounds set to None."""</span>
+    <span class="n">kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"start"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_coordinate</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="s2">"start"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">end</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"end"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_coordinate</span><span class="p">(</span><span class="n">end</span><span class="p">,</span> <span class="s2">"end"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">kwargs</span>
 
 
 <div class="viewcode-block" id="BigWigFile">
 <a class="viewcode-back" href="../../api.html#recount3._bigwig.BigWigFile">[docs]</a>
 <span class="nd">@dataclasses</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">BigWigFile</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A lazily-opened BigWig reader with a small, typed API.</span>
+<span class="w">    </span><span class="sd">"""A lazily opened reader for local BigWig files.</span>
 
-<span class="sd">    Instances are cheap to construct and do not open the file until the first</span>
-<span class="sd">    method call that requires a live ``pyBigWig`` handle. The handle is cached</span>
-<span class="sd">    for subsequent calls and can be explicitly released with :meth:`close`.</span>
+<span class="sd">    The first read or context entry opens a native ``pyBigWig`` handle, which</span>
+<span class="sd">    is cached until :meth:`close`. Changes to ``path`` and ``mode`` take effect</span>
+<span class="sd">    on the next open, after the cached handle closes.</span>
+
+<span class="sd">    A context yields the native handle and closes it on exit. Call methods on</span>
+<span class="sd">    the wrapper inside the context to use its validation and unsigned interval</span>
+<span class="sd">    coordinates. Close through the wrapper: closing the native handle directly</span>
+<span class="sd">    leaves a closed handle cached in the wrapper.</span>
+
+<span class="sd">    Read methods raise :exc:`RuntimeError` in write mode before opening or</span>
+<span class="sd">    querying. Use the native context-manager handle for writing.</span>
+
+<span class="sd">    String arguments must encode as UTF-8 and contain no embedded NUL</span>
+<span class="sd">    characters. Coordinates must be integers in ``0..2**32 - 1``; NumPy</span>
+<span class="sd">    integer scalars are accepted.</span>
 
 <span class="sd">    Attributes:</span>
-<span class="sd">        path: Filesystem path to a BigWig file (typically ``.bw``). The</span>
-<span class="sd">          file must exist when the handle is opened.</span>
-<span class="sd">        mode: File mode passed to ``pyBigWig.open``. Reading is the default</span>
-<span class="sd">          (``"r"``).</span>
+<span class="sd">        path: Local path to a BigWig file. Must exist when opened for reading.</span>
+<span class="sd">        mode: Mode passed to ``pyBigWig.open``; defaults to ``"r"``. A mode</span>
+<span class="sd">          containing ``"w"`` creates or overwrites the file on each open.</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        Opening errors propagate from read methods and context entry:</span>
+<span class="sd">        :exc:`FileNotFoundError` for a missing read path, :exc:`ImportError`</span>
+<span class="sd">        for an unavailable ``pyBigWig`` dependency, :exc:`RuntimeError` for a</span>
+<span class="sd">        native open failure, and :exc:`~recount3.errors.LoadError` for BigBed</span>
+<span class="sd">        input.</span>
 <span class="sd">    """</span>
 
-    <span class="n">path</span><span class="p">:</span> <span class="n">Path</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span>
     <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"r"</span>
 
     <span class="n">_bw</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">_bw_writable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_open</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pyBigWig</span><span class="o">.</span><span class="n">pyBigWig</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Open the file if needed and return the live ``pyBigWig`` handle.</span>
+<span class="w">        </span><span class="sd">"""Return the cached handle, or open and cache a validated handle.</span>
 
-<span class="sd">        This method is the single place that opens the underlying file. It is</span>
-<span class="sd">        called internally by all public read methods.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            A live ``pyBigWig`` handle.</span>
+<span class="sd">        Cache a reader only after format validation succeeds; close rejected</span>
+<span class="sd">        handles. Write mode bypasses existence and format checks.</span>
 
 <span class="sd">        Raises:</span>
-<span class="sd">            FileNotFoundError: If ``path`` does not exist at open time.</span>
-<span class="sd">            ImportError: If the optional ``pyBigWig`` dependency is missing or</span>
-<span class="sd">              fails to import.</span>
-<span class="sd">            RuntimeError: If ``pyBigWig.open`` fails (it returns ``None``).</span>
+<span class="sd">            TypeError: If ``path`` cannot be converted to a Path or ``mode``</span>
+<span class="sd">              is not a string.</span>
+<span class="sd">            ValueError: If the path or mode contains an embedded NUL.</span>
+<span class="sd">            UnicodeEncodeError: If the path or mode cannot be encoded as UTF-8.</span>
+<span class="sd">            FileNotFoundError: If the path does not exist when reading.</span>
+<span class="sd">            ImportError: If ``pyBigWig`` is unavailable or fails to import.</span>
+<span class="sd">            RuntimeError: If ``pyBigWig.open`` fails.</span>
+<span class="sd">            recount3.errors.LoadError: If a reader opens a BigBed file.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="s2">"pyBigWig.pyBigWig"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">_native_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span> <span class="s2">"mode"</span><span class="p">)</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">_native_string</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="s2">"path"</span><span class="p">)</span>
+        <span class="n">writable</span> <span class="o">=</span> <span class="s2">"w"</span> <span class="ow">in</span> <span class="n">mode</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">writable</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">))</span>
 
         <span class="n">pybigwig</span> <span class="o">=</span> <span class="n">_utils</span><span class="o">.</span><span class="n">get_pybigwig_module</span><span class="p">()</span>
-        <span class="n">bw</span> <span class="o">=</span> <span class="n">pybigwig</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">bw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># pyBigWig returns None on failure</span>
+        <span class="n">bw</span> <span class="o">=</span> <span class="n">pybigwig</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">mode</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">bw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Failed to open BigWig file: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">writable</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">bw</span><span class="o">.</span><span class="n">isBigWig</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="n">errors</span><span class="o">.</span><span class="n">LoadError</span><span class="p">(</span>  <span class="c1"># noqa: TRY301</span>
+                    <span class="sa">f</span><span class="s2">"Not a BigWig file: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
+            <span class="n">bw</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">raise</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="o">=</span> <span class="n">bw</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bw_writable</span> <span class="o">=</span> <span class="n">writable</span>
         <span class="k">return</span> <span class="n">bw</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ensure_readable</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pyBigWig</span><span class="o">.</span><span class="n">pyBigWig</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a read handle, rejecting writers before opening or querying.</span>
+
+<span class="sd">        Opening a writer would truncate the file, and native ``values()`` can</span>
+<span class="sd">        crash on a headerless writer. Check the cached handle's mode when</span>
+<span class="sd">        present, since ``mode`` configures the next open.</span>
+<span class="sd">        """</span>
+        <span class="n">writable</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_bw_writable</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="s2">"w"</span> <span class="ow">in</span> <span class="n">_native_string</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span> <span class="s2">"mode"</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">writable</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">"BigWig read methods cannot be used in write mode"</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
 
 <div class="viewcode-block" id="BigWigFile.close">
 <a class="viewcode-back" href="../../api.html#recount3._bigwig.BigWigFile.close">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Close the underlying ``pyBigWig`` handle if it is open.</span>
-
-<span class="sd">        This method is idempotent.</span>
-<span class="sd">        """</span>
+<span class="w">        </span><span class="sd">"""Close and clear the cached handle. Repeated calls are safe."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
         <span class="k">finally</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="o">=</span> <span class="kc">None</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_bw_writable</span> <span class="o">=</span> <span class="kc">False</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pyBigWig</span><span class="o">.</span><span class="n">pyBigWig</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Enter a context manager and return the live ``pyBigWig`` handle."""</span>
+<span class="w">        </span><span class="sd">"""Return the cached or newly opened native ``pyBigWig`` handle."""</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">exc_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="ne">BaseException</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">exc</span><span class="p">:</span> <span class="ne">BaseException</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">tb</span><span class="p">:</span> <span class="n">TracebackType</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tb</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">TracebackType</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Exit a context manager and close the file handle."""</span>
+<span class="w">        </span><span class="sd">"""Close the cached handle on normal or exceptional context exit."""</span>
         <span class="k">del</span> <span class="n">exc_type</span><span class="p">,</span> <span class="n">exc</span><span class="p">,</span> <span class="n">tb</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
 <div class="viewcode-block" id="BigWigFile.is_open">
 <a class="viewcode-back" href="../../api.html#recount3._bigwig.BigWigFile.is_open">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">is_open</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return ``True`` if the underlying handle is currently open."""</span>
+<span class="w">        </span><span class="sd">"""Return whether this wrapper holds a cached native handle.</span>
+
+<span class="sd">        Closing the native handle directly does not update this result.</span>
+<span class="sd">        """</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
 
 
@@ -232,26 +313,41 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">chroms</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">chrom</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return chromosome lengths, or a single chromosome length.</span>
+<span class="w">        </span><span class="sd">"""Return chromosome lengths in bases.</span>
 
 <span class="sd">        Args:</span>
-<span class="sd">            chrom: If provided, return only the length for this chromosome.</span>
+<span class="sd">            chrom: Chromosome name, or None to request all chromosomes.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            If ``chrom`` is None, a mapping from chromosome name to length.</span>
-<span class="sd">            Otherwise, the length for the requested chromosome. ``None`` may be</span>
-<span class="sd">            returned if the chromosome is not present.</span>
+<span class="sd">            A dictionary of names to lengths when ``chrom`` is None. Otherwise,</span>
+<span class="sd">            the requested chromosome's length, or None if the name is unknown.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If ``chrom`` is neither a string nor None.</span>
+<span class="sd">            ValueError: If ``chrom`` contains an embedded NUL.</span>
+<span class="sd">            UnicodeEncodeError: If ``chrom`` cannot be encoded as UTF-8.</span>
+<span class="sd">            RuntimeError: If the handle is in write mode.</span>
 <span class="sd">        """</span>
-        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">chroms</span><span class="p">(</span><span class="n">chrom</span><span class="p">)</span> <span class="k">if</span> <span class="n">chrom</span> <span class="k">else</span> <span class="n">bw</span><span class="o">.</span><span class="n">chroms</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="n">chrom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">chrom</span> <span class="o">=</span> <span class="n">_native_string</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="s2">"chrom"</span><span class="p">)</span>
+        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_readable</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">chroms</span><span class="p">(</span><span class="n">chrom</span><span class="p">)</span> <span class="k">if</span> <span class="n">chrom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">bw</span><span class="o">.</span><span class="n">chroms</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="BigWigFile.header">
 <a class="viewcode-back" href="../../api.html#recount3._bigwig.BigWigFile.header">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">header</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the BigWig header metadata."""</span>
-        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">bw</span><span class="o">.</span><span class="n">header</span><span class="p">())</span></div>
+<span class="w">        </span><span class="sd">"""Return BigWig header metadata as supplied by pyBigWig.</span>
+
+<span class="sd">        Floating-point summaries may be truncated to integers, and extrema</span>
+<span class="sd">        from the native writer may be inaccurate. Use :meth:`stats` with</span>
+<span class="sd">        ``exact=True`` to compute statistics from the stored signal.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: If the handle is in write mode.</span>
+<span class="sd">        """</span>
+        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_readable</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">cast</span><span class="p">(</span><span class="s2">"dict[str, Any]"</span><span class="p">,</span> <span class="n">bw</span><span class="o">.</span><span class="n">header</span><span class="p">())</span></div>
 
 
 <div class="viewcode-block" id="BigWigFile.values">
@@ -263,24 +359,51 @@
         <span class="n">end</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">numpy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return per-base values over a half-open interval ``[start, end)``.</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return per-base values over the half-open interval ``[start, end)``.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            chrom: Chromosome name.</span>
-<span class="sd">            start: 0-based start coordinate (inclusive).</span>
-<span class="sd">            end: 0-based end coordinate (exclusive).</span>
-<span class="sd">            numpy: Forwarded to ``pyBigWig.values``. When True, ``pyBigWig`` may</span>
-<span class="sd">              return a NumPy array depending on its configuration.</span>
+<span class="sd">            start: 0-based integer start coordinate (inclusive).</span>
+<span class="sd">            end: 0-based integer end coordinate (exclusive).</span>
+<span class="sd">            numpy: True requests a NumPy array and requires ``pyBigWig`` built</span>
+<span class="sd">              with NumPy support. False or None returns a list with either</span>
+<span class="sd">              build.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            Values returned by ``pyBigWig.values``. When ``numpy`` is not</span>
-<span class="sd">            True, this is typically a ``list[float]``. When ``numpy`` is</span>
-<span class="sd">            True, ``pyBigWig`` may return a NumPy array depending on its</span>
-<span class="sd">            configuration.</span>
+<span class="sd">            A list of floats, or an array with dtype ``float32``, in genomic</span>
+<span class="sd">            order. Uncovered bases are NaN. A file with no entries returns an</span>
+<span class="sd">            empty result, subject to the older NumPy-output bug noted below.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If ``chrom`` is not a string or a coordinate is not an</span>
+<span class="sd">              integer, or NumPy output is requested from a build without</span>
+<span class="sd">              NumPy support.</span>
+<span class="sd">            ValueError: If ``chrom`` contains an embedded NUL, a coordinate is</span>
+<span class="sd">              outside ``0..2**32 - 1``, or a list query exceeds ``2**31 - 1``</span>
+<span class="sd">              bases.</span>
+<span class="sd">            UnicodeEncodeError: If ``chrom`` cannot be encoded as UTF-8.</span>
+<span class="sd">            RuntimeError: If the handle is in write mode or pyBigWig rejects</span>
+<span class="sd">              the chromosome or interval.</span>
+
+<span class="sd">        Notes:</span>
+<span class="sd">            List output is limited to ``2**31 - 1`` bases by pyBigWig's signed</span>
+<span class="sd">            loop counter. Both output forms allocate memory proportional to</span>
+<span class="sd">            the query length; use smaller intervals to limit memory use.</span>
+
+<span class="sd">            For NumPy reads of files with no entries, pyBigWig versions before</span>
+<span class="sd">            0.3.25 return a scalar array containing an uninitialized value.</span>
+<span class="sd">            Use 0.3.25 or newer for a correctly empty array.</span>
 <span class="sd">        """</span>
-        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">end</span><span class="p">),</span> <span class="n">numpy</span><span class="o">=</span><span class="n">numpy</span><span class="p">)</span></div>
+        <span class="n">chrom</span> <span class="o">=</span> <span class="n">_native_string</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="s2">"chrom"</span><span class="p">)</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">_coordinate</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="s2">"start"</span><span class="p">)</span>
+        <span class="n">end</span> <span class="o">=</span> <span class="n">_coordinate</span><span class="p">(</span><span class="n">end</span><span class="p">,</span> <span class="s2">"end"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">numpy</span> <span class="ow">and</span> <span class="n">end</span> <span class="o">-</span> <span class="n">start</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="o">**</span><span class="mi">31</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"List queries cannot exceed 2**31 - 1 bases"</span><span class="p">)</span>
+        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_readable</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">numpy</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">numpy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="BigWigFile.stats">
@@ -291,39 +414,67 @@
         <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
-        <span class="nb">type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"mean"</span><span class="p">,</span>  <span class="c1"># pylint: disable=redefined-builtin</span>
+        <span class="nb">type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"mean"</span><span class="p">,</span>  <span class="c1"># noqa: A002 - Matches the pyBigWig keyword.</span>
         <span class="n">n_bins</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">exact</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return summary statistic(s) over an interval or whole chromosome.</span>
+<span class="w">        </span><span class="sd">"""Return binned statistics over a half-open interval or chromosome.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            chrom: Chromosome name.</span>
-<span class="sd">            start: 0-based start coordinate (inclusive). If omitted, stats are</span>
-<span class="sd">              computed over the whole chromosome.</span>
-<span class="sd">            end: 0-based end coordinate (exclusive). If omitted, stats are</span>
-<span class="sd">              computed over the whole chromosome.</span>
-<span class="sd">            type: Statistic name understood by ``pyBigWig.stats`` (for example,</span>
-<span class="sd">              ``"mean"``, ``"min"``, ``"max"``, ``"coverage"``).</span>
-<span class="sd">            n_bins: If provided, request binned stats via the ``nBins``</span>
-<span class="sd">              argument.</span>
-<span class="sd">            exact: If provided, forward to the ``exact`` argument.</span>
+<span class="sd">            start: 0-based integer start coordinate (inclusive). Defaults to 0.</span>
+<span class="sd">            end: 0-based integer end coordinate (exclusive). Defaults to the</span>
+<span class="sd">              chromosome length independently of ``start``.</span>
+<span class="sd">            type: One of ``"mean"``, ``"std"``, ``"min"``, ``"max"``,</span>
+<span class="sd">              ``"coverage"``, or ``"sum"``. Native aliases ``"dev"`` for</span>
+<span class="sd">              ``"std"`` and ``"cov"`` for ``"coverage"`` are also accepted.</span>
+<span class="sd">            n_bins: Integer bin count in ``1..2**31 - 1``, forwarded as native</span>
+<span class="sd">              ``nBins``. None requests one bin.</span>
+<span class="sd">            exact: True computes from the stored intervals. False or None</span>
+<span class="sd">              allows approximate zoom summaries when available.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            A list of statistic values as returned by ``pyBigWig.stats``. Values</span>
-<span class="sd">            may be ``None`` for missing data regions.</span>
+<span class="sd">            A list containing one float or None per bin, in genomic order.</span>
+<span class="sd">            Missing-data bins produce None; native undefined results also</span>
+<span class="sd">            appear as None.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If ``chrom`` or ``type`` is not a string, or a coordinate</span>
+<span class="sd">              or bin count is not an integer.</span>
+<span class="sd">            ValueError: If ``chrom`` or ``type`` contains an embedded NUL, a</span>
+<span class="sd">              coordinate is outside ``0..2**32 - 1``, or ``n_bins`` is outside</span>
+<span class="sd">              ``1..2**31 - 1``.</span>
+<span class="sd">            UnicodeEncodeError: If ``chrom`` or ``type`` cannot be encoded as</span>
+<span class="sd">              UTF-8.</span>
+<span class="sd">            RuntimeError: If the handle is in write mode or pyBigWig rejects</span>
+<span class="sd">              the chromosome, interval, or statistic type.</span>
+
+<span class="sd">        Notes:</span>
+<span class="sd">            Statistics use covered bases; ``coverage`` is the covered fraction</span>
+<span class="sd">            of each bin. ``std`` uses sample standard deviation, returning zero</span>
+<span class="sd">            for a single covered base when ``exact=True``.</span>
+
+<span class="sd">            Use ``exact=True`` for sums: native zoom-summary bugs can</span>
+<span class="sd">            substantially undercount them or return None for covered</span>
+<span class="sd">            zero-signal regions. Keep ``n_bins`` at or below the number of</span>
+<span class="sd">            queried bases; finer bins can give inconsistent native results</span>
+<span class="sd">            even with ``exact=True``.</span>
 <span class="sd">        """</span>
-        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
-        <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="nb">type</span><span class="p">}</span>
+        <span class="n">chrom</span> <span class="o">=</span> <span class="n">_native_string</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="s2">"chrom"</span><span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"type"</span><span class="p">:</span> <span class="n">_native_string</span><span class="p">(</span><span class="nb">type</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+            <span class="o">**</span><span class="n">_bounds</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">),</span>
+        <span class="p">}</span>
         <span class="k">if</span> <span class="n">n_bins</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">kwargs</span><span class="p">[</span><span class="s2">"nBins"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_bins</span><span class="p">)</span>
+            <span class="n">n_bins</span> <span class="o">=</span> <span class="n">operator</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">n_bins</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">n_bins</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">31</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"n_bins must be between 1 and 2**31 - 1"</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">"nBins"</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_bins</span>
         <span class="k">if</span> <span class="n">exact</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">kwargs</span><span class="p">[</span><span class="s2">"exact"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">exact</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">end</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_readable</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">stats</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="BigWigFile.intervals">
@@ -333,25 +484,39 @@
         <span class="n">chrom</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">start</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return (start, end, value) intervals overlapping a region.</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return stored intervals overlapping a half-open query region.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            chrom: Chromosome name.</span>
-<span class="sd">            start: 0-based start coordinate (inclusive). If omitted, intervals</span>
-<span class="sd">              for the entire chromosome may be returned.</span>
-<span class="sd">            end: 0-based end coordinate (exclusive). If omitted, intervals for</span>
-<span class="sd">              the entire chromosome may be returned.</span>
+<span class="sd">            start: 0-based integer start coordinate (inclusive). Defaults to 0.</span>
+<span class="sd">            end: 0-based integer end coordinate (exclusive). Defaults to the</span>
+<span class="sd">              chromosome length independently of ``start``.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            Intervals returned by ``pyBigWig.intervals``. This is often a</span>
-<span class="sd">            list of ``(start, end, value)`` tuples. ``None`` may be returned</span>
-<span class="sd">            when no intervals overlap the requested region.</span>
+<span class="sd">            A tuple of ``(start, end, value)`` tuples in coordinate order, or</span>
+<span class="sd">            None when no intervals overlap. Endpoints are unsigned coordinates</span>
+<span class="sd">            from the file and are not clipped to the query bounds.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            TypeError: If ``chrom`` is not a string or a coordinate is not an</span>
+<span class="sd">              integer.</span>
+<span class="sd">            ValueError: If ``chrom`` contains an embedded NUL or a coordinate</span>
+<span class="sd">              is outside ``0..2**32 - 1``.</span>
+<span class="sd">            UnicodeEncodeError: If ``chrom`` cannot be encoded as UTF-8.</span>
+<span class="sd">            RuntimeError: If the handle is in write mode or pyBigWig rejects</span>
+<span class="sd">              the chromosome or interval.</span>
 <span class="sd">        """</span>
-        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_open</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">start</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">intervals</span><span class="p">(</span><span class="n">chrom</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">bw</span><span class="o">.</span><span class="n">intervals</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">end</span><span class="p">))</span></div>
+        <span class="n">chrom</span> <span class="o">=</span> <span class="n">_native_string</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="s2">"chrom"</span><span class="p">)</span>
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">_bounds</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">)</span>
+        <span class="n">bw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_readable</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">bw</span><span class="o">.</span><span class="n">intervals</span><span class="p">(</span><span class="n">chrom</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">result</span> <span class="ow">and</span> <span class="n">result</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
+                <span class="p">(</span><span class="n">start</span> <span class="o">%</span> <span class="mi">2</span><span class="o">**</span><span class="mi">32</span><span class="p">,</span> <span class="n">end</span> <span class="o">%</span> <span class="mi">2</span><span class="o">**</span><span class="mi">32</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">result</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span></div>
 </div>
 
 </pre></div>
