@@ -12,6 +12,10 @@ coverage, and the on-disk cache.
 For the ``recount3`` command-line tool, see :doc:`cli`. For full per-symbol
 documentation, see :doc:`api`.
 
+.. contents:: Contents
+   :local:
+   :backlinks: none
+
 
 Installation
 ------------

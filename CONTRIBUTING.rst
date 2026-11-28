@@ -9,23 +9,10 @@ Discussion and issue tracking take place at
 https://github.com/MoseleyBioinformaticsLab/recount3/issues.
 
 
-Contents
-~~~~~~~~
-
-* `Reporting bugs`_
-* `Requesting features`_
-* `Development environment`_
-* `Repository layout`_
-* `Testing`_
-* `Code style`_
-* `Ruff exceptions`_
-* `Documentation`_
-* `Changelog`_
-* `TODO`_
-* `Commit messages`_
-* `Pull requests`_
-* `Releases`_
-* `License`_
+.. contents:: Contents
+   :local:
+   :depth: 1
+   :backlinks: none
 
 
 Reporting bugs

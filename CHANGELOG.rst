@@ -1,6 +1,17 @@
 Changelog
 =========
 
+Unreleased
+----------
+
+Documentation
+~~~~~~~~~~~~~
+
+- The tutorial has a linked table of contents for every section and
+  subsection. The README and contributing guide generate their contents
+  lists from headings so the links stay current as headings change. This
+  documentation update is source-compatible.
+
 1.4.0 (2026-11-27)
 ------------------
 
